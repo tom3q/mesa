@@ -233,6 +233,15 @@ egl_gallium_la_LIBADD += \
 
 endif
 
+if HAVE_GALLIUM_OPENFIMG
+egl_gallium_la_CPPFLAGS += -DGALLIUM_OPENFIMG
+egl_gallium_la_LIBADD += \
+	$(top_builddir)/src/gallium/winsys/openfimg/drm/libopenfimgdrm.la \
+	$(top_builddir)/src/gallium/drivers/openfimg/libopenfimg.la \
+	$(OPENFIMG_LIBS)
+
+endif
+
 if HAVE_GALLIUM_SOFTPIPE
 egl_gallium_la_CPPFLAGS += -DGALLIUM_SOFTPIPE
 egl_gallium_la_LIBADD += \
