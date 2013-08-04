@@ -148,6 +148,20 @@ pipe_msm_la_LIBADD = \
 
 endif
 
+if HAVE_GALLIUM_OPENFIMG
+pipe_LTLIBRARIES += pipe_exynos.la
+
+pipe_exynos_la_SOURCES = pipe_exynos.c
+nodist_EXTRA_pipe_exynos_la_SOURCES = dummy.cpp
+pipe_exynos_la_LIBADD = \
+	$(PIPE_LIBS) \
+	$(top_builddir)/src/gallium/winsys/openfimg/drm/libopenfimgdrm.la \
+	$(top_builddir)/src/gallium/drivers/openfimg/libopenfimg.la \
+	$(LIBDRM_LIBS) \
+	$(OPENFIMG_LIBS)
+
+endif
+
 if HAVE_GALLIUM_SVGA
 pipe_LTLIBRARIES += pipe_vmwgfx.la
 

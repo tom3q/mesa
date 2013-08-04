@@ -97,6 +97,15 @@ STATIC_TARGET_LIB_DEPS += \
 
 endif
 
+if HAVE_GALLIUM_OPENFIMG
+STATIC_TARGET_CPPFLAGS += -DGALLIUM_OPENFIMG
+STATIC_TARGET_LIB_DEPS += \
+	$(top_builddir)/src/gallium/winsys/openfimg/drm/libopenfimgdrm.la \
+	$(top_builddir)/src/gallium/drivers/openfimg/libopenfimg.la \
+	$(OPENFIMG_LIBS)
+
+endif
+
 libxatracker_la_SOURCES += target.c
 libxatracker_la_CPPFLAGS = $(STATIC_TARGET_CPPFLAGS)
 libxatracker_la_LIBADD += $(STATIC_TARGET_LIB_DEPS)
