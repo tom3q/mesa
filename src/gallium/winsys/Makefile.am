@@ -59,6 +59,10 @@ if HAVE_GALLIUM_NOUVEAU
 SUBDIRS += nouveau/drm
 endif
 
+if HAVE_GALLIUM_OPENFIMG
+SUBDIRS += openfimg/drm
+endif
+
 if NEED_RADEON_DRM_WINSYS
 SUBDIRS += radeon/drm
 endif

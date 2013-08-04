@@ -1,4 +1,5 @@
-# Copyright © 2013 Intel Corporation
+# Copyright © 2012 Intel Corporation
+# Copyright © 2013 Tomasz Figa <tomasz.figa@gmail.com>
 #
 # Permission is hereby granted, free of charge, to any person obtaining a
 # copy of this software and associated documentation files (the "Software"),
@@ -20,58 +21,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 # DEALINGS IN THE SOFTWARE.
 
-SUBDIRS =
+include $(top_srcdir)/src/gallium/Automake.inc
 
-if HAVE_DRI2
-SUBDIRS += dri
-else
-if HAVE_DRISW
-SUBDIRS += dri
-endif
-endif
+AM_CFLAGS = \
+	-I$(top_srcdir)/src/gallium/drivers \
+	$(GALLIUM_CFLAGS) \
+	$(OPENFIMG_CFLAGS)
 
-if HAVE_X11_DRIVER
-SUBDIRS += libgl-xlib
-endif
+noinst_LTLIBRARIES = libopenfimgdrm.la
 
-if HAVE_ST_OMX
-SUBDIRS += omx
-endif
-
-if HAVE_GALLIUM_OSMESA
-SUBDIRS += osmesa
-endif
-
-if HAVE_GALLIUM_GBM
-SUBDIRS += gbm
-endif
-
-if HAVE_GALLIUM_OPENFIMG
-if HAVE_DRI
-SUBDIRS += dri-openfimg
-endif
-endif
-
-if HAVE_ST_VDPAU
-SUBDIRS += vdpau
-endif
-
-if HAVE_ST_XA
-SUBDIRS += xa
-endif
-
-if HAVE_ST_XVMC
-SUBDIRS += xvmc
-endif
-
-if HAVE_CLOVER
-SUBDIRS += opencl
-endif
-
-if NEED_GALLIUM_LOADER
-SUBDIRS += pipe-loader
-endif
-
-if HAVE_GALLIUM_EGL
-SUBDIRS += egl-static
-endif
+libopenfimgdrm_la_SOURCES = openfimg_drm_winsys.c
