@@ -1,0 +1,380 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://nouveau.freedesktop.org/"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+	xsi:schemaLocation="http://nouveau.freedesktop.org/ rules-ng.xsd">
+
+<copyright year="2013">
+	<author name="Tomasz Figa" email="tomasz.figa@gmail.com">
+		<nick name="t.figa"/>
+	</author>
+	<license>
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice (including the
+next paragraph) shall be included in all copies or substantial
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE COPYRIGHT OWNER(S) AND/OR ITS SUPPLIERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+	</license>
+</copyright>
+
+<enum name="fghi_attrib_dt">
+	<value value="0" name="DT_BYTE"/>
+	<value value="1" name="DT_SHORT"/>
+	<value value="2" name="DT_INT"/>
+	<value value="3" name="DT_FIXED"/>
+	<value value="4" name="DT_UBYTE"/>
+	<value value="5" name="DT_USHORT"/>
+	<value value="6" name="DT_UINT"/>
+	<value value="7" name="DT_FLOAT"/>
+	<value value="8" name="DT_NBYTE"/>
+	<value value="9" name="DT_NSHORT"/>
+	<value value="10" name="DT_NINT"/>
+	<value value="11" name="DT_NFIXED"/>
+	<value value="12" name="DT_NUBYTE"/>
+	<value value="13" name="DT_NUSHORT"/>
+	<value value="14" name="DT_NUINT"/>
+	<value value="15" name="DT_HFLOAT"/>
+</enum>
+
+<enum name="fgpe_vctx_ptype">
+	<value value="0x01" name="PTYPE_POINT_SPRITE"/>
+	<value value="0x02" name="PTYPE_POINTS"/>
+	<value value="0x04" name="PTYPE_LINE_STRIP"/>
+	<value value="0x08" name="PTYPE_LINE_LOOP"/>
+	<value value="0x10" name="PTYPE_LINES"/>
+	<value value="0x20" name="PTYPE_TRIANGLE_STRIP"/>
+	<value value="0x40" name="PTYPE_TRIANGLE_FAN"/>
+	<value value="0x80" name="PTYPE_TRIANGLES"/>
+</enum>
+
+<enum name="fgra_bfcull_face">
+	<value value="0" name="FACE_BACK"/>
+	<value value="1" name="FACE_FRONT"/>
+	<value value="3" name="FACE_BOTH"/>
+</enum>
+
+<bitset name="FGRA_LODCTL">
+	<bitfield name="LOD" pos="0"/>
+	<bitfield name="DDX" pos="1"/>
+	<bitfield name="DDY" pos="2"/>
+</bitset>
+
+<enum name="fgra_coordreplace">
+	<value value="0x01" name="CREP_ATTR0"/>
+	<value value="0x02" name="CREP_ATTR1"/>
+	<value value="0x04" name="CREP_ATTR2"/>
+	<value value="0x08" name="CREP_ATTR3"/>
+	<value value="0x10" name="CREP_ATTR4"/>
+	<value value="0x20" name="CREP_ATTR5"/>
+	<value value="0x40" name="CREP_ATTR6"/>
+	<value value="0x80" name="CREP_ATTR7"/>
+</enum>
+
+<enum name="fgpf_test_mode">
+	<value value="0" name="TEST_NEVER"/>
+	<value value="1" name="TEST_ALWAYS"/>
+	<value value="2" name="TEST_LESS"/>
+	<value value="3" name="TEST_LEQUAL"/>
+	<value value="4" name="TEST_EQUAL"/>
+	<value value="5" name="TEST_GREATER"/>
+	<value value="6" name="TEST_GEQUAL"/>
+	<value value="7" name="TEST_NOTEQUAL"/>
+</enum>
+
+<enum name="fgpf_stencil_action">
+	<value value="0" name="STENCIL_KEEP"/>
+	<value value="1" name="STENCIL_ZERO"/>
+	<value value="2" name="STENCIL_REPLACE"/>
+	<value value="3" name="STENCIL_INCR"/>
+	<value value="4" name="STENCIL_DECR"/>
+	<value value="5" name="STENCIL_INVERT"/>
+	<value value="6" name="STENCIL_INCR_WRAP"/>
+	<value value="7" name="STENCIL_DECR_WRAP"/>
+</enum>
+
+<enum name="fgpf_blend_factor">
+	<value value="0" name="BLEND_ZERO"/>
+	<value value="1" name="BLEND_ONE"/>
+	<value value="2" name="BLEND_SRC_COL"/>
+	<value value="3" name="BLEND_SRC_COL_INV"/>
+	<value value="4" name="BLEND_DST_COL"/>
+	<value value="5" name="BLEND_DST_COL_INV"/>
+	<value value="6" name="BLEND_SRC_ALP"/>
+	<value value="7" name="BLEND_SRC_ALP_INV"/>
+	<value value="8" name="BLEND_DST_ALP"/>
+	<value value="9" name="BLEND_DST_ALP_INV"/>
+	<value value="10" name="BLEND_CONST_COL"/>
+	<value value="11" name="BLEND_CONST_COL_INV"/>
+	<value value="12" name="BLEND_CONST_ALP"/>
+	<value value="13" name="BLEND_CONST_ALP_INV"/>
+	<value value="14" name="BLEND_SRC_ALP_SAT"/>
+</enum>
+
+<enum name="fgpf_blend_op">
+	<value value="0" name="BLEND_SRC_ADD_DST"/>
+	<value value="1" name="BLEND_SRC_SUB_DST"/>
+	<value value="2" name="BLEND_DST_SUB_SRC"/>
+	<value value="3" name="BLEND_MIN"/>
+	<value value="4" name="BLEND_MAX"/>
+</enum>
+
+<enum name="fgpf_logical_op">
+	<value value="0" name="LOGICAL_ZERO"/>
+	<value value="1" name="LOGICAL_SRC_AND_DST"/>
+	<value value="2" name="LOGICAL_SRC_AND_NOT_DST"/>
+	<value value="3" name="LOGICAL_SRC"/>
+	<value value="4" name="LOGICAL_NOT_SRC_AND_DST"/>
+	<value value="5" name="LOGICAL_DST"/>
+	<value value="6" name="LOGICAL_SRC_XOR_DST"/>
+	<value value="7" name="LOGICAL_SRC_OR_DST"/>
+	<value value="8" name="LOGICAL_SRC_NOR_DST"/>
+	<value value="9" name="LOGICAL_SRC_EQV_DST"/>
+	<value value="10" name="LOGICAL_NOT_DST"/>
+	<value value="11" name="LOGICAL_SRC_OR_NOT_DST"/>
+	<value value="12" name="LOGICAL_NOT_SRC"/>
+	<value value="13" name="LOGICAL_NOT_SRC_OR_DST"/>
+	<value value="14" name="LOGICAL_SRC_NAND_DST"/>
+	<value value="15" name="LOGICAL_ONE"/>
+</enum>
+
+<enum name="fgpf_color_mode">
+	<value value="0" name="COLOR_RGB555"/>
+	<value value="1" name="COLOR_RGB565"/>
+	<value value="2" name="COLOR_ARGB4444"/>
+	<value value="3" name="COLOR_ARGB1555"/>
+	<value value="4" name="COLOR_XRGB8888"/>
+	<value value="5" name="COLOR_ARGB8888"/>
+</enum>
+
+<enum name="fgtu_tex_type">
+	<value value="1" name="TEX_TYPE_2D"/>
+	<value value="2" name="TEX_TYPE_CUBE"/>
+	<value value="3" name="TEX_TYPE_3D"/>
+</enum>
+
+<enum name="fgtu_pal_format">
+	<value value="0" name="PAL_FORMAT_1555"/>
+	<value value="1" name="PAL_FORMAT_565"/>
+	<value value="2" name="PAL_FORMAT_4444"/>
+	<value value="3" name="PAL_FORMAT_8888"/>
+</enum>
+
+<enum name="fgtu_tex_format">
+	<value value="0" name="TEX_FMT_1555"/>
+	<value value="1" name="TEX_FMT_565"/>
+	<value value="2" name="TEX_FMT_4444"/>
+	<value value="3" name="TEX_FMT_DEPTH16"/>
+	<value value="4" name="TEX_FMT_88"/>
+	<value value="5" name="TEX_FMT_8"/>
+	<value value="6" name="TEX_FMT_8888"/>
+	<value value="7" name="TEX_FMT_1BPP"/>
+	<value value="8" name="TEX_FMT_2BPP"/>
+	<value value="9" name="TEX_FMT_4BPP"/>
+	<value value="10" name="TEX_FMT_8BPP"/>
+	<value value="11" name="TEX_FMT_DXT1"/>
+	<value value="12" name="TEX_FMT_Y1VY0U"/>
+	<value value="13" name="TEX_FMT_VY1UY0"/>
+	<value value="14" name="TEX_FMT_Y1UY0V"/>
+	<value value="15" name="TEX_FMT_UY1VY0"/>
+</enum>
+
+<enum name="fgtu_addr_mode">
+	<value value="0" name="ADDR_MODE_REPEAT"/>
+	<value value="1" name="ADDR_MODE_FLIP"/>
+	<value value="2" name="ADDR_MODE_CLAMP_TO_EDGE"/>
+</enum>
+
+<enum name="fgtu_mipmap_mode">
+	<value value="0" name="MIPMAP_DISABLED"/>
+	<value value="1" name="MIPMAP_NEAREST"/>
+	<value value="2" name="MIPMAP_LINEAR"/>
+</enum>
+
+<domain name="STATE" width="32" bare="yes">
+	<stripe offset="7" stride="1" length="10">
+		<reg32 offset="0" name="FGHI_ATTRIB">
+			<bitfield name="SRCX" high="1" low="0" type="uint"/>
+			<bitfield name="SRCY" high="3" low="2" type="uint"/>
+			<bitfield name="SRCZ" high="5" low="4" type="uint"/>
+			<bitfield name="SRCW" high="7" low="6" type="uint"/>
+			<bitfield name="NUM_COMP" high="9" low="8" type="uint"/>
+			<bitfield name="DT" high="15" low="12" type="fghi_attrib_dt"/>
+			<bitfield name="LAST_ATTR" pos="31" type="boolean"/>
+		</reg32>
+	</stripe>
+	<stripe offset="17" stride="1" length="10">
+		<reg32 offset="0" name="FGHI_ATTRIB_VBCTRL">
+			<bitfield name="RANGE" high="15" low="0" type="uint"/>
+			<bitfield name="STRIDE" high="31" low="24" type="uint"/>
+		</reg32>
+	</stripe>
+	<stripe offset="27" stride="1" length="10">
+		<reg32 offset="0" name="FGHI_ATTRIB_VBBASE">
+			<bitfield name="ADDR" high="15" low="0" type="uint"/>
+		</reg32>
+	</stripe>
+
+	<reg32 offset="37" name="FGPE_VERTEX_CONTEXT">
+		<bitfield name="TYPE" high="26" low="19" type="fgpe_vctx_ptype"/>
+		<bitfield name="VS_POINT_SIZE" pos="18"/>
+		<bitfield name="VSOUT" high="13" low="10"/>
+		<bitfield name="FLAT_SHADE" pos="9"/>
+		<bitfield name="FLAT_MODEL" high="8" low="0" type="hex"/>
+	</reg32>
+	<reg32 offset="38" name="FGPE_VIEWPORT_OX" type="float"/>
+	<reg32 offset="39" name="FGPE_VIEWPORT_OY" type="float"/>
+	<reg32 offset="40" name="FGPE_VIEWPORT_HALF_PX" type="float"/>
+	<reg32 offset="41" name="FGPE_VIEWPORT_HALF_PY" type="float"/>
+	<reg32 offset="42" name="FGPE_DEPTHRANGE_HALF_F_SUB_N" type="float"/>
+	<reg32 offset="43" name="FGPE_DEPTHRANGE_HALF_F_ADD_N" type="float"/>
+
+	<reg32 offset="44" name="FGRA_PIX_SAMP">
+		<bitfield name="PIX_CORNER_SAMP" pos="0"/>
+	</reg32>
+	<reg32 offset="45" name="FGRA_D_OFF_EN">
+		<bitfield name="ENABLE" pos="0"/>
+	</reg32>
+	<reg32 offset="46" name="FGRA_D_OFF_FACTOR" type="float"/>
+	<reg32 offset="47" name="FGRA_D_OFF_UNITS" type="float"/>
+	<reg32 offset="48" name="FGRA_BFCULL">
+		<bitfield name="FACE" high="1" low="0" type="fgra_bfcull_face"/>
+		<bitfield name="FRONT_CW" pos="2"/>
+		<bitfield name="ENABLE" pos="3"/>
+	</reg32>
+	<reg32 offset="49" name="FGRA_YCLIP">
+		<bitfield name="MIN_VAL" high="11" low="0" type="uint"/>
+		<bitfield name="MAX_VAL" high="27" low="16" type="uint"/>
+	</reg32>
+	<reg32 offset="50" name="FGRA_LODCTL">
+		<bitfield name="LOD_CON0" high="2" low="0" type="uint"/>
+		<bitfield name="LOD_CON1" high="5" low="3" type="uint"/>
+		<bitfield name="LOD_CON2" high="8" low="6" type="uint"/>
+		<bitfield name="LOD_CON3" high="11" low="9" type="uint"/>
+		<bitfield name="LOD_CON4" high="14" low="12" type="uint"/>
+		<bitfield name="LOD_CON5" high="17" low="15" type="uint"/>
+		<bitfield name="LOD_CON6" high="20" low="18" type="uint"/>
+		<bitfield name="LOD_CON7" high="23" low="21" type="uint"/>
+	</reg32>
+	<reg32 offset="51" name="FGRA_XCLIP">
+		<bitfield name="MIN_VAL" high="11" low="0" type="uint"/>
+		<bitfield name="MAX_VAL" high="27" low="16" type="uint"/>
+	</reg32>
+	<reg32 offset="52" name="FGRA_PWIDTH" type="float"/>
+	<reg32 offset="53" name="FGRA_PSIZE_MIN" type="float"/>
+	<reg32 offset="54" name="FGRA_PSIZE_MAX" type="float"/>
+	<reg32 offset="55" name="FGRA_COORDREPLACE">
+		<bitfield name="ATTR" high="7" low="0" type="fgra_coordreplace"/>
+	</reg32>
+	<reg32 offset="56" name="FGRA_LWIDTH" type="float"/>
+
+	<reg32 offset="57" name="FGPF_ALPHAT">
+		<bitfield name="ENABLE" pos="0"/>
+		<bitfield name="MODE" high="3" low="1" type="fgpf_test_mode"/>
+		<bitfield name="VALUE" high="11" low="4" type="uint"/>
+	</reg32>
+	<reg32 offset="0" name="FGPF_FRONTST">
+		<bitfield name="ENABLE" pos="0"/>
+		<bitfield name="MODE" high="3" low="1" type="fgpf_test_mode"/>
+		<bitfield name="VALUE" high="11" low="4" type="uint"/>
+		<bitfield name="MASK" high="19" low="12" type="uint"/>
+		<bitfield name="SFAIL" high="25" low="23" type="fgpf_stencil_action"/>
+		<bitfield name="DPFAIL" high="28" low="26" type="fgpf_stencil_action"/>
+		<bitfield name="DPPASS" high="31" low="29" type="fgpf_stencil_action"/>
+	</reg32>
+	<reg32 offset="58" name="FGPF_BACKST">
+		<bitfield name="MODE" high="3" low="1" type="fgpf_test_mode"/>
+		<bitfield name="VALUE" high="11" low="4" type="uint"/>
+		<bitfield name="MASK" high="19" low="12" type="uint"/>
+		<bitfield name="SFAIL" high="25" low="23" type="fgpf_stencil_action"/>
+		<bitfield name="DPFAIL" high="28" low="26" type="fgpf_stencil_action"/>
+		<bitfield name="DPPASS" high="31" low="29" type="fgpf_stencil_action"/>
+	</reg32>
+	<reg32 offset="1" name="FGPF_DEPTHT">
+		<bitfield name="ENABLE" pos="1"/>
+		<bitfield name="MODE" high="3" low="1" type="fgpf_test_mode"/>
+	</reg32>
+	<reg32 offset="59" name="FGPF_CCLR" type="uint"/>
+	<reg32 offset="60" name="FGPF_BLEND">
+		<bitfield name="ENABLE" pos="0"/>
+		<bitfield name="COLOR_SRC_FUNC" high="4" low="1" type="fgpf_blend_factor"/>
+		<bitfield name="ALPHA_SRC_FUNC" high="8" low="5" type="fgpf_blend_factor"/>
+		<bitfield name="COLOR_DST_FUNC" high="12" low="9" type="fgpf_blend_factor"/>
+		<bitfield name="ALPHA_DST_FUNC" high="16" low="13" type="fgpf_blend_factor"/>
+		<bitfield name="COLOR_EQUATION" high="19" low="17" type="fgpf_blend_op"/>
+		<bitfield name="ALPHA_EQUATION" high="22" low="20" type="fgpf_blend_op"/>
+	</reg32>
+	<reg32 offset="61" name="FGPF_LOGOP">
+		<bitfield name="ENABLE" pos="0"/>
+		<bitfield name="COLOR_OP" high="4" low="1" type="fgpf_logical_op"/>
+		<bitfield name="ALPHA_OP" high="8" low="5" type="fgpf_logical_op"/>
+	</reg32>
+	<reg32 offset="62" name="FGPF_CBMSK">
+		<bitfield name="ALPHA" pos="0"/>
+		<bitfield name="BLUE" pos="1"/>
+		<bitfield name="GREEN" pos="2"/>
+		<bitfield name="RED" pos="3"/>
+	</reg32>
+	<reg32 offset="2" name="FGPF_DBMSK">
+		<bitfield name="DEPTH_MASK" pos="0"/>
+		<bitfield name="FRONT_STENCIL_MASK" high="23" low="16" type="uint"/>
+		<bitfield name="BACK_STENCIL_MASK" high="31" low="24" type="uint"/>
+	</reg32>
+	<reg32 offset="3" name="FGPF_FBCTL">
+		<bitfield name="COLOR_MODE" high="2" low="1" type="fgpf_color_mode"/>
+		<bitfield name="DITHER_ON" pos="3"/>
+		<bitfield name="ALPHA_CONST" high="11" low="4" type="uint"/>
+		<bitfield name="ALPHA_THRESHOLD" high="19" low="12" type="uint"/>
+		<bitfield name="OPAQUE_ALPHA" pos="20"/>
+	</reg32>
+</domain>
+
+<domain name="TEX" width="32" bare="yes">
+	<reg32 offset="0x00" name="TSTA">
+		<bitfield name="MIPMAP_EN" high="1" low="0" type="fgtu_mipmap_mode"/>
+		<bitfield name="TEX_FLT_EN" pos="2"/>
+		<bitfield name="MAG_FILTER" pos="3"/>
+		<bitfield name="NON_PARAMETRIC" pos="4"/>
+		<bitfield name="PADDR_MODE" high="7" low="6" type="fgtu_addr_mode"/>
+		<bitfield name="VADDR_MODE" high="9" low="8" type="fgtu_addr_mode"/>
+		<bitfield name="UADDR_MODE" high="11" low="10" type="fgtu_addr_mode"/>
+		<bitfield name="FORMAT" high="16" low="12" type="fgtu_tex_format"/>
+		<bitfield name="PAL_FMT" high="18" low="17" type="fgtu_pal_format"/>
+		<bitfield name="RGBA" pos="19"/>
+		<bitfield name="ZERO_PAD" pos="20"/>
+		<bitfield name="CK_EN" pos="21"/>
+		<bitfield name="CK2" pos="22"/>
+		<bitfield name="TYPE" high="28" low="27" type="fgtu_tex_type"/>
+	</reg32>
+	<reg32 offset="0x04" name="USIZE" type="uint"/>
+	<reg32 offset="0x08" name="VSIZE" type="uint"/>
+	<reg32 offset="0x0c" name="PSIZE" type="uint"/>
+	<stripe offset="0x10" stride="0x04" length="11">
+		<reg32 offset="0x00" name="TOFFS" type="uint"/>
+	</stripe>
+	<reg32 offset="0x3c" name="MIN_L" type="uint"/>
+	<reg32 offset="0x40" name="MAX_L" type="uint"/>
+</domain>
+
+<domain name="VTEX" width="32" bare="yes">
+	<reg32 offset="0x00" name="VTSTA">
+		<bitfield name="VSIZE" high="3" low="0" type="uint"/>
+		<bitfield name="USIZE" high="7" low="4" type="uint"/>
+		<bitfield name="VMOD" high="9" low="8" type="fgtu_addr_mode"/>
+		<bitfield name="UMOD" high="11" low="10" type="fgtu_addr_mode"/>
+	</reg32>
+</domain>
+
+</database>
