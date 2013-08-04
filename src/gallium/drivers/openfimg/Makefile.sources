@@ -1,0 +1,21 @@
+C_SOURCES := \
+	openfimg_context.c \
+	openfimg_draw.c \
+	openfimg_emit.c \
+	openfimg_fence.c \
+	openfimg_resource.c \
+	openfimg_screen.c \
+	openfimg_state.c \
+	openfimg_surface.c \
+	openfimg_texture.c \
+	openfimg_util.c \
+	openfimg_vertex.c
+
+COMPILER_SOURCES := \
+	compiler/openfimg_assembler.c \
+	compiler/openfimg_compiler.c \
+	compiler/openfimg_ir.c \
+	compiler/openfimg_optimize.c \
+	compiler/openfimg_program.c \
+	compiler/openfimg_reg.c \
+	compiler/openfimg_ssa.c

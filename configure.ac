@@ -1949,6 +1949,12 @@ if test -n "$with_gallium_drivers"; then
             gallium_require_drm "freedreno"
             gallium_require_drm_loader
             ;;
+        xopenfimg)
+            HAVE_GALLIUM_OPENFIMG=yes
+            PKG_CHECK_MODULES([OPENFIMG], [libdrm_freedreno >= $LIBDRM_FREEDRENO_REQUIRED])
+            gallium_require_drm "openfimg"
+            gallium_require_drm_loader
+            ;;
         xswrast)
             HAVE_GALLIUM_SOFTPIPE=yes
             if test "x$MESA_LLVM" = x1; then
@@ -2025,6 +2031,7 @@ AM_CONDITIONAL(HAVE_GALLIUM_RADEON_COMMON, test "x$HAVE_GALLIUM_R600" = xyes -o 
                                                 "x$HAVE_GALLIUM_RADEONSI" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_NOUVEAU, test "x$HAVE_GALLIUM_NOUVEAU" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_FREEDRENO, test "x$HAVE_GALLIUM_FREEDRENO" = xyes)
+AM_CONDITIONAL(HAVE_GALLIUM_OPENFIMG, test "x$HAVE_GALLIUM_OPENFIMG" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_SOFTPIPE, test "x$HAVE_GALLIUM_SOFTPIPE" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_LLVMPIPE, test "x$HAVE_GALLIUM_LLVMPIPE" = xyes)
 AM_CONDITIONAL(HAVE_GALLIUM_VC4, test "x$HAVE_GALLIUM_VC4" = xyes)
@@ -2154,6 +2161,7 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/drivers/llvmpipe/Makefile
 		src/gallium/drivers/noop/Makefile
 		src/gallium/drivers/nouveau/Makefile
+		src/gallium/drivers/openfimg/Makefile
 		src/gallium/drivers/r300/Makefile
 		src/gallium/drivers/r600/Makefile
 		src/gallium/drivers/radeon/Makefile
@@ -2195,6 +2203,7 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/winsys/i915/drm/Makefile
 		src/gallium/winsys/intel/drm/Makefile
 		src/gallium/winsys/nouveau/drm/Makefile
+		src/gallium/winsys/openfimg/drm/Makefile
 		src/gallium/winsys/radeon/drm/Makefile
 		src/gallium/winsys/svga/drm/Makefile
 		src/gallium/winsys/sw/dri/Makefile
