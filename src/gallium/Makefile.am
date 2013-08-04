@@ -82,6 +82,11 @@ if HAVE_GALLIUM_VC4
 SUBDIRS += drivers/vc4 winsys/vc4/drm
 endif
 
+## openfimg
+if HAVE_GALLIUM_OPENFIMG
+SUBDIRS += drivers/openfimg winsys/openfimg/drm
+endif
+
 ## the sw winsys'
 SUBDIRS += winsys/sw/null
 

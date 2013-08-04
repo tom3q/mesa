@@ -53,6 +53,9 @@ endif
 ifneq ($(filter freedreno, $(MESA_GPU_DRIVERS)),)
 LOCAL_CFLAGS += -DGALLIUM_FREEDRENO
 endif
+ifneq ($(filter openfimg, $(MESA_GPU_DRIVERS)),)
+LOCAL_CFLAGS += -DGALLIUM_OPENFIMG
+endif
 ifneq ($(filter i915g, $(MESA_GPU_DRIVERS)),)
 LOCAL_CFLAGS += -DGALLIUM_I915
 endif
