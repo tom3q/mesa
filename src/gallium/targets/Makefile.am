@@ -54,6 +54,12 @@ SUBDIRS += dri-freedreno
 endif
 endif
 
+if HAVE_GALLIUM_OPENFIMG
+if HAVE_DRI
+SUBDIRS += dri-openfimg
+endif
+endif
+
 if HAVE_GALLIUM_I915
 if HAVE_DRI
 SUBDIRS += dri-i915
