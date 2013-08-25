@@ -33,7 +33,7 @@ LIBDRM_INTEL_REQUIRED=2.4.49
 LIBDRM_NVVIEUX_REQUIRED=2.4.33
 LIBDRM_NOUVEAU_REQUIRED="2.4.33 libdrm >= 2.4.41"
 LIBDRM_FREEDRENO_REQUIRED=2.4.39
-LIBDRM_OPENFIMG_REQUIRED=0.6
+LIBDRM_OPENFIMG_REQUIRED=2.4.39
 DRI2PROTO_REQUIRED=2.6
 DRI3PROTO_REQUIRED=1.0
 PRESENTPROTO_REQUIRED=1.0
@@ -1805,7 +1805,7 @@ if test "x$with_gallium_drivers" != x; then
             ;;
         xopenfimg)
             HAVE_GALLIUM_OPENFIMG=yes
-            PKG_CHECK_MODULES([OPENFIMG], [libdrm_exynos >= $LIBDRM_OPENFIMG_REQUIRED])
+	    PKG_CHECK_MODULES([OPENFIMG], [libdrm_openfimg >= $LIBDRM_OPENFIMG_REQUIRED])
             gallium_require_drm_loader
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS openfimg"
             gallium_check_st "openfimg/drm" "dri-openfimg" "" "" "" ""

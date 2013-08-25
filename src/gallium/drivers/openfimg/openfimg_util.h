@@ -28,8 +28,8 @@
 #ifndef OPENFIMG_UTIL_H_
 #define OPENFIMG_UTIL_H_
 
-//#include <openfimg_drmif.h>
-//#include <openfimg_ringbuffer.h>
+#include <openfimg_drmif.h>
+#include <openfimg_ringbuffer.h>
 
 #include "pipe/p_format.h"
 #include "util/u_debug.h"

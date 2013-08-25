@@ -43,8 +43,8 @@
 #include <stdlib.h>
 
 #include "openfimg_screen.h"
-//#include "openfimg_resource.h"
-//#include "openfimg_fence.h"
+#include "openfimg_resource.h"
+#include "openfimg_fence.h"
 #include "openfimg_util.h"
 
 /* XXX this should go away */

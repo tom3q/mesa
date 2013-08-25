@@ -10,5 +10,15 @@ AM_CFLAGS = \
 	$(VISIBILITY_CFLAGS)
 
 libopenfimg_la_SOURCES = \
+	openfimg_context.c \
+	openfimg_draw.c \
+	openfimg_fence.c \
+	openfimg_resource.c \
 	openfimg_screen.c \
+	openfimg_state.c \
+	openfimg_surface.c \
+	openfimg_texture.c \
 	openfimg_util.c
+
+libopenfimg_la_LIBADD = \
+	drm/libofdrm.la
