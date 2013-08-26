@@ -192,6 +192,9 @@ struct pipe_context * of_context_init(struct of_context *ctx,
 
 void of_context_render(struct pipe_context *pctx);
 
+struct pipe_context * of_context_create(struct pipe_screen *pscreen,
+		void *priv);
+
 void of_context_destroy(struct pipe_context *pctx);
 
 #endif /* FREEDRENO_CONTEXT_H_ */

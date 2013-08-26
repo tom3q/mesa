@@ -34,7 +34,6 @@
 #include "openfimg_context.h"
 #include "openfimg_resource.h"
 #include "openfimg_texture.h"
-#include "openfimg_gmem.h"
 #include "openfimg_util.h"
 
 /* All the generic state handling.. In case of CSO's that are specific

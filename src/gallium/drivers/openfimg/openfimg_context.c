@@ -166,3 +166,33 @@ fail:
 	pctx->destroy(pctx);
 	return NULL;
 }
+
+struct pipe_context *
+of_context_create(struct pipe_screen *pscreen, void *priv)
+{
+	struct of_context *of_ctx = CALLOC_STRUCT(of_context);
+	struct pipe_context *pctx;
+
+	if (!of_ctx)
+		return NULL;
+
+	pctx = &of_ctx->base;
+
+	pctx->destroy = of_context_destroy;
+	//pctx->create_blend_state = of_blend_state_create;
+	//pctx->create_rasterizer_state = of_rasterizer_state_create;
+	//pctx->create_depth_stencil_alpha_state = of_zsa_state_create;
+
+	of_draw_init(pctx);
+	//of_gmem_init(pctx);
+	of_texture_init(pctx);
+	//of_prog_init(pctx);
+
+	pctx = of_context_init(of_ctx, pscreen, priv);
+	if (!pctx)
+		return NULL;
+
+	//of_emit_setup(&of_ctx->base);
+
+	return pctx;
+}

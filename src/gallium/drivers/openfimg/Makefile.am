@@ -19,6 +19,3 @@ libopenfimg_la_SOURCES = \
 	openfimg_surface.c \
 	openfimg_texture.c \
 	openfimg_util.c
-
-libopenfimg_la_LIBADD = \
-	drm/libofdrm.la

@@ -28,8 +28,8 @@
 #ifndef OPENFIMG_SCREEN_H_
 #define OPENFIMG_SCREEN_H_
 
-//#include <openfimg_drmif.h>
-//#include <openfimg_ringbuffer.h>
+#include <openfimg_drmif.h>
+#include <openfimg_ringbuffer.h>
 
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
@@ -40,10 +40,6 @@ struct of_bo;
 
 struct of_screen {
 	struct pipe_screen base;
-
-	uint32_t gmemsize_bytes;
-	uint32_t device_id;
-	uint32_t gpu_id;
 
 	struct of_device *dev;
 	struct of_pipe *pipe;

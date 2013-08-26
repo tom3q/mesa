@@ -42,6 +42,7 @@
 #include <errno.h>
 #include <stdlib.h>
 
+#include "openfimg_context.h"
 #include "openfimg_screen.h"
 #include "openfimg_resource.h"
 #include "openfimg_fence.h"
@@ -345,7 +346,7 @@ of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		return 4; /* Max native address registers */
 	case PIPE_SHADER_CAP_MAX_CONSTS:
 		return 1024;
-	case case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
+	case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
 		return 0;
 	case PIPE_SHADER_CAP_MAX_PREDS:
 		return 7; /* nothing uses this */
@@ -433,24 +434,6 @@ of_screen_create(struct of_device *dev)
 		DBG("could not create 3d pipe");
 		goto fail;
 	}
-
-	if (of_pipe_get_param(screen->pipe, OF_GMEM_SIZE, &val)) {
-		DBG("could not get GMEM size");
-		goto fail;
-	}
-	screen->gmemsize_bytes = val;
-
-	if (of_pipe_get_param(screen->pipe, OF_DEVICE_ID, &val)) {
-		DBG("could not get device-id");
-		goto fail;
-	}
-	screen->device_id = val;
-
-	if (of_pipe_get_param(screen->pipe, OF_GPU_ID, &val)) {
-		DBG("could not get gpu-id");
-		goto fail;
-	}
-	screen->gpu_id = val;
 
 	pscreen->context_create = of_context_create;
 	pscreen->is_format_supported = of_screen_is_format_supported;

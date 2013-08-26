@@ -168,8 +168,7 @@ of_resource_create(struct pipe_screen *pscreen,
 	assert(rsc->cpp);
 
 	size = rsc->pitch * tmpl->height0 * rsc->cpp;
-	flags = DRM_FREEDRENO_GEM_CACHE_WCOMBINE |
-			DRM_FREEDRENO_GEM_TYPE_KMEM; /* TODO */
+	flags = DRM_OPENFIMG_GEM_WBACK;
 
 	rsc->bo = of_bo_new(screen->dev, size, flags);
 
