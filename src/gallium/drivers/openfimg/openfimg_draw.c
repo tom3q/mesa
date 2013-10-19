@@ -125,7 +125,7 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	/* and any buffers used, need to be resolved: */
 	ctx->resolve |= buffers;
 
-	ctx->draw(ctx, info);
+	/* TODO: Implement draw here. */
 }
 
 /* TODO figure out how to make better use of existing state mechanism
@@ -155,7 +155,7 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 			util_format_name(pfb->cbufs[0]->format),
 			pfb->zsbuf ? util_format_name(pfb->zsbuf->format) : "none");
 
-	ctx->clear(ctx, buffers, color, depth, stencil);
+	/* TODO: Implement clear here. */
 
 	ctx->dirty |= OF_DIRTY_ZSA |
 			OF_DIRTY_RASTERIZER |

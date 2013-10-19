@@ -166,11 +166,6 @@ struct of_context {
 	struct of_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
 	struct of_vertexbuf_stateobj vertexbuf;
 	struct pipe_index_buffer indexbuf;
-
-	/* draw: */
-	void (*draw)(struct of_context *pctx, const struct pipe_draw_info *info);
-	void (*clear)(struct of_context *ctx, unsigned buffers,
-			const union pipe_color_union *color, double depth, unsigned stencil);
 };
 
 static INLINE struct of_context *
