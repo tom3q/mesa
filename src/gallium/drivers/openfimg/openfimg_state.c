@@ -184,21 +184,6 @@ of_set_vertex_buffers(struct pipe_context *pctx,
 	struct of_vertexbuf_stateobj *so = &ctx->vertexbuf;
 	int i;
 
-	/* on a2xx, pitch is encoded in the vtx fetch instruction, so
-	 * we need to mark VTXSTATE as dirty as well to trigger patching
-	 * and re-emitting the vtx shader:
-	 */
-	for (i = 0; i < count; i++) {
-		bool new_enabled = vb && (vb[i].buffer || vb[i].user_buffer);
-		bool old_enabled = so->vb[i].buffer || so->vb[i].user_buffer;
-		uint32_t new_stride = vb ? vb[i].stride : 0;
-		uint32_t old_stride = so->vb[i].stride;
-		if ((new_enabled != old_enabled) || (new_stride != old_stride)) {
-			ctx->dirty |= OF_DIRTY_VTXSTATE;
-			break;
-		}
-	}
-
 	util_set_vertex_buffers_mask(so->vb, &so->enabled_mask, vb, start_slot, count);
 	so->count = util_last_bit(so->enabled_mask);
 
@@ -223,6 +208,59 @@ of_set_index_buffer(struct pipe_context *pctx,
 	ctx->dirty |= OF_DIRTY_INDEXBUF;
 }
 
+static void *
+of_blend_state_create(struct pipe_context *pctx,
+		const struct pipe_blend_state *cso)
+{
+	const struct pipe_rt_blend_state *rt = cso->rt;
+	struct of_blend_stateobj *so;
+
+	if (cso->independent_blend_enable) {
+		DBG("Unsupported! independent blend state");
+		return NULL;
+	}
+
+	so = CALLOC_STRUCT(of_blend_stateobj);
+	if (!so)
+		return NULL;
+
+	so->base = *cso;
+
+	so->fgpf_blend =
+		FGPF_BLEND_COLOR_SRC_FUNC(of_blend_factor(rt->rgb_src_factor)) |
+		FGPF_BLEND_COLOR_EQUATION(of_blend_func(rt->rgb_func)) |
+		FGPF_BLEND_COLOR_DST_FUNC(of_blend_factor(rt->rgb_dst_factor)) |
+		FGPF_BLEND_ALPHA_SRC_FUNC(of_blend_factor(rt->alpha_src_factor)) |
+		FGPF_BLEND_ALPHA_EQUATION(of_blend_func(rt->alpha_func)) |
+		FGPF_BLEND_ALPHA_DST_FUNC(of_blend_factor(rt->alpha_dst_factor));
+
+	if (rt->blend_enable)
+		so->fgpf_blend |= FGPF_BLEND_ENABLE;
+
+	so->fgpf_logop =
+		FGPF_LOGOP_COLOR_OP(of_logic_op(cso->logicop_func)) |
+		FGPF_LOGOP_ALPHA_OP(of_logic_op(cso->logicop_func));
+
+	if (cso->logicop_enable)
+		so->fgpf_logop |= FGPF_LOGOP_ENABLE;
+
+	if (!(rt->colormask & PIPE_MASK_R))
+		so->fgpf_cbmsk |= FGPF_CBMSK_RED;
+	if (!(rt->colormask & PIPE_MASK_G))
+		so->fgpf_cbmsk |= FGPF_CBMSK_GREEN;
+	if (!(rt->colormask & PIPE_MASK_B))
+		so->fgpf_cbmsk |= FGPF_CBMSK_BLUE;
+	if (!(rt->colormask & PIPE_MASK_A))
+		so->fgpf_cbmsk |= FGPF_CBMSK_ALPHA;
+
+	if (cso->dither)
+		so->fgpf_fbctl |= FGPF_FBCTL_DITHER_ON;
+	if (cso->alpha_to_one)
+		so->fgpf_fbctl |= FGPF_FBCTL_OPAQUE_ALPHA;
+
+	return so;
+}
+
 static void
 of_blend_state_bind(struct pipe_context *pctx, void *hwcso)
 {
@@ -237,6 +275,48 @@ of_blend_state_delete(struct pipe_context *pctx, void *hwcso)
 	FREE(hwcso);
 }
 
+static void *
+of_rasterizer_state_create(struct pipe_context *pctx,
+		const struct pipe_rasterizer_state *cso)
+{
+	struct of_rasterizer_stateobj *so;
+	float psize_min, psize_max;
+
+	so = CALLOC_STRUCT(of_rasterizer_stateobj);
+	if (!so)
+		return NULL;
+
+	if (cso->point_size_per_vertex) {
+		psize_min = util_get_min_point_size(cso);
+		psize_max = 2048;
+	} else {
+		/* Force the point size to be as if the vertex output was disabled. */
+		psize_min = cso->point_size;
+		psize_max = cso->point_size;
+	}
+
+	so->base = *cso;
+
+	if (cso->cull_face) {
+		so->fgra_bfcull = FGRA_BFCULL_FACE(of_cull_face(cso->cull_face));
+		so->fgra_bfcull |= FGRA_BFCULL_ENABLE;
+	}
+
+	if (!cso->front_ccw)
+		so->fgra_bfcull |= FGRA_BFCULL_FRONT_CW;
+
+	so->fgra_pwidth = FGRA_PWIDTH(cso->point_size);
+	so->fgra_psize_min = FGRA_PSIZE_MIN(psize_min);
+	so->fgra_psize_max = FGRA_PSIZE_MAX(psize_max);
+
+	so->fgra_lwidth = FGRA_LWIDTH(cso->line_width);
+
+	if (cso->offset_tri)
+		so->fgra_doffen = FGRA_D_OFF_EN_ENABLE;
+
+	return so;
+}
+
 static void
 of_rasterizer_state_bind(struct pipe_context *pctx, void *hwcso)
 {
@@ -249,6 +329,61 @@ static void
 of_rasterizer_state_delete(struct pipe_context *pctx, void *hwcso)
 {
 	FREE(hwcso);
+}
+
+static void *
+of_zsa_state_create(struct pipe_context *pctx,
+		const struct pipe_depth_stencil_alpha_state *cso)
+{
+	struct of_zsa_stateobj *so;
+
+	so = CALLOC_STRUCT(of_zsa_stateobj);
+	if (!so)
+		return NULL;
+
+	so->base = *cso;
+
+	if (cso->depth.enabled) {
+		so->fgpf_deptht |= FGPF_DEPTHT_ENABLE;
+		so->fgpf_deptht = FGPF_DEPTHT_MODE(of_test_mode(cso->depth.func));
+	}
+
+	if (!cso->depth.writemask)
+		so->fgpf_dbmsk |= FGPF_DBMSK_DEPTH_MASK;
+
+	if (cso->stencil[0].enabled) {
+		const struct pipe_stencil_state *s = &cso->stencil[0];
+
+		so->fgpf_frontst =
+			FGPF_FRONTST_ENABLE |
+			FGPF_FRONTST_MODE(of_test_mode(s->func)) |
+			FGPF_FRONTST_MASK(s->valuemask) |
+			FGPF_FRONTST_SFAIL(of_stencil_op(s->fail_op)) |
+			FGPF_FRONTST_DPPASS(of_stencil_op(s->zpass_op)) |
+			FGPF_FRONTST_DPFAIL(of_stencil_op(s->zfail_op));
+
+		so->fgpf_dbmsk |= FGPF_DBMSK_FRONT_STENCIL_MASK(~s->writemask);
+
+		if (cso->stencil[1].enabled)
+			s = &cso->stencil[1];
+
+		so->fgpf_backst =
+			FGPF_FRONTST_MODE(of_test_mode(s->func)) |
+			FGPF_FRONTST_MASK(s->valuemask) |
+			FGPF_FRONTST_SFAIL(of_stencil_op(s->fail_op)) |
+			FGPF_FRONTST_DPPASS(of_stencil_op(s->zpass_op)) |
+			FGPF_FRONTST_DPFAIL(of_stencil_op(s->zfail_op));
+
+		so->fgpf_dbmsk |= FGPF_DBMSK_BACK_STENCIL_MASK(~s->writemask);
+	}
+
+	if (cso->alpha.enabled)
+		so->fgpf_alphat =
+			FGPF_ALPHAT_ENABLE |
+			FGPF_ALPHAT_MODE(of_test_mode(cso->alpha.func)) |
+			FGPF_ALPHAT_VALUE(float_to_ubyte(cso->alpha.ref_value));
+
+	return so;
 }
 
 static void
@@ -310,12 +445,15 @@ of_state_init(struct pipe_context *pctx)
 	pctx->set_vertex_buffers = of_set_vertex_buffers;
 	pctx->set_index_buffer = of_set_index_buffer;
 
+	pctx->create_blend_state = of_blend_state_create;
 	pctx->bind_blend_state = of_blend_state_bind;
 	pctx->delete_blend_state = of_blend_state_delete;
 
+	pctx->create_rasterizer_state = of_rasterizer_state_create;
 	pctx->bind_rasterizer_state = of_rasterizer_state_bind;
 	pctx->delete_rasterizer_state = of_rasterizer_state_delete;
 
+	pctx->create_depth_stencil_alpha_state = of_zsa_state_create;
 	pctx->bind_depth_stencil_alpha_state = of_zsa_state_bind;
 	pctx->delete_depth_stencil_alpha_state = of_zsa_state_delete;
 

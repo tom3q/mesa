@@ -63,8 +63,10 @@ uint32_t of_tex_swiz(enum pipe_format format, unsigned swizzle_r,
 enum pc_di_index_size of_pipe2index(enum pipe_format format);
 enum fgpf_blend_factor of_blend_factor(unsigned factor);
 enum fgpf_blend_op of_blend_func(unsigned func);
-enum adreno_pa_su_sc_draw of_polygon_mode(unsigned mode);
 enum fgpf_stencil_action of_stencil_op(unsigned op);
+enum fgpf_logical_op of_logic_op(unsigned op);
+enum fgra_bfcull_face of_cull_face(unsigned face);
+enum fgpf_test_mode of_test_mode(unsigned mode);
 
 /* convert x,y to dword */
 static inline uint32_t xy2d(uint16_t x, uint16_t y)

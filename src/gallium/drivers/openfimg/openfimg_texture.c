@@ -90,22 +90,30 @@ static void set_sampler_views(struct of_texture_stateobj *prog,
 
 	prog->num_textures = new_nr;
 }
-
 static void
-of_fragtex_sampler_states_bind(struct pipe_context *pctx,
+of_sampler_states_bind(struct pipe_context *pctx,
+		unsigned shader, unsigned start,
 		unsigned nr, void **hwcso)
 {
 	struct of_context *ctx = of_context(pctx);
 
-	/* on a2xx, since there is a flat address space for textures/samplers,
-	 * a change in # of fragment textures/samplers will trigger patching and
-	 * re-emitting the vertex shader:
-	 */
-	if (nr != ctx->fragtex.num_samplers)
-		ctx->dirty |= OF_DIRTY_TEXSTATE;
+	assert(start == 0);
 
-	bind_sampler_states(&ctx->fragtex, nr, hwcso);
-	ctx->dirty |= OF_DIRTY_FRAGTEX;
+	if (shader == PIPE_SHADER_FRAGMENT) {
+		/* on a2xx, since there is a flat address space for textures/samplers,
+		 * a change in # of fragment textures/samplers will trigger patching and
+		 * re-emitting the vertex shader:
+		 */
+		if (nr != ctx->fragtex.num_samplers)
+			ctx->dirty |= OF_DIRTY_TEXSTATE;
+
+		bind_sampler_states(&ctx->fragtex, nr, hwcso);
+		ctx->dirty |= OF_DIRTY_FRAGTEX;
+	}
+	else if (shader == PIPE_SHADER_VERTEX) {
+		bind_sampler_states(&ctx->verttex, nr, hwcso);
+		ctx->dirty |= OF_DIRTY_VERTTEX;
+	}
 }
 
 
@@ -127,22 +135,30 @@ of_fragtex_set_sampler_views(struct pipe_context *pctx, unsigned nr,
 }
 
 static void
-of_verttex_sampler_states_bind(struct pipe_context *pctx,
-		unsigned nr, void **hwcso)
-{
-	struct of_context *ctx = of_context(pctx);
-	bind_sampler_states(&ctx->verttex, nr, hwcso);
-	ctx->dirty |= OF_DIRTY_VERTTEX;
-}
-
-
-static void
 of_verttex_set_sampler_views(struct pipe_context *pctx, unsigned nr,
 		struct pipe_sampler_view **views)
 {
 	struct of_context *ctx = of_context(pctx);
 	set_sampler_views(&ctx->verttex, nr, views);
 	ctx->dirty |= OF_DIRTY_VERTTEX;
+}
+
+static void
+of_set_sampler_views(struct pipe_context *pctx, unsigned shader,
+                     unsigned start, unsigned nr,
+                     struct pipe_sampler_view **views)
+{
+   assert(start == 0);
+   switch (shader) {
+   case PIPE_SHADER_FRAGMENT:
+      of_fragtex_set_sampler_views(pctx, nr, views);
+      break;
+   case PIPE_SHADER_VERTEX:
+      of_verttex_set_sampler_views(pctx, nr, views);
+      break;
+   default:
+      ;
+   }
 }
 
 void
@@ -152,9 +168,6 @@ of_texture_init(struct pipe_context *pctx)
 
 	pctx->sampler_view_destroy = of_sampler_view_destroy;
 
-	pctx->bind_fragment_sampler_states = of_fragtex_sampler_states_bind;
-	pctx->set_fragment_sampler_views = of_fragtex_set_sampler_views;
-
-	pctx->bind_vertex_sampler_states = of_verttex_sampler_states_bind;
-	pctx->set_vertex_sampler_views = of_verttex_set_sampler_views;
+	pctx->bind_sampler_states = of_sampler_states_bind;
+	pctx->set_sampler_views = of_set_sampler_views;
 }

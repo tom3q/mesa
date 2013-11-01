@@ -31,6 +31,33 @@
 #include "pipe/p_context.h"
 #include "openfimg_context.h"
 
+struct of_blend_stateobj {
+	struct pipe_blend_state base;
+	uint32_t fgpf_blend;
+	uint32_t fgpf_logop;
+	uint32_t fgpf_cbmsk;
+	uint32_t fgpf_fbctl;
+};
+
+struct of_rasterizer_stateobj {
+	struct pipe_rasterizer_state base;
+	uint32_t fgra_doffen;
+	uint32_t fgra_bfcull;
+	uint32_t fgra_pwidth;
+	uint32_t fgra_psize_min;
+	uint32_t fgra_psize_max;
+	uint32_t fgra_lwidth;
+};
+
+struct of_zsa_stateobj {
+	struct pipe_depth_stencil_alpha_state base;
+	uint32_t fgpf_alphat;
+	uint32_t fgpf_frontst;
+	uint32_t fgpf_backst;
+	uint32_t fgpf_deptht;
+	uint32_t fgpf_dbmsk;
+};
+
 static inline bool of_depth_enabled(struct of_context *ctx)
 {
 	return ctx->zsa && ctx->zsa->depth.enabled;
@@ -49,6 +76,24 @@ static inline bool of_logicop_enabled(struct of_context *ctx)
 static inline bool of_blend_enabled(struct of_context *ctx, unsigned n)
 {
 	return ctx->blend && ctx->blend->rt[n].blend_enable;
+}
+
+static INLINE struct of_blend_stateobj *
+of_blend_stateobj(struct pipe_blend_state *blend)
+{
+	return (struct of_blend_stateobj *)blend;
+}
+
+static INLINE struct of_rasterizer_stateobj *
+of_rasterizer_stateobj(struct pipe_rasterizer_state *rast)
+{
+	return (struct of_rasterizer_stateobj *)rast;
+}
+
+static INLINE struct of_zsa_stateobj *
+of_zsa_stateobj(struct pipe_depth_stencil_alpha_state *zsa)
+{
+	return (struct of_zsa_stateobj *)zsa;
 }
 
 void of_state_init(struct pipe_context *pctx);

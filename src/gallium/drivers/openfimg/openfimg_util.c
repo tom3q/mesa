@@ -259,23 +259,7 @@ of_blend_func(unsigned func)
 		return 0;
 	}
 }
-#if 0
-enum adreno_pa_su_sc_draw
-of_polygon_mode(unsigned mode)
-{
-	switch (mode) {
-	case PIPE_POLYGON_MODE_POINT:
-		return PC_DRAW_POINTS;
-	case PIPE_POLYGON_MODE_LINE:
-		return PC_DRAW_LINES;
-	case PIPE_POLYGON_MODE_FILL:
-		return PC_DRAW_TRIANGLES;
-	default:
-		DBG("invalid polygon mode: %u", mode);
-		return 0;
-	}
-}
-#endif
+
 enum fgpf_stencil_action
 of_stencil_op(unsigned op)
 {
@@ -298,6 +282,90 @@ of_stencil_op(unsigned op)
 		return STENCIL_INVERT;
 	default:
 		DBG("invalid stencil op: %u", op);
+		return 0;
+	}
+}
+
+enum fgra_bfcull_face
+of_cull_face(unsigned face)
+{
+	switch (face) {
+	case PIPE_FACE_FRONT:
+		return FACE_FRONT;
+	case PIPE_FACE_BACK:
+		return FACE_BACK;
+	case PIPE_FACE_FRONT | PIPE_FACE_BACK:
+		return FACE_BOTH;
+	default:
+		DBG("invalid cull face setting: %u", face);
+		return 0;
+	}
+}
+
+enum fgpf_logical_op
+of_logic_op(unsigned op)
+{
+	switch (op) {
+	case PIPE_LOGICOP_CLEAR:
+		return LOGICAL_ZERO;
+	case PIPE_LOGICOP_NOR:
+		return LOGICAL_SRC_NOR_DST;
+	case PIPE_LOGICOP_AND_INVERTED:
+		return LOGICAL_NOT_SRC_AND_DST;
+	case PIPE_LOGICOP_COPY_INVERTED:
+		return LOGICAL_NOT_SRC;
+	case PIPE_LOGICOP_AND_REVERSE:
+		return LOGICAL_SRC_AND_NOT_DST;
+	case PIPE_LOGICOP_INVERT:
+		return LOGICAL_NOT_DST;
+	case PIPE_LOGICOP_XOR:
+		return LOGICAL_SRC_XOR_DST;
+	case PIPE_LOGICOP_NAND:
+		return LOGICAL_SRC_NAND_DST;
+	case PIPE_LOGICOP_AND:
+		return LOGICAL_SRC_AND_DST;
+	case PIPE_LOGICOP_EQUIV:
+		return LOGICAL_SRC_EQV_DST;
+	case PIPE_LOGICOP_NOOP:
+		return LOGICAL_DST;
+	case PIPE_LOGICOP_OR_INVERTED:
+		return LOGICAL_NOT_SRC_OR_DST;
+	case PIPE_LOGICOP_COPY:
+		return LOGICAL_SRC;
+	case PIPE_LOGICOP_OR_REVERSE:
+		return LOGICAL_SRC_OR_NOT_DST;
+	case PIPE_LOGICOP_OR:
+		return LOGICAL_SRC_OR_DST;
+	case PIPE_LOGICOP_SET:
+		return LOGICAL_ONE;
+	default:
+		DBG("invalid logic op: %u", op);
+		return 0;
+	}
+}
+
+enum fgpf_test_mode
+of_test_mode(unsigned mode)
+{
+	switch (mode) {
+	case PIPE_FUNC_NEVER:
+		return TEST_NEVER;
+	case PIPE_FUNC_LESS:
+		return TEST_LESS;
+	case PIPE_FUNC_EQUAL:
+		return TEST_EQUAL;
+	case PIPE_FUNC_LEQUAL:
+		return TEST_LEQUAL;
+	case PIPE_FUNC_GREATER:
+		return TEST_GREATER;
+	case PIPE_FUNC_NOTEQUAL:
+		return TEST_NOTEQUAL;
+	case PIPE_FUNC_GEQUAL:
+		return TEST_GEQUAL;
+	case PIPE_FUNC_ALWAYS:
+		return TEST_ALWAYS;
+	default:
+		DBG("invalid test mode: %u", mode);
 		return 0;
 	}
 }
