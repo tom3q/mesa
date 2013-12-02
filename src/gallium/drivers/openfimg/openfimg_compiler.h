@@ -25,40 +25,13 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_TEXTURE_H_
-#define FREEDRENO_TEXTURE_H_
+#ifndef OF_COMPILER_H_
+#define OF_COMPILER_H_
 
-#include "openfimg_context.h"
-#include "pipe/p_context.h"
-#include "fimg_3dse.xml.h"
+#include "openfimg_program.h"
+#include "openfimg_util.h"
 
-struct of_sampler_stateobj {
-	struct pipe_sampler_state base;
-	uint32_t tex0, tex3, tex4, tex5;
-};
+int of_compile_shader(struct of_program_stateobj *prog,
+		struct of_shader_stateobj *so);
 
-static INLINE struct of_sampler_stateobj *
-of_sampler_stateobj(struct pipe_sampler_state *samp)
-{
-	return (struct of_sampler_stateobj *)samp;
-}
-
-struct of_pipe_sampler_view {
-	struct pipe_sampler_view base;
-	struct of_resource *tex_resource;
-	enum fgtu_tex_format fmt;
-	uint32_t tex0, tex2, tex3;
-};
-
-static INLINE struct of_pipe_sampler_view *
-of_pipe_sampler_view(struct pipe_sampler_view *pview)
-{
-	return (struct of_pipe_sampler_view *)pview;
-}
-
-unsigned of_get_const_idx(struct of_context *ctx,
-		struct of_texture_stateobj *tex, unsigned samp_id);
-
-void of_texture_init(struct pipe_context *pctx);
-
-#endif /* FREEDRENO_TEXTURE_H_ */
+#endif /* OF_COMPILER_H_ */

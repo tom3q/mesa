@@ -32,8 +32,39 @@
 #include "util/u_inlines.h"
 
 #include "openfimg_texture.h"
+#include "openfimg_resource.h"
 #include "openfimg_context.h"
 #include "openfimg_util.h"
+
+static enum fgtu_addr_mode
+tex_clamp(unsigned wrap)
+{
+	switch (wrap) {
+	case PIPE_TEX_WRAP_REPEAT:
+		return ADDR_MODE_REPEAT;
+	case PIPE_TEX_WRAP_CLAMP_TO_EDGE:
+		return ADDR_MODE_CLAMP_TO_EDGE;
+	case PIPE_TEX_WRAP_MIRROR_REPEAT:
+		return ADDR_MODE_FLIP;
+	default:
+		DBG("invalid wrap: %u", wrap);
+		return 0;
+	}
+}
+
+static uint32_t
+tex_filter(unsigned filter)
+{
+	switch (filter) {
+	case PIPE_TEX_FILTER_NEAREST:
+		return 0;
+	case PIPE_TEX_FILTER_LINEAR:
+		return TSTA_MAG_FILTER;
+	default:
+		DBG("invalid filter: %u", filter);
+		return 0;
+	}
+}
 
 static void
 of_sampler_state_delete(struct pipe_context *pctx, void *hwcso)
@@ -161,11 +192,73 @@ of_set_sampler_views(struct pipe_context *pctx, unsigned shader,
    }
 }
 
+static void *
+of_sampler_state_create(struct pipe_context *pctx,
+		const struct pipe_sampler_state *cso)
+{
+	struct of_sampler_stateobj *so = CALLOC_STRUCT(of_sampler_stateobj);
+
+	if (!so)
+		return NULL;
+
+	so->base = *cso;
+
+#warning TODO
+
+	return so;
+}
+
+static struct pipe_sampler_view *
+of_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
+		const struct pipe_sampler_view *cso)
+{
+	struct of_pipe_sampler_view *so = CALLOC_STRUCT(of_pipe_sampler_view);
+	struct of_resource *rsc = of_resource(prsc);
+
+	if (!so)
+		return NULL;
+
+	so->base = *cso;
+	pipe_reference(NULL, &prsc->reference);
+	so->base.texture = prsc;
+	so->base.reference.count = 1;
+	so->base.context = pctx;
+
+	so->tex_resource =  rsc;
+	so->fmt = of_pipe2texture(cso->format);
+
+#warning TODO
+
+	return &so->base;
+}
+
+/* map gallium sampler-id to hw const-idx.. adreno uses a flat address
+ * space of samplers (const-idx), so we need to map the gallium sampler-id
+ * which is per-shader to a global const-idx space.
+ *
+ * Fragment shader sampler maps directly to const-idx, and vertex shader
+ * is offset by the # of fragment shader samplers.  If the # of fragment
+ * shader samplers changes, this shifts the vertex shader indexes.
+ *
+ * TODO maybe we can do frag shader 0..N  and vert shader N..0 to avoid
+ * this??
+ */
+unsigned
+of_get_const_idx(struct of_context *ctx, struct of_texture_stateobj *tex,
+		unsigned samp_id)
+{
+	if (tex == &ctx->fragtex)
+		return samp_id;
+	return samp_id + ctx->fragtex.num_samplers;
+}
+
 void
 of_texture_init(struct pipe_context *pctx)
 {
+	pctx->create_sampler_state = of_sampler_state_create;
 	pctx->delete_sampler_state = of_sampler_state_delete;
 
+	pctx->create_sampler_view = of_sampler_view_create;
 	pctx->sampler_view_destroy = of_sampler_view_destroy;
 
 	pctx->bind_sampler_states = of_sampler_states_bind;

@@ -25,40 +25,57 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_TEXTURE_H_
-#define FREEDRENO_TEXTURE_H_
+#ifndef OF_PROGRAM_H_
+#define OF_PROGRAM_H_
+
+#include "pipe/p_context.h"
 
 #include "openfimg_context.h"
-#include "pipe/p_context.h"
-#include "fimg_3dse.xml.h"
 
-struct of_sampler_stateobj {
-	struct pipe_sampler_state base;
-	uint32_t tex0, tex3, tex4, tex5;
+#include "openfimg_ir.h"
+#include "openfimg_disasm.h"
+
+struct of_shader_stateobj {
+	enum shader_t type;
+
+	uint32_t *bin;
+
+	struct tgsi_token *tokens;
+
+	/* note that we defer compiling shader until we know both vs and ps..
+	 * and if one changes, we potentially need to recompile in order to
+	 * get varying linkages correct:
+	 */
+	struct ir2_shader_info info;
+	struct ir2_shader *ir;
+
+	/* for vertex shaders, the fetch instructions which need to be
+	 * patched up before assembly:
+	 */
+	unsigned num_vfetch_instrs;
+	struct ir2_instruction *vfetch_instrs[64];
+
+	/* for all shaders, any tex fetch instructions which need to be
+	 * patched before assembly:
+	 */
+	unsigned num_tfetch_instrs;
+	struct {
+		unsigned samp_id;
+		struct ir2_instruction *instr;
+	} tfetch_instrs[64];
+
+	unsigned first_immediate;     /* const reg # of first immediate */
+	unsigned num_immediates;
+	struct {
+		uint32_t val[4];
+	} immediates[64];
 };
 
-static INLINE struct of_sampler_stateobj *
-of_sampler_stateobj(struct pipe_sampler_state *samp)
-{
-	return (struct of_sampler_stateobj *)samp;
-}
+void of_program_emit(struct of_ringbuffer *ring,
+		struct of_program_stateobj *prog);
+void of_program_validate(struct of_context *ctx);
 
-struct of_pipe_sampler_view {
-	struct pipe_sampler_view base;
-	struct of_resource *tex_resource;
-	enum fgtu_tex_format fmt;
-	uint32_t tex0, tex2, tex3;
-};
+void of_prog_init(struct pipe_context *pctx);
+void of_prog_fini(struct pipe_context *pctx);
 
-static INLINE struct of_pipe_sampler_view *
-of_pipe_sampler_view(struct pipe_sampler_view *pview)
-{
-	return (struct of_pipe_sampler_view *)pview;
-}
-
-unsigned of_get_const_idx(struct of_context *ctx,
-		struct of_texture_stateobj *tex, unsigned samp_id);
-
-void of_texture_init(struct pipe_context *pctx);
-
-#endif /* FREEDRENO_TEXTURE_H_ */
+#endif /* OF_PROGRAM_H_ */

@@ -25,40 +25,23 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_TEXTURE_H_
-#define FREEDRENO_TEXTURE_H_
+#ifndef DISASM_H_
+#define DISASM_H_
 
-#include "openfimg_context.h"
-#include "pipe/p_context.h"
-#include "fimg_3dse.xml.h"
-
-struct of_sampler_stateobj {
-	struct pipe_sampler_state base;
-	uint32_t tex0, tex3, tex4, tex5;
+enum shader_t {
+	SHADER_VERTEX,
+	SHADER_FRAGMENT,
+	SHADER_COMPUTE,
 };
 
-static INLINE struct of_sampler_stateobj *
-of_sampler_stateobj(struct pipe_sampler_state *samp)
-{
-	return (struct of_sampler_stateobj *)samp;
-}
-
-struct of_pipe_sampler_view {
-	struct pipe_sampler_view base;
-	struct of_resource *tex_resource;
-	enum fgtu_tex_format fmt;
-	uint32_t tex0, tex2, tex3;
+/* bitmask of debug flags */
+enum debug_t {
+	PRINT_RAW      = 0x1,    /* dump raw hexdump */
+	PRINT_VERBOSE  = 0x2,
 };
 
-static INLINE struct of_pipe_sampler_view *
-of_pipe_sampler_view(struct pipe_sampler_view *pview)
-{
-	return (struct of_pipe_sampler_view *)pview;
-}
+int disasm_fimg_3dse(uint32_t *dwords, int sizedwords,
+		     int level, enum shader_t type);
+void disasm_set_debug(enum debug_t debug);
 
-unsigned of_get_const_idx(struct of_context *ctx,
-		struct of_texture_stateobj *tex, unsigned samp_id);
-
-void of_texture_init(struct pipe_context *pctx);
-
-#endif /* FREEDRENO_TEXTURE_H_ */
+#endif /* DISASM_H_ */

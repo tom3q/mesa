@@ -55,6 +55,16 @@ extern int of_mesa_debug;
 
 #define LOG_DWORDS 0
 
+enum of_request_type {
+	G3D_REQUEST_REGISTER_WRITE = 0,
+	G3D_REQUEST_SHADER_PROGRAM = 1,
+	G3D_REQUEST_SHADER_DATA = 2,
+	G3D_REQUEST_TEXTURE = 3,
+	G3D_REQUEST_COLORBUFFER = 4,
+	G3D_REQUEST_DEPTHBUFFER = 5,
+	G3D_REQUEST_DRAW = 6,
+};
+
 enum fgtu_tex_format of_pipe2texture(enum pipe_format format);
 enum fgpf_color_mode of_pipe2color(enum pipe_format format);
 int of_depth_supported(enum pipe_format format);
@@ -72,6 +82,34 @@ enum fgpf_test_mode of_test_mode(unsigned mode);
 static inline uint32_t xy2d(uint16_t x, uint16_t y)
 {
 	return ((y & 0x3fff) << 16) | (x & 0x3fff);
+}
+
+static inline void
+OUT_RING(struct of_ringbuffer *ring, uint32_t data)
+{
+	if (LOG_DWORDS) {
+		DBG("ring[%p]: OUT_RING   %04x:  %08x", ring,
+				(uint32_t)(ring->cur - ring->last_start), data);
+	}
+	*(ring->cur++) = data;
+}
+
+static inline void BEGIN_RING(struct of_ringbuffer *ring, uint32_t ndwords)
+{
+	if ((ring->cur + ndwords) >= ring->end) {
+		/* this probably won't really work if we have multiple tiles..
+		 * but it is ok for 2d..  we might need different behavior
+		 * depending on 2d or 3d pipe.
+		 */
+		DBG("uh oh..");
+	}
+}
+
+static inline void
+OUT_PKT(struct of_ringbuffer *ring, uint8_t opcode, uint32_t cnt)
+{
+	BEGIN_RING(ring, cnt+1);
+	OUT_RING(ring, ((opcode) << 24) | ((cnt * 4) & 0xffffff));
 }
 
 #endif /* OPENFIMG_UTIL_H_ */

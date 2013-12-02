@@ -25,40 +25,23 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_TEXTURE_H_
-#define FREEDRENO_TEXTURE_H_
+#ifndef OF_EMIT_H
+#define OF_EMIT_H
+
+#include "pipe/p_context.h"
 
 #include "openfimg_context.h"
-#include "pipe/p_context.h"
-#include "fimg_3dse.xml.h"
 
-struct of_sampler_stateobj {
-	struct pipe_sampler_state base;
-	uint32_t tex0, tex3, tex4, tex5;
+struct of_ringbuffer;
+
+struct of_vertex_buf {
+	unsigned offset, size;
+	struct pipe_resource *prsc;
 };
 
-static INLINE struct of_sampler_stateobj *
-of_sampler_stateobj(struct pipe_sampler_state *samp)
-{
-	return (struct of_sampler_stateobj *)samp;
-}
+void of_emit_vertex_bufs(struct of_ringbuffer *ring, uint32_t val,
+		struct of_vertex_buf *vbufs, uint32_t n);
+void of_emit_state(struct of_context *ctx, uint32_t dirty);
+void of_emit_setup(struct of_context *ctx);
 
-struct of_pipe_sampler_view {
-	struct pipe_sampler_view base;
-	struct of_resource *tex_resource;
-	enum fgtu_tex_format fmt;
-	uint32_t tex0, tex2, tex3;
-};
-
-static INLINE struct of_pipe_sampler_view *
-of_pipe_sampler_view(struct pipe_sampler_view *pview)
-{
-	return (struct of_pipe_sampler_view *)pview;
-}
-
-unsigned of_get_const_idx(struct of_context *ctx,
-		struct of_texture_stateobj *tex, unsigned samp_id);
-
-void of_texture_init(struct pipe_context *pctx);
-
-#endif /* FREEDRENO_TEXTURE_H_ */
+#endif /* OF_EMIT_H */

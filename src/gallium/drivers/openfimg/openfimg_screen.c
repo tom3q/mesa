@@ -358,7 +358,7 @@ of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
 		return 1;
 	case PIPE_SHADER_CAP_SUBROUTINES:
-		return 1;
+		return 0; /* Supported by HW, but needs more work... */
 	case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
 	case PIPE_SHADER_CAP_INTEGERS:
 		return 0;

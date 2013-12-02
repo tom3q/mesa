@@ -26,17 +26,19 @@
  */
 
 #include "pipe/p_state.h"
+#include "util/u_clear.h"
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_prim.h"
 #include "util/u_format.h"
+#include "util/u_surface.h"
 
 #include "openfimg_draw.h"
+#include "openfimg_emit.h"
 #include "openfimg_context.h"
 #include "openfimg_state.h"
 #include "openfimg_resource.h"
 #include "openfimg_util.h"
-
 
 static enum fgpe_vctx_ptype
 mode2primtype(unsigned mode)
@@ -44,6 +46,7 @@ mode2primtype(unsigned mode)
 	switch (mode) {
 	case PIPE_PRIM_POINTS:		return PTYPE_POINTS;
 	case PIPE_PRIM_LINES:		return PTYPE_LINES;
+	case PIPE_PRIM_LINE_LOOP:	return PTYPE_LINE_LOOP;
 	case PIPE_PRIM_LINE_STRIP:	return PTYPE_LINE_STRIP;
 	case PIPE_PRIM_TRIANGLES:	return PTYPE_TRIANGLES;
 	case PIPE_PRIM_TRIANGLE_STRIP:	return PTYPE_TRIANGLE_STRIP;
@@ -54,31 +57,42 @@ mode2primtype(unsigned mode)
 	return 0;
 }
 
-/* this is same for a2xx/a3xx, so split into helper: */
-void
-of_draw_emit(struct of_context *ctx, const struct pipe_draw_info *info)
+static void
+emit_vertexbufs(struct of_context *ctx)
 {
-	struct of_ringbuffer *ring = ctx->ring;
-	struct pipe_index_buffer *idx = &ctx->indexbuf;
-	struct of_bo *idx_bo = NULL;
-	uint32_t idx_width, idx_size, idx_offset;
+	struct of_vertex_stateobj *vtx = ctx->vtx;
+	struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
+	struct of_vertex_buf bufs[PIPE_MAX_ATTRIBS];
+	unsigned i;
 
-	if (info->indexed) {
-		/* TODO: Handle user buffers? */
-		assert(!idx->user_buffer);
+	if (!vtx->num_elements)
+		return;
 
-		idx_bo = of_resource(idx->buffer)->bo;
-		idx_width = idx->index_size;
-		idx_size = idx->index_size * info->count;
-		idx_offset = idx->offset;
-	} else {
-		idx_bo = NULL;
-		idx_width = 0;
-		idx_size = 0;
-		idx_offset = 0;
+	for (i = 0; i < vtx->num_elements; i++) {
+		struct pipe_vertex_element *elem = &vtx->pipe[i];
+		struct pipe_vertex_buffer *vb =
+				&vertexbuf->vb[elem->vertex_buffer_index];
+		bufs[i].offset = vb->buffer_offset;
+		bufs[i].size = of_bo_size(of_resource(vb->buffer)->bo);
+		bufs[i].prsc = vb->buffer;
 	}
 
-	/* TODO: Prepare and emit draw batches here. */
+	// NOTE I believe the 0x78 (or 0x9c in solid_vp) relates to the
+	// CONST(20,0) (or CONST(26,0) in soliv_vp)
+
+	of_emit_vertex_bufs(ctx->ring, 0x78, bufs, vtx->num_elements);
+}
+
+static void
+of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
+{
+	struct of_ringbuffer *ring = ctx->ring;
+
+	of_emit_state(ctx, ctx->dirty);
+
+	// TODO: Emit parameters from pipe_draw_info
+	// TODO: Prepare geometry data
+	// TODO: Emit draw commands
 }
 
 static void
@@ -128,12 +142,9 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	/* TODO: Implement draw here. */
 }
 
-/* TODO figure out how to make better use of existing state mechanism
- * for clear (and possibly gmem->mem / mem->gmem) so we can (a) keep
- * track of what state really actually changes, and (b) reduce the code
- * in the a2xx/a3xx parts.
+/*
+ * TODO: implement all the three clears properly
  */
-
 static void
 of_clear(struct pipe_context *pctx, unsigned buffers,
 		const union pipe_color_union *color, double depth, unsigned stencil)
@@ -141,31 +152,9 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	struct of_context *ctx = of_context(pctx);
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
 
-	ctx->cleared |= buffers;
-	ctx->resolve |= buffers;
-	ctx->needs_flush = true;
+	util_clear(pctx, pfb, buffers, color, depth, stencil);
 
-	if (buffers & PIPE_CLEAR_COLOR)
-		of_resource(pfb->cbufs[0]->texture)->dirty = true;
-
-	if (buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))
-		of_resource(pfb->zsbuf->texture)->dirty = true;
-
-	DBG("%x depth=%f, stencil=%u (%s/%s)", buffers, depth, stencil,
-			util_format_name(pfb->cbufs[0]->format),
-			pfb->zsbuf ? util_format_name(pfb->zsbuf->format) : "none");
-
-	/* TODO: Implement clear here. */
-
-	ctx->dirty |= OF_DIRTY_ZSA |
-			OF_DIRTY_RASTERIZER |
-			OF_DIRTY_SAMPLE_MASK |
-			OF_DIRTY_PROG |
-			OF_DIRTY_CONSTBUF |
-			OF_DIRTY_BLEND;
-
-	if (of_mesa_debug & OF_DBG_DCLEAR)
-		ctx->dirty = 0xffffffff;
+#warning TODO
 }
 
 static void
@@ -174,6 +163,10 @@ of_clear_render_target(struct pipe_context *pctx, struct pipe_surface *ps,
 		unsigned x, unsigned y, unsigned w, unsigned h)
 {
 	DBG("TODO: x=%u, y=%u, w=%u, h=%u", x, y, w, h);
+
+	util_clear_render_target(pctx, ps, color, x, y, w, h);
+
+#warning TODO
 }
 
 static void
@@ -183,6 +176,10 @@ of_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *ps,
 {
 	DBG("TODO: buffers=%u, depth=%f, stencil=%u, x=%u, y=%u, w=%u, h=%u",
 			buffers, depth, stencil, x, y, w, h);
+
+	util_clear_depth_stencil(pctx, ps, buffers, depth, stencil, x, y, w, h);
+
+#warning TODO
 }
 
 void
