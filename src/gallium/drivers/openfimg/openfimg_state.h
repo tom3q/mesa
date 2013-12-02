@@ -41,12 +41,9 @@ struct of_blend_stateobj {
 
 struct of_rasterizer_stateobj {
 	struct pipe_rasterizer_state base;
-	uint32_t fgra_doffen;
 	uint32_t fgra_bfcull;
-	uint32_t fgra_pwidth;
 	uint32_t fgra_psize_min;
 	uint32_t fgra_psize_max;
-	uint32_t fgra_lwidth;
 };
 
 struct of_zsa_stateobj {

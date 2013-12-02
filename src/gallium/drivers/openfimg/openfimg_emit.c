@@ -181,8 +181,6 @@ emit_textures(struct of_ringbuffer *ring, struct of_context *ctx)
 void
 of_emit_state(struct of_context *ctx, uint32_t dirty)
 {
-	struct of_blend_stateobj *blend = of_blend_stateobj(ctx->blend);
-	struct of_zsa_stateobj *zsa = of_zsa_stateobj(ctx->zsa);
 	struct of_ringbuffer *ring = ctx->ring;
 
 	/* NOTE: we probably want to eventually refactor this so each state
@@ -192,25 +190,60 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	 * so not sure the best way to deal with that yet.
 	 */
 
-	if (dirty & (OF_DIRTY_ZSA | OF_DIRTY_STENCIL_REF)) {
-		struct pipe_stencil_ref *sr = &ctx->stencil_ref;
-
+	if (dirty & OF_DIRTY_FRAMEBUFFER) {
 #warning TODO
 	}
 
-	if (dirty & (OF_DIRTY_RASTERIZER | OF_DIRTY_FRAMEBUFFER)) {
+	if (dirty & OF_DIRTY_RASTERIZER) {
 		struct of_rasterizer_stateobj *rasterizer =
 				of_rasterizer_stateobj(ctx->rasterizer);
-#warning TODO
+
+		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 6);
+		OUT_RING(ring, REG_FGRA_D_OFF_EN);
+		OUT_RING(ring, ctx->rasterizer->offset_tri);
+		OUT_RING(ring, REG_FGRA_D_OFF_FACTOR);
+		OUT_RING(ring, fui(ctx->rasterizer->offset_scale));
+		OUT_RING(ring, REG_FGRA_D_OFF_UNITS);
+		OUT_RING(ring, fui(ctx->rasterizer->offset_units));
+		OUT_RING(ring, REG_FGRA_BFCULL);
+		OUT_RING(ring, rasterizer->fgra_bfcull);
+		OUT_RING(ring, REG_FGRA_PWIDTH);
+		OUT_RING(ring, fui(ctx->rasterizer->point_size));
+		OUT_RING(ring, REG_FGRA_PSIZE_MIN);
+		OUT_RING(ring, rasterizer->fgra_psize_min);
+		OUT_RING(ring, REG_FGRA_PSIZE_MAX);
+		OUT_RING(ring, rasterizer->fgra_psize_max);
+		OUT_RING(ring, REG_FGRA_LWIDTH);
+		OUT_RING(ring, fui(ctx->rasterizer->line_width));
 	}
 
 	if (dirty & OF_DIRTY_SCISSOR) {
-		struct pipe_scissor_state *scissor = of_context_get_scissor(ctx);
-#warning TODO
+		struct pipe_scissor_state *scissor =
+				of_context_get_scissor(ctx);
+
+		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 2);
+		OUT_RING(ring, REG_FGRA_XCLIP);
+		OUT_RING(ring, (scissor->maxx << 16) | scissor->minx);
+		OUT_RING(ring, REG_FGRA_YCLIP);
+		OUT_RING(ring, (scissor->maxy << 16) | scissor->miny);
 	}
 
 	if (dirty & OF_DIRTY_VIEWPORT) {
-#warning TODO
+		struct pipe_viewport_state *viewport = &ctx->viewport;
+
+		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 6);
+		OUT_RING(ring, REG_FGPE_VIEWPORT_OX);
+		OUT_RING(ring, fui(viewport->translate[0]));
+		OUT_RING(ring, REG_FGPE_VIEWPORT_OY);
+		OUT_RING(ring, fui(viewport->translate[1]));
+		OUT_RING(ring, REG_FGPE_DEPTHRANGE_HALF_F_ADD_N);
+		OUT_RING(ring, fui(viewport->translate[2]));
+		OUT_RING(ring, REG_FGPE_VIEWPORT_HALF_PX);
+		OUT_RING(ring, fui(viewport->scale[0]));
+		OUT_RING(ring, REG_FGPE_VIEWPORT_HALF_PY);
+		OUT_RING(ring, fui(viewport->scale[1]));
+		OUT_RING(ring, REG_FGPE_DEPTHRANGE_HALF_F_SUB_N);
+		OUT_RING(ring, fui(viewport->scale[2]));
 	}
 
 	if (dirty & (OF_DIRTY_PROG | OF_DIRTY_VTXSTATE | OF_DIRTY_TEXSTATE)) {
@@ -225,12 +258,50 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 				dirty & OF_DIRTY_PROG, ctx->prog.fp);
 	}
 
-	if (dirty & (OF_DIRTY_BLEND | OF_DIRTY_ZSA)) {
-#warning TODO
+	if (dirty & OF_DIRTY_BLEND) {
+		struct of_blend_stateobj *blend =
+				of_blend_stateobj(ctx->blend);
+
+		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 4);
+		OUT_RING(ring, REG_FGPF_BLEND);
+		OUT_RING(ring, blend->fgpf_blend);
+		OUT_RING(ring, REG_FGPF_LOGOP);
+		OUT_RING(ring, blend->fgpf_logop);
+		OUT_RING(ring, REG_FGPF_CBMSK);
+		OUT_RING(ring, blend->fgpf_cbmsk);
+		OUT_RING(ring, REG_FGPF_FBCTL);
+		OUT_RING(ring, blend->fgpf_fbctl);
 	}
 
-	if (dirty & OF_DIRTY_BLEND) {
-#warning TODO
+	if (dirty & OF_DIRTY_BLEND_COLOR) {
+		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 1);
+		OUT_RING(ring, REG_FGPF_CCLR);
+		OUT_RING(ring, ctx->blend_color);
+	}
+
+	if (dirty & (OF_DIRTY_ZSA | OF_DIRTY_STENCIL_REF)) {
+		struct of_zsa_stateobj *zsa = of_zsa_stateobj(ctx->zsa);
+		struct pipe_stencil_ref *sr = &ctx->stencil_ref;
+
+		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 2);
+		OUT_RING(ring, REG_FGPF_FRONTST);
+		OUT_RING(ring, zsa->fgpf_frontst |
+				FGPF_FRONTST_VALUE(sr->ref_value[0]));
+		OUT_RING(ring, REG_FGPF_BACKST);
+		OUT_RING(ring, zsa->fgpf_backst |
+				FGPF_BACKST_VALUE(sr->ref_value[1]));
+	}
+
+	if (dirty & OF_DIRTY_ZSA) {
+		struct of_zsa_stateobj *zsa = of_zsa_stateobj(ctx->zsa);
+
+		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 3);
+		OUT_RING(ring, REG_FGPF_ALPHAT);
+		OUT_RING(ring, zsa->fgpf_alphat);
+		OUT_RING(ring, REG_FGPF_DEPTHT);
+		OUT_RING(ring, zsa->fgpf_deptht);
+		OUT_RING(ring, REG_FGPF_DBMSK);
+		OUT_RING(ring, zsa->fgpf_dbmsk);
 	}
 
 	if (dirty & (OF_DIRTY_VERTTEX | OF_DIRTY_FRAGTEX | OF_DIRTY_PROG))

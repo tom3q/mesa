@@ -29,6 +29,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_helpers.h"
+#include "util/u_pack_color.h"
 
 #include "openfimg_state.h"
 #include "openfimg_context.h"
@@ -45,8 +46,11 @@ static void
 of_set_blend_color(struct pipe_context *pctx,
 		const struct pipe_blend_color *blend_color)
 {
+	union util_color uc;
 	struct of_context *ctx = of_context(pctx);
-	ctx->blend_color = *blend_color;
+
+	util_pack_color(blend_color->color, PIPE_FORMAT_ABGR8888_UNORM, &uc);
+	ctx->blend_color = uc.ui;
 	ctx->dirty |= OF_DIRTY_BLEND_COLOR;
 }
 
@@ -298,21 +302,15 @@ of_rasterizer_state_create(struct pipe_context *pctx,
 	so->base = *cso;
 
 	if (cso->cull_face) {
-		so->fgra_bfcull = FGRA_BFCULL_FACE(of_cull_face(cso->cull_face));
+		so->fgra_bfcull =
+				FGRA_BFCULL_FACE(of_cull_face(cso->cull_face));
 		so->fgra_bfcull |= FGRA_BFCULL_ENABLE;
+		if (!cso->front_ccw)
+			so->fgra_bfcull |= FGRA_BFCULL_FRONT_CW;
 	}
 
-	if (!cso->front_ccw)
-		so->fgra_bfcull |= FGRA_BFCULL_FRONT_CW;
-
-	so->fgra_pwidth = FGRA_PWIDTH(cso->point_size);
 	so->fgra_psize_min = FGRA_PSIZE_MIN(psize_min);
 	so->fgra_psize_max = FGRA_PSIZE_MAX(psize_max);
-
-	so->fgra_lwidth = FGRA_LWIDTH(cso->line_width);
-
-	if (cso->offset_tri)
-		so->fgra_doffen = FGRA_D_OFF_EN_ENABLE;
 
 	return so;
 }

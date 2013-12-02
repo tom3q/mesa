@@ -157,7 +157,7 @@ struct of_context {
 
 	struct of_vertex_stateobj *vtx;
 
-	struct pipe_blend_color blend_color;
+	uint32_t blend_color;
 	struct pipe_stencil_ref stencil_ref;
 	unsigned sample_mask;
 	struct pipe_framebuffer_state framebuffer;
