@@ -25,8 +25,8 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_SURFACE_H_
-#define FREEDRENO_SURFACE_H_
+#ifndef OPENFIMG_SURFACE_H_
+#define OPENFIMG_SURFACE_H_
 
 #include "pipe/p_state.h"
 
@@ -50,4 +50,4 @@ struct pipe_surface* of_create_surface(struct pipe_context *pctx,
 		const struct pipe_surface *surf_tmpl);
 void of_surface_destroy(struct pipe_context *pctx, struct pipe_surface *psurf);
 
-#endif /* FREEDRENO_SURFACE_H_ */
+#endif /* OPENFIMG_SURFACE_H_ */

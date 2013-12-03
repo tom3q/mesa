@@ -25,8 +25,8 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_RESOURCE_H_
-#define FREEDRENO_RESOURCE_H_
+#ifndef OPENFIMG_RESOURCE_H_
+#define OPENFIMG_RESOURCE_H_
 
 #include "util/u_transfer.h"
 
@@ -47,4 +47,4 @@ of_resource(struct pipe_resource *ptex)
 void of_resource_screen_init(struct pipe_screen *pscreen);
 void of_resource_context_init(struct pipe_context *pctx);
 
-#endif /* FREEDRENO_RESOURCE_H_ */
+#endif /* OPENFIMG_RESOURCE_H_ */

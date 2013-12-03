@@ -63,6 +63,7 @@ enum of_request_type {
 	G3D_REQUEST_COLORBUFFER = 4,
 	G3D_REQUEST_DEPTHBUFFER = 5,
 	G3D_REQUEST_DRAW = 6,
+	G3D_REQUEST_VTX_TEXTURE = 7,
 };
 
 enum fgtu_tex_format of_pipe2texture(enum pipe_format format);

@@ -25,8 +25,8 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_STATE_H_
-#define FREEDRENO_STATE_H_
+#ifndef OPENFIMG_STATE_H_
+#define OPENFIMG_STATE_H_
 
 #include "pipe/p_context.h"
 #include "openfimg_context.h"
@@ -95,4 +95,4 @@ of_zsa_stateobj(struct pipe_depth_stencil_alpha_state *zsa)
 
 void of_state_init(struct pipe_context *pctx);
 
-#endif /* FREEDRENO_STATE_H_ */
+#endif /* OPENFIMG_STATE_H_ */

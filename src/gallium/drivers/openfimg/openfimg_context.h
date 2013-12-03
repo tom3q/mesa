@@ -25,8 +25,8 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_CONTEXT_H_
-#define FREEDRENO_CONTEXT_H_
+#ifndef OPENFIMG_CONTEXT_H_
+#define OPENFIMG_CONTEXT_H_
 
 #include "draw/draw_context.h"
 #include "pipe/p_context.h"
@@ -192,4 +192,4 @@ struct pipe_context * of_context_create(struct pipe_screen *pscreen,
 
 void of_context_destroy(struct pipe_context *pctx);
 
-#endif /* FREEDRENO_CONTEXT_H_ */
+#endif /* OPENFIMG_CONTEXT_H_ */

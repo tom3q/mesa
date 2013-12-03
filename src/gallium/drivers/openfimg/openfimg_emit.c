@@ -146,7 +146,7 @@ typedef uint32_t texmask;
 
 static texmask
 emit_texture(struct of_ringbuffer *ring, struct of_context *ctx,
-		struct of_texture_stateobj *tex, unsigned samp_id, texmask emitted)
+	     struct of_texture_stateobj *tex, unsigned samp_id, texmask emitted)
 {
 	unsigned const_idx = of_get_const_idx(ctx, tex, samp_id);
 	struct of_sampler_stateobj *sampler;
@@ -158,7 +158,49 @@ emit_texture(struct of_ringbuffer *ring, struct of_context *ctx,
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
 	view = of_pipe_sampler_view(tex->textures[samp_id]);
 
-#warning TODO
+	OUT_PKT(ring, G3D_REQUEST_TEXTURE, 20);
+	OUT_RING(ring, sampler->tsta | view->tsta);
+	OUT_RING(ring, view->width);
+	OUT_RING(ring, view->height);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, view->base.u.tex.first_level);
+	OUT_RING(ring, view->base.u.tex.last_level);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, of_bo_handle(view->tex_resource->bo));
+	OUT_RING(ring, (samp_id << 24) | view->tex_resource->dirty ? 1 : 0);
+
+	return (1 << const_idx);
+}
+
+static texmask
+emit_vtx_texture(struct of_ringbuffer *ring, struct of_context *ctx,
+		 struct of_texture_stateobj *tex, unsigned samp_id,
+		 texmask emitted)
+{
+	unsigned const_idx = of_get_const_idx(ctx, tex, samp_id);
+	struct of_sampler_stateobj *sampler;
+	struct of_pipe_sampler_view *view;
+
+	if (emitted & (1 << const_idx))
+		return 0;
+
+	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
+	view = of_pipe_sampler_view(tex->textures[samp_id]);
+
+	OUT_PKT(ring, G3D_REQUEST_VTX_TEXTURE, 4);
+	OUT_RING(ring, sampler->vtx_tsta | view->vtx_tsta);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, of_bo_handle(view->tex_resource->bo));
+	OUT_RING(ring, (samp_id << 24) | view->tex_resource->dirty ? 1 : 0);
 
 	return (1 << const_idx);
 }
@@ -171,11 +213,13 @@ emit_textures(struct of_ringbuffer *ring, struct of_context *ctx)
 
 	for (i = 0; i < ctx->verttex.num_samplers; i++)
 		if (ctx->verttex.samplers[i])
-			emitted |= emit_texture(ring, ctx, &ctx->verttex, i, emitted);
+			emitted |= emit_vtx_texture(ring, ctx,
+						&ctx->verttex, i, emitted);
 
 	for (i = 0; i < ctx->fragtex.num_samplers; i++)
 		if (ctx->fragtex.samplers[i])
-			emitted |= emit_texture(ring, ctx, &ctx->fragtex, i, emitted);
+			emitted |= emit_texture(ring, ctx,
+						&ctx->fragtex, i, emitted);
 }
 
 void
@@ -315,10 +359,6 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 void
 of_emit_setup(struct of_context *ctx)
 {
-	struct of_ringbuffer *ring = ctx->ring;
-
-#warning TODO
-
-	of_ringbuffer_flush(ring);
-	of_ringmarker_mark(ctx->draw_start);
+	/* Mark all context parts dirty */
+	ctx->dirty = (OF_DIRTY_SCISSOR << 1) - 1;
 }

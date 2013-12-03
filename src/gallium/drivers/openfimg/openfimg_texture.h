@@ -25,8 +25,8 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_TEXTURE_H_
-#define FREEDRENO_TEXTURE_H_
+#ifndef OPENFIMG_TEXTURE_H_
+#define OPENFIMG_TEXTURE_H_
 
 #include "openfimg_context.h"
 #include "pipe/p_context.h"
@@ -34,7 +34,8 @@
 
 struct of_sampler_stateobj {
 	struct pipe_sampler_state base;
-	uint32_t tex0, tex3, tex4, tex5;
+	uint32_t vtx_tsta;
+	uint32_t tsta;
 };
 
 static INLINE struct of_sampler_stateobj *
@@ -46,8 +47,10 @@ of_sampler_stateobj(struct pipe_sampler_state *samp)
 struct of_pipe_sampler_view {
 	struct pipe_sampler_view base;
 	struct of_resource *tex_resource;
-	enum fgtu_tex_format fmt;
-	uint32_t tex0, tex2, tex3;
+	uint32_t vtx_tsta;
+	uint32_t tsta;
+	uint32_t width;
+	uint32_t height;
 };
 
 static INLINE struct of_pipe_sampler_view *
@@ -61,4 +64,4 @@ unsigned of_get_const_idx(struct of_context *ctx,
 
 void of_texture_init(struct pipe_context *pctx);
 
-#endif /* FREEDRENO_TEXTURE_H_ */
+#endif /* OPENFIMG_TEXTURE_H_ */

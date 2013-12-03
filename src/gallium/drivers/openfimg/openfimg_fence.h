@@ -25,8 +25,8 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_FENCE_H_
-#define FREEDRENO_FENCE_H_
+#ifndef OPENFIMG_FENCE_H_
+#define OPENFIMG_FENCE_H_
 
 #include "util/u_inlines.h"
 #include "util/u_double_list.h"
@@ -61,4 +61,4 @@ of_fence(struct pipe_fence_handle *fence)
 }
 
 
-#endif /* FREEDRENO_FENCE_H_ */
+#endif /* OPENFIMG_FENCE_H_ */

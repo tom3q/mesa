@@ -25,8 +25,8 @@
  * SOFTWARE.
  */
 
-#ifndef FREEDRENO_DRAW_H_
-#define FREEDRENO_DRAW_H_
+#ifndef OPENFIMG_DRAW_H_
+#define OPENFIMG_DRAW_H_
 
 #include "pipe/p_state.h"
 #include "pipe/p_context.h"
@@ -39,4 +39,4 @@ void of_draw_emit(struct of_context *ctx, const struct pipe_draw_info *info);
 
 void of_draw_init(struct pipe_context *pctx);
 
-#endif /* FREEDRENO_DRAW_H_ */
+#endif /* OPENFIMG_DRAW_H_ */

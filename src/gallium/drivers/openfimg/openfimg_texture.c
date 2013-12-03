@@ -53,13 +53,15 @@ tex_clamp(unsigned wrap)
 }
 
 static uint32_t
-tex_filter(unsigned filter)
+tex_mip_filter(unsigned filter)
 {
 	switch (filter) {
-	case PIPE_TEX_FILTER_NEAREST:
-		return 0;
-	case PIPE_TEX_FILTER_LINEAR:
-		return TSTA_MAG_FILTER;
+	case PIPE_TEX_MIPFILTER_NONE:
+		return MIPMAP_DISABLED;
+	case PIPE_TEX_MIPFILTER_NEAREST:
+		return MIPMAP_NEAREST;
+	case PIPE_TEX_MIPFILTER_LINEAR:
+		return MIPMAP_LINEAR;
 	default:
 		DBG("invalid filter: %u", filter);
 		return 0;
@@ -203,7 +205,17 @@ of_sampler_state_create(struct pipe_context *pctx,
 
 	so->base = *cso;
 
-#warning TODO
+	so->tsta = TSTA_UADDR_MODE(tex_clamp(cso->wrap_s))
+			| TSTA_VADDR_MODE(tex_clamp(cso->wrap_t))
+			| TSTA_PADDR_MODE(tex_clamp(cso->wrap_r))
+			| TSTA_MIPMAP_EN(tex_mip_filter(cso->min_mip_filter));
+
+	if (cso->min_img_filter != PIPE_TEX_FILTER_NEAREST)
+		so->tsta |= TSTA_TEX_FLT_EN;
+	if (cso->mag_img_filter != PIPE_TEX_FILTER_NEAREST)
+		so->tsta |= TSTA_MAG_FILTER;
+	if (!cso->normalized_coords)
+		so->tsta |= TSTA_NON_PARAMETRIC;
 
 	return so;
 }
@@ -225,9 +237,10 @@ of_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.context = pctx;
 
 	so->tex_resource =  rsc;
-	so->fmt = of_pipe2texture(cso->format);
-
-#warning TODO
+	so->tsta = TSTA_FORMAT(of_pipe2texture(cso->format))
+			| TSTA_TYPE(TEX_TYPE_2D);
+	so->width = prsc->width0;
+	so->height = prsc->height0;
 
 	return &so->base;
 }
