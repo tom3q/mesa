@@ -402,8 +402,12 @@ static void *
 of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 		const struct pipe_vertex_element *elements)
 {
-	struct of_vertex_stateobj *so = CALLOC_STRUCT(of_vertex_stateobj);
+	struct of_vertex_stateobj *so;
 
+	if (num_elements >= OF_MAX_ATTRIBS)
+		return NULL;
+
+	so = CALLOC_STRUCT(of_vertex_stateobj);
 	if (!so)
 		return NULL;
 

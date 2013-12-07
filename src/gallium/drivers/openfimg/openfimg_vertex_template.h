@@ -88,18 +88,18 @@ PACK_ATTRIBUTE(uint8_t *buf, const struct of_vertex_transfer *xfer,
  * @param prim_data Primitive type information.
  * @return Amount of vertices available to send to hardware.
  */
-static struct of_batch_buffer *
-COPY_VERTICES(struct of_context *ctx, struct of_draw_info *draw,
+static struct of_vertex_buffer *
+COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
 	      INDEX_TYPE indices, unsigned *pos, unsigned *count)
 {
 	const struct of_primitive_data *prim_data;
-	struct of_batch_buffer *buffer;
+	struct of_vertex_buffer *buffer;
 	struct of_vertex_transfer *t;
 	unsigned batch_size;
 	uint8_t *buf;
 	unsigned i;
 
-	prim_data = &primitive_data[draw->mode];
+	prim_data = &primitive_data[draw->key.info.mode];
 	batch_size = draw->batch_size - prim_data->extra;
 
 	if (batch_size > *count)
@@ -175,10 +175,10 @@ COPY_VERTICES(struct of_context *ctx, struct of_draw_info *draw,
  * @param indices First index.
  */
 static int
-PREPARE_DRAW(struct of_context *ctx, struct of_draw_info *draw,
+PREPARE_DRAW(struct of_context *ctx, struct of_vertex_info *draw,
 	     unsigned count, INDEX_TYPE indices)
 {
-	struct of_batch_buffer *buffer;
+	struct of_vertex_buffer *buffer;
 	unsigned int pos = 0;
 
 	LIST_INITHEAD(&draw->buffers);

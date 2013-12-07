@@ -38,22 +38,6 @@
 
 #include <util/u_double_list.h>
 
-#define FGHI_ATTRIB(i)		(FGHI_ATTRIB0 + (i))
-#define FGHI_ATTRIB_VBCTRL(i)	(FGHI_ATTRIB_VBCTRL0 + (i))
-#define FGHI_ATTRIB_VBBASE(i)	(FGHI_ATTRIB_VBBASE0 + (i))
-
-#define VERTEX_BUFFER_CONST	(MAX_WORDS_PER_VERTEX)
-#define VERTEX_BUFFER_WORDS	(VERTEX_BUFFER_SIZE / 4 - VERTEX_BUFFER_CONST)
-
-#define MAX_ATTRIBS		(FIMG_ATTRIB_NUM)
-#define MAX_WORDS_PER_ATTRIB	(4)
-#define MAX_WORDS_PER_VERTEX	(MAX_ATTRIBS*MAX_WORDS_PER_ATTRIB)
-
-#define CONST_ADDR(attrib)	(4*MAX_WORDS_PER_ATTRIB*(attrib))
-#define DATA_OFFSET		(CONST_ADDR(MAX_ATTRIBS))
-
-#define ROUND_UP(val, to)	(((val) + (to) - 1) & ~((to) - 1))
-
 #define CBUF_ADDR_32(buf, offs)	\
 			((const uint32_t *)((const uint8_t *)(buf) + (offs)))
 #define CBUF_ADDR_16(buf, offs)	\
@@ -67,18 +51,6 @@
 			((uint16_t *)((uint8_t *)(buf) + (offs)))
 #define BUF_ADDR_8(buf, offs)	\
 			((uint8_t *)(buf) + (offs))
-
-/** Primitive types supported by FIMG-3DSE. */
-enum of_primitive_type {
-	OF_PTYPE_POINT_SPRITE = 0,	/**< Point sprites */
-	OF_PTYPE_POINTS,		/**< Separate points */
-	OF_PTYPE_LINE_STRIP,	/**< Line strips */
-	OF_PTYPE_LINES,		/**< Separate lines */
-	OF_PTYPE_TRIANGLE_STRIP,	/**< Triangle strips */
-	OF_PTYPE_TRIANGLE_FAN,	/**< Triangle fans */
-	OF_PTYPE_TRIANGLES,		/**< Separate triangles */
-	OF_PTYPE_MAX,
-};
 
 /**
  * Structure describing requirements of primitive mode regarding
@@ -106,52 +78,43 @@ struct of_primitive_data {
 	unsigned repeat_last:1;
 };
 
-struct of_batch_buffer {
-	uint8_t *base;
-	unsigned nr_vertices;
-	struct list_head list;
-};
-
 /**
  * Structure describing requirements of primitive mode regarding
  * geometry format.
  */
-const struct of_primitive_data primitive_data[OF_PTYPE_MAX] = {
-	[OF_PTYPE_POINT_SPRITE] = {
+const struct of_primitive_data primitive_data[PIPE_PRIM_MAX] = {
+	[PIPE_PRIM_POINTS] = {
 		.min = 1,
 	},
-	[OF_PTYPE_POINTS] = {
-		.min = 1,
-	},
-	[OF_PTYPE_LINE_STRIP] = {
+	[PIPE_PRIM_LINE_STRIP] = {
 		.min = 2,
 		.overlap = 1,
 	},
-	[OF_PTYPE_LINES] = {
+	[PIPE_PRIM_LINES] = {
 		.min = 2,
 		.multiple_of_two = 1,
 	},
-	[OF_PTYPE_TRIANGLE_STRIP] = {
+	[PIPE_PRIM_TRIANGLE_STRIP] = {
 		.min = 3,
 		.overlap = 2,
 		.extra = 1,
 		.multiple_of_two = 1,
 		.repeat_last = 1,
 	},
-	[OF_PTYPE_TRIANGLE_FAN] = {
+	[PIPE_PRIM_TRIANGLE_FAN] = {
 		.min = 3,
 		.overlap = 2,
 		.extra = 2,
 		.shift = 1,
 		.repeat_first = 1,
 	},
-	[OF_PTYPE_TRIANGLES] = {
+	[PIPE_PRIM_TRIANGLES] = {
 		.min = 3,
 		.multiple_of_three = 1,
 	},
 };
 
-static struct of_batch_buffer *of_get_batch_buffer(struct of_context *ctx)
+static struct of_vertex_buffer *of_get_batch_buffer(struct of_context *ctx)
 {
 #warning TODO
 	return NULL;
@@ -195,10 +158,10 @@ static void small_memcpy(uint8_t *dst, const uint8_t *src, uint32_t len)
  * @param count Vertex count.
  * @param indices Array of vertex indices.
  */
-void of_prepare_draw_idx8(struct of_context *ctx, struct of_draw_info *draw,
-			  unsigned count, const uint8_t *indices)
+void of_prepare_draw_idx8(struct of_context *ctx, struct of_vertex_info *vtx,
+			  const uint8_t *indices)
 {
-	PREPARE_DRAW(ctx, draw, count, indices);
+	PREPARE_DRAW(ctx, vtx, vtx->count, indices);
 }
 
 #undef INDEX_TYPE
@@ -224,10 +187,10 @@ void of_prepare_draw_idx8(struct of_context *ctx, struct of_draw_info *draw,
  * @param count Vertex count.
  * @param indices Array of vertex indices.
  */
-void of_prepare_draw_idx16(struct of_context *ctx, struct of_draw_info *draw,
-			   unsigned count, const uint16_t *indices)
+void of_prepare_draw_idx16(struct of_context *ctx, struct of_vertex_info *vtx,
+			   const uint16_t *indices)
 {
-	PREPARE_DRAW(ctx, draw, count, indices);
+	PREPARE_DRAW(ctx, vtx, vtx->count, indices);
 }
 
 #undef INDEX_TYPE
@@ -253,10 +216,10 @@ void of_prepare_draw_idx16(struct of_context *ctx, struct of_draw_info *draw,
  * @param count Vertex count.
  * @param indices Array of vertex indices.
  */
-void of_prepare_draw_idx32(struct of_context *ctx, struct of_draw_info *draw,
-			   unsigned count, const uint32_t *indices)
+void of_prepare_draw_idx32(struct of_context *ctx, struct of_vertex_info *vtx,
+			   const uint32_t *indices)
 {
-	PREPARE_DRAW(ctx, draw, count, indices);
+	PREPARE_DRAW(ctx, vtx, vtx->count, indices);
 }
 
 #undef INDEX_TYPE
@@ -280,10 +243,9 @@ void of_prepare_draw_idx32(struct of_context *ctx, struct of_draw_info *draw,
  * @param arrays Array of attribute array descriptors.
  * @param count Vertex count.
  */
-void of_prepare_draw_seq(struct of_context *ctx, struct of_draw_info *draw,
-			 unsigned int count)
+void of_prepare_draw_seq(struct of_context *ctx, struct of_vertex_info *vtx)
 {
-	PREPARE_DRAW(ctx, draw, count, 0);
+	PREPARE_DRAW(ctx, vtx, vtx->count, 0);
 }
 
 #undef INDEX_TYPE

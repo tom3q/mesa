@@ -186,10 +186,6 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 	if (!ctx->blitter)
 		goto fail;
 
-	ctx->primconvert = util_primconvert_create(pctx, ctx->primtype_mask);
-	if (!ctx->primconvert)
-		goto fail;
-
 	of_emit_setup(ctx);
 
 	return pctx;

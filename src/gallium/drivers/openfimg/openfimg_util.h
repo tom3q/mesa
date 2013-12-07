@@ -49,6 +49,7 @@ extern int of_mesa_debug;
 				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
+#define ROUND_UP(val, to)	(((val) + (to) - 1) & ~((to) - 1))
 
 /* for conditionally setting boolean flag(s): */
 #define COND(bool, val) ((bool) ? (val) : 0)

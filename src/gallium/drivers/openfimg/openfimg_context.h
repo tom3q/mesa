@@ -37,6 +37,8 @@
 
 #include "openfimg_screen.h"
 
+#define OF_MAX_ATTRIBS		9
+
 struct of_vertex_stateobj;
 
 struct of_texture_stateobj {
@@ -75,7 +77,7 @@ struct of_vertexbuf_stateobj {
 };
 
 struct of_vertex_stateobj {
-	struct pipe_vertex_element pipe[PIPE_MAX_ATTRIBS];
+	struct pipe_vertex_element pipe[OF_MAX_ATTRIBS];
 	unsigned num_elements;
 };
 
@@ -84,7 +86,7 @@ struct of_context {
 
 	struct of_screen *screen;
 	struct blitter_context *blitter;
-	struct primconvert_context *primconvert;
+	struct cso_hash *draw_hash;
 
 	struct util_slab_mempool transfer_pool;
 

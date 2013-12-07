@@ -27,36 +27,85 @@
 #include <stdint.h>
 
 #include <util/u_double_list.h>
+#include <indices/u_indices.h>
+
+#include "openfimg_context.h"
 
 #define VERTEX_BUFFER_SIZE	4096
-#define FIMG_ATTRIB_NUM		9
+
+#define FGHI_ATTRIB(i)		(FGHI_ATTRIB0 + (i))
+#define FGHI_ATTRIB_VBCTRL(i)	(FGHI_ATTRIB_VBCTRL0 + (i))
+#define FGHI_ATTRIB_VBBASE(i)	(FGHI_ATTRIB_VBBASE0 + (i))
+
+#define VERTEX_BUFFER_CONST	(MAX_WORDS_PER_VERTEX)
+#define VERTEX_BUFFER_WORDS	(VERTEX_BUFFER_SIZE / 4 - VERTEX_BUFFER_CONST)
+
+#define MAX_ATTRIBS		(OF_MAX_ATTRIBS)
+#define MAX_WORDS_PER_ATTRIB	(4)
+#define MAX_WORDS_PER_VERTEX	(MAX_ATTRIBS*MAX_WORDS_PER_ATTRIB)
+
+#define CONST_ADDR(attrib)	(4*MAX_WORDS_PER_ATTRIB*(attrib))
+#define DATA_OFFSET		(CONST_ADDR(MAX_ATTRIBS))
+
+struct of_draw_info {
+	struct pipe_draw_info info;
+	struct pipe_index_buffer ib;
+	struct pipe_vertex_buffer vb[OF_MAX_ATTRIBS];
+	struct pipe_vertex_element elements[OF_MAX_ATTRIBS];
+	unsigned num_elements;
+	unsigned num_vb;
+};
 
 struct of_vertex_transfer {
-	/** Pointer to vertex attribute data. */
 	const void *pointer;
-	/** Stride of single vertex. */
+	unsigned vertex_buffer_index;
+	uint32_t src_offset;
 	uint8_t stride;
-	/** Width of single vertex. */
 	uint8_t width;
-	/** Offset in batch buffer */
 	uint16_t offset;
 };
 
-struct of_draw_info {
+struct of_vertex_element {
+	uint8_t transfer_index;
+	uint8_t width;
+	uint16_t offset;
+	uint32_t attrib;
+};
+
+struct of_vertex_info {
+	struct of_draw_info key;
+
+	bool bypass_cache;
 	unsigned batch_size;
-	unsigned mode;
+	unsigned draw_mode;
 	unsigned num_transfers;
-	struct of_vertex_transfer transfers[FIMG_ATTRIB_NUM];
+	unsigned num_draws;
+
+	bool indexed;
+	unsigned mode;
+	unsigned index_size;
+	unsigned count;
+	u_translate_func trans_func;
+	u_generate_func gen_func;
+	struct pipe_index_buffer ib;
+
+	struct of_vertex_transfer transfers[OF_MAX_ATTRIBS];
+	struct of_vertex_element elements[OF_MAX_ATTRIBS];
 	struct list_head buffers;
 };
 
-void of_prepare_draw_idx8(struct of_context *ctx, struct of_draw_info *draw,
-			  unsigned count, const uint8_t *indices);
-void of_prepare_draw_idx16(struct of_context *ctx, struct of_draw_info *draw,
-			   unsigned count, const uint16_t *indices);
-void of_prepare_draw_idx32(struct of_context *ctx, struct of_draw_info *draw,
-			   unsigned count, const uint32_t *indices);
-void of_prepare_draw_seq(struct of_context *ctx, struct of_draw_info *draw,
-			 unsigned int count);
+struct of_vertex_buffer {
+	uint8_t *base;
+	unsigned nr_vertices;
+	struct list_head list;
+};
+
+void of_prepare_draw_idx8(struct of_context *ctx, struct of_vertex_info *vtx,
+			  const uint8_t *indices);
+void of_prepare_draw_idx16(struct of_context *ctx, struct of_vertex_info *vtx,
+			   const uint16_t *indices);
+void of_prepare_draw_idx32(struct of_context *ctx, struct of_vertex_info *vtx,
+			   const uint32_t *indices);
+void of_prepare_draw_seq(struct of_context *ctx, struct of_vertex_info *vtx);
 
 #endif
