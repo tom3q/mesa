@@ -70,15 +70,14 @@
 
 /** Primitive types supported by FIMG-3DSE. */
 enum of_primitive_type {
-	FGPE_POINT_SPRITE = 0,	/**< Point sprites */
-	FGPE_POINTS,		/**< Separate points */
-	FGPE_LINE_STRIP,	/**< Line strips */
-	FGPE_LINE_LOOP,		/**< Line loops */
-	FGPE_LINES,		/**< Separate lines */
-	FGPE_TRIANGLE_STRIP,	/**< Triangle strips */
-	FGPE_TRIANGLE_FAN,	/**< Triangle fans */
-	FGPE_TRIANGLES,		/**< Separate triangles */
-	FGPE_PRIMITIVE_MAX,
+	OF_PTYPE_POINT_SPRITE = 0,	/**< Point sprites */
+	OF_PTYPE_POINTS,		/**< Separate points */
+	OF_PTYPE_LINE_STRIP,	/**< Line strips */
+	OF_PTYPE_LINES,		/**< Separate lines */
+	OF_PTYPE_TRIANGLE_STRIP,	/**< Triangle strips */
+	OF_PTYPE_TRIANGLE_FAN,	/**< Triangle fans */
+	OF_PTYPE_TRIANGLES,		/**< Separate triangles */
+	OF_PTYPE_MAX,
 };
 
 /**
@@ -98,13 +97,13 @@ struct of_primitive_data {
 	/** How many vertices to skip. */
 	unsigned shift;
 	/** Set to 1 if batch size must be a multiple of two. */
-	unsigned multipleOfTwo:1;
+	unsigned multiple_of_two:1;
 	/** Set to 1 if batch size must be a multiple of three. */
-	unsigned multipleOfThree:1;
+	unsigned multiple_of_three:1;
 	/** Set to 1 if first vertex must be repeated three times. */
-	unsigned repeatFirst:1;
+	unsigned repeat_first:1;
 	/** Set to 1 if last vertex must be repeated. */
-	unsigned repeatLast:1;
+	unsigned repeat_last:1;
 };
 
 struct of_batch_buffer {
@@ -117,46 +116,38 @@ struct of_batch_buffer {
  * Structure describing requirements of primitive mode regarding
  * geometry format.
  */
-const struct of_primitive_data primitive_data[FGPE_PRIMITIVE_MAX] = {
-	[FGPE_POINT_SPRITE] = {
+const struct of_primitive_data primitive_data[OF_PTYPE_MAX] = {
+	[OF_PTYPE_POINT_SPRITE] = {
 		.min = 1,
 	},
-	[FGPE_POINTS] = {
+	[OF_PTYPE_POINTS] = {
 		.min = 1,
 	},
-	[FGPE_LINE_STRIP] = {
+	[OF_PTYPE_LINE_STRIP] = {
 		.min = 2,
 		.overlap = 1,
 	},
-	[FGPE_LINE_LOOP] = {
-		/*
-		 * Line loops don't go well with buffered transfers,
-		 * so let's just force higher level code to emulate them
-		 * using line strips.
-		 */
-		.min = 0,
-	},
-	[FGPE_LINES] = {
+	[OF_PTYPE_LINES] = {
 		.min = 2,
-		.multipleOfTwo = 1,
+		.multiple_of_two = 1,
 	},
-	[FGPE_TRIANGLE_STRIP] = {
+	[OF_PTYPE_TRIANGLE_STRIP] = {
 		.min = 3,
 		.overlap = 2,
 		.extra = 1,
-		.multipleOfTwo = 1,
-		.repeatLast = 1,
+		.multiple_of_two = 1,
+		.repeat_last = 1,
 	},
-	[FGPE_TRIANGLE_FAN] = {
+	[OF_PTYPE_TRIANGLE_FAN] = {
 		.min = 3,
 		.overlap = 2,
 		.extra = 2,
 		.shift = 1,
-		.repeatFirst = 1,
+		.repeat_first = 1,
 	},
-	[FGPE_TRIANGLES] = {
+	[OF_PTYPE_TRIANGLES] = {
 		.min = 3,
-		.multipleOfThree = 1,
+		.multiple_of_three = 1,
 	},
 };
 

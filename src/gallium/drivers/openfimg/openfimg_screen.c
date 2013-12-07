@@ -73,18 +73,9 @@ of_screen_is_format_supported(struct pipe_screen *pscreen,
 	unsigned retval = 0;
 
 	if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
-			(sample_count > 1) || /* TODO add MSAA */
+			(sample_count > 1) ||
 			!util_format_is_supported(format, usage)) {
 		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
-				util_format_name(format), target, sample_count, usage);
-		return FALSE;
-	}
-
-	/* TODO figure out how to render to other formats.. */
-	if ((usage & PIPE_BIND_RENDER_TARGET) &&
-			((format != PIPE_FORMAT_B8G8R8A8_UNORM) &&
-			 (format != PIPE_FORMAT_B8G8R8X8_UNORM))) {
-		DBG("not supported render target: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
 		return FALSE;
 	}
@@ -103,12 +94,13 @@ of_screen_is_format_supported(struct pipe_screen *pscreen,
 	}
 
 	if ((usage & PIPE_BIND_DEPTH_STENCIL) &&
-			(of_depth_supported(format) != 0)) {
+			(of_depth_supported(format) != 0))
 		retval |= PIPE_BIND_DEPTH_STENCIL;
-	}
 
-	if (usage & PIPE_BIND_VERTEX_BUFFER)
+	if ((usage & PIPE_BIND_VERTEX_BUFFER)
+	    && (format != PIPE_FORMAT_R64_FLOAT))
 		retval |= PIPE_BIND_VERTEX_BUFFER;
+
 	if (usage & PIPE_BIND_INDEX_BUFFER)
 		retval |= PIPE_BIND_INDEX_BUFFER;
 	if (usage & PIPE_BIND_TRANSFER_READ)

@@ -40,38 +40,83 @@
 #include "openfimg_resource.h"
 #include "openfimg_util.h"
 
-static void
-emit_vertexbufs(struct of_context *ctx)
-{
-	struct of_vertex_stateobj *vtx = ctx->vtx;
-	struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
-	struct of_vertex_buf bufs[PIPE_MAX_ATTRIBS];
-	unsigned i;
+#define OF_MAX_ATTRIBS	9
 
-	if (!vtx->num_elements)
-		return;
+struct of_draw_element {
+	struct pipe_resource *buffer;
+	unsigned buffer_offset;
+	unsigned stride;
+	enum pipe_format src_format;
+};
 
-	for (i = 0; i < vtx->num_elements; i++) {
-		struct pipe_vertex_element *elem = &vtx->pipe[i];
-		struct pipe_vertex_buffer *vb =
-				&vertexbuf->vb[elem->vertex_buffer_index];
-		bufs[i].offset = vb->buffer_offset;
-		bufs[i].size = of_bo_size(of_resource(vb->buffer)->bo);
-		bufs[i].prsc = vb->buffer;
-	}
+struct of_draw_request {
+	unsigned mode;
+	unsigned start;
+	unsigned count;
 
-	// NOTE I believe the 0x78 (or 0x9c in solid_vp) relates to the
-	// CONST(20,0) (or CONST(26,0) in soliv_vp)
+	struct {
+		int bias;
+		boolean primitive_restart;
+		unsigned restart_index;
 
-	of_emit_vertex_bufs(ctx->ring, 0x78, bufs, vtx->num_elements);
-}
+		struct pipe_resource *buffer;
+		unsigned size;
+		unsigned offset;
+	} index;
+
+	unsigned num_elements;
+	struct of_draw_element elements[OF_MAX_ATTRIBS];
+};
 
 static void
 of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 {
-	struct of_ringbuffer *ring = ctx->ring;
+	struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
+	struct pipe_index_buffer *indexbuf = &ctx->indexbuf;
+	struct of_vertex_stateobj *vtx = ctx->vtx;
+	struct of_draw_request draw;
+	unsigned i;
 
 	of_emit_state(ctx, ctx->dirty);
+
+	for (i = 0; i < vtx->num_elements; ++i) {
+		struct pipe_vertex_element *elem = &vtx->pipe[i];
+		struct pipe_vertex_buffer *vb =
+				&vertexbuf->vb[elem->vertex_buffer_index];
+		struct of_draw_element *of_elem = &draw.elements[i];
+
+		if (!vb->buffer)
+			goto no_cache;
+
+		of_elem->buffer = vb->buffer;
+		of_elem->buffer_offset = vb->buffer_offset + elem->src_offset;
+		of_elem->stride = vb->stride;
+		of_elem->src_format = elem->src_format;
+	}
+
+	draw.mode = info->mode;
+	draw.start = info->start;
+	draw.count = info->count;
+
+	if (info->indexed) {
+		if (!indexbuf->buffer)
+			goto no_cache;
+
+		draw.index.bias = info->index_bias;
+		draw.index.primitive_restart = info->primitive_restart;
+		draw.index.restart_index = info->restart_index;
+
+		draw.index.buffer = indexbuf->buffer;
+		draw.index.offset = indexbuf->offset;
+		draw.index.size = indexbuf->index_size;
+	} else {
+		memset(&draw.index, 0, sizeof(draw.index));
+	}
+
+	// TODO: Look-up in draw cache
+
+no_cache:
+	assert(0);
 
 	// TODO: Emit parameters from pipe_draw_info
 	// TODO: Prepare geometry data
@@ -130,7 +175,7 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	/* and any buffers used, need to be resolved: */
 	ctx->resolve |= buffers;
 
-	/* TODO: Implement draw here. */
+	of_draw(ctx, info);
 }
 
 /*

@@ -39,8 +39,6 @@ struct of_vertex_buf {
 	struct pipe_resource *prsc;
 };
 
-void of_emit_vertex_bufs(struct of_ringbuffer *ring, uint32_t val,
-		struct of_vertex_buf *vbufs, uint32_t n);
 void of_emit_state(struct of_context *ctx, uint32_t dirty);
 void of_emit_setup(struct of_context *ctx);
 

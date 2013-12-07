@@ -109,9 +109,9 @@ COPY_VERTICES(struct of_context *ctx, struct of_draw_info *draw,
 		return 0;
 
 	if (batch_size > prim_data->min) {
-		if (prim_data->multipleOfTwo && (batch_size % 2))
+		if (prim_data->multiple_of_two && (batch_size % 2))
 			--batch_size;
-		if (prim_data->multipleOfThree && (batch_size % 3))
+		if (prim_data->multiple_of_three && (batch_size % 3))
 			batch_size -= batch_size % 3;
 	}
 
@@ -121,7 +121,7 @@ COPY_VERTICES(struct of_context *ctx, struct of_draw_info *draw,
 		buf = BUF_ADDR_8(buffer->base, t->offset);
 #ifdef SEQUENTIAL
 		if (ROUND_UP(t->width, 4) == t->stride) {
-			if (prim_data->repeatFirst) {
+			if (prim_data->repeat_first) {
 				memcpy(buf, t->pointer, t->width);
 				buf += t->stride;
 				memcpy(buf, t->pointer, t->width);
@@ -135,7 +135,7 @@ COPY_VERTICES(struct of_context *ctx, struct of_draw_info *draw,
 				(batch_size - prim_data->shift) * t->stride);
 			buf += (batch_size - prim_data->shift) * t->stride;
 
-			if (prim_data->repeatLast) {
+			if (prim_data->repeat_last) {
 				memcpy(buf, BUF_ADDR_8(t->pointer,
 					(*pos + batch_size - 1) * t->stride),
 					t->width);
@@ -145,7 +145,7 @@ COPY_VERTICES(struct of_context *ctx, struct of_draw_info *draw,
 			continue;
 		}
 #endif
-		if (prim_data->repeatFirst) {
+		if (prim_data->repeat_first) {
 			buf += PACK_ATTRIBUTE(buf, t, indices, 1);
 			buf += PACK_ATTRIBUTE(buf, t, indices, 1);
 			buf += PACK_ATTRIBUTE(buf, t, indices, 1);
@@ -154,7 +154,7 @@ COPY_VERTICES(struct of_context *ctx, struct of_draw_info *draw,
 		buf += PACK_ATTRIBUTE(buf, t, indices + *pos + prim_data->shift,
 					batch_size - prim_data->shift);
 
-		if (prim_data->repeatLast)
+		if (prim_data->repeat_last)
 			buf += PACK_ATTRIBUTE(buf, t,
 					indices + *pos + batch_size - 1, 1);
 	}
