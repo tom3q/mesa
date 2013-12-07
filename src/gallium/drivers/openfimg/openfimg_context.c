@@ -27,6 +27,8 @@
 
 #include "openfimg_context.h"
 #include "openfimg_draw.h"
+#include "openfimg_emit.h"
+#include "openfimg_program.h"
 #include "openfimg_resource.h"
 #include "openfimg_texture.h"
 #include "openfimg_state.h"
@@ -121,14 +123,39 @@ of_context_destroy(struct pipe_context *pctx)
 	FREE(ctx);
 }
 
+static const uint8_t fimg_3dse_primtypes[PIPE_PRIM_MAX] = {
+	[PIPE_PRIM_POINTS]         = PTYPE_POINTS,
+	[PIPE_PRIM_LINES]          = PTYPE_LINES,
+	[PIPE_PRIM_LINE_STRIP]     = PTYPE_LINE_STRIP,
+	[PIPE_PRIM_TRIANGLES]      = PTYPE_TRIANGLES,
+	[PIPE_PRIM_TRIANGLE_STRIP] = PTYPE_TRIANGLE_STRIP,
+	[PIPE_PRIM_TRIANGLE_FAN]   = PTYPE_TRIANGLE_FAN,
+};
+
 struct pipe_context *
-of_context_init(struct of_context *ctx,
-		struct pipe_screen *pscreen, void *priv)
+of_context_create(struct pipe_screen *pscreen, void *priv)
 {
+	struct of_context *ctx = CALLOC_STRUCT(of_context);
 	struct of_screen *screen = of_screen(pscreen);
 	struct pipe_context *pctx;
+	int i;
+
+	if (!ctx)
+		return NULL;
+
+	pctx = &ctx->base;
+
+	of_draw_init(pctx);
+	of_texture_init(pctx);
+	of_prog_init(pctx);
 
 	ctx->screen = screen;
+
+	ctx->primtypes = fimg_3dse_primtypes;
+	ctx->primtype_mask = 0;
+	for (i = 0; i < PIPE_PRIM_MAX; i++)
+		if (fimg_3dse_primtypes[i])
+			ctx->primtype_mask |= (1 << i);
 
 	/* need some sane default in case state tracker doesn't
 	 * set some state:
@@ -159,40 +186,15 @@ of_context_init(struct of_context *ctx,
 	if (!ctx->blitter)
 		goto fail;
 
+	ctx->primconvert = util_primconvert_create(pctx, ctx->primtype_mask);
+	if (!ctx->primconvert)
+		goto fail;
+
+	of_emit_setup(ctx);
 
 	return pctx;
 
 fail:
 	pctx->destroy(pctx);
 	return NULL;
-}
-
-struct pipe_context *
-of_context_create(struct pipe_screen *pscreen, void *priv)
-{
-	struct of_context *of_ctx = CALLOC_STRUCT(of_context);
-	struct pipe_context *pctx;
-
-	if (!of_ctx)
-		return NULL;
-
-	pctx = &of_ctx->base;
-
-	pctx->destroy = of_context_destroy;
-	//pctx->create_blend_state = of_blend_state_create;
-	//pctx->create_rasterizer_state = of_rasterizer_state_create;
-	//pctx->create_depth_stencil_alpha_state = of_zsa_state_create;
-
-	of_draw_init(pctx);
-	//of_gmem_init(pctx);
-	of_texture_init(pctx);
-	//of_prog_init(pctx);
-
-	pctx = of_context_init(of_ctx, pscreen, priv);
-	if (!pctx)
-		return NULL;
-
-	//of_emit_setup(&of_ctx->base);
-
-	return pctx;
 }

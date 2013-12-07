@@ -33,6 +33,7 @@
 #include "util/u_blitter.h"
 #include "util/u_slab.h"
 #include "util/u_string.h"
+#include "indices/u_primconvert.h"
 
 #include "openfimg_screen.h"
 
@@ -83,8 +84,16 @@ struct of_context {
 
 	struct of_screen *screen;
 	struct blitter_context *blitter;
+	struct primconvert_context *primconvert;
 
 	struct util_slab_mempool transfer_pool;
+
+	/* table with PIPE_PRIM_MAX entries mapping PIPE_PRIM_x to
+	 * DI_PT_x value to use for draw initiator.  There are some
+	 * slight differences between generation:
+	 */
+	const uint8_t *primtypes;
+	uint32_t primtype_mask;
 
 	/* shaders used by clear, and gmem->mem blits: */
 	struct of_program_stateobj solid_prog; // TODO move to screen?
@@ -182,8 +191,11 @@ of_context_get_scissor(struct of_context *ctx)
 	return &ctx->disabled_scissor;
 }
 
-struct pipe_context * of_context_init(struct of_context *ctx,
-		struct pipe_screen *pscreen, void *priv);
+static INLINE bool
+of_supported_prim(struct of_context *ctx, unsigned prim)
+{
+	return (1 << prim) & ctx->primtype_mask;
+}
 
 void of_context_render(struct pipe_context *pctx);
 

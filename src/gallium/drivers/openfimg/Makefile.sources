@@ -12,4 +12,5 @@ C_SOURCES := \
 	openfimg_state.c \
 	openfimg_surface.c \
 	openfimg_texture.c \
-	openfimg_util.c
+	openfimg_util.c \
+	openfimg_vertex.c

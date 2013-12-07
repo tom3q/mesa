@@ -40,23 +40,6 @@
 #include "openfimg_resource.h"
 #include "openfimg_util.h"
 
-static enum fgpe_vctx_ptype
-mode2primtype(unsigned mode)
-{
-	switch (mode) {
-	case PIPE_PRIM_POINTS:		return PTYPE_POINTS;
-	case PIPE_PRIM_LINES:		return PTYPE_LINES;
-	case PIPE_PRIM_LINE_LOOP:	return PTYPE_LINE_LOOP;
-	case PIPE_PRIM_LINE_STRIP:	return PTYPE_LINE_STRIP;
-	case PIPE_PRIM_TRIANGLES:	return PTYPE_TRIANGLES;
-	case PIPE_PRIM_TRIANGLE_STRIP:	return PTYPE_TRIANGLE_STRIP;
-	case PIPE_PRIM_TRIANGLE_FAN:	return PTYPE_TRIANGLE_FAN;
-	}
-	DBG("unsupported mode: (%s) %d", u_prim_name(mode), mode);
-	assert(0);
-	return 0;
-}
-
 static void
 emit_vertexbufs(struct of_context *ctx)
 {
@@ -106,6 +89,14 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	/* if we supported transform feedback, we'd have to disable this: */
 	if (((scissor->maxx - scissor->minx) *
 			(scissor->maxy - scissor->miny)) == 0) {
+		return;
+	}
+
+	/* emulate unsupported primitives: */
+	if (!of_supported_prim(ctx, info->mode)) {
+		util_primconvert_save_index_buffer(ctx->primconvert, &ctx->indexbuf);
+		util_primconvert_save_rasterizer_state(ctx->primconvert, ctx->rasterizer);
+		util_primconvert_draw_vbo(ctx->primconvert, info);
 		return;
 	}
 
