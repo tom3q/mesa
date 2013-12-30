@@ -54,12 +54,35 @@ of_draw_hash(struct of_draw_info *req)
 	return hash_key;
 }
 
-static unsigned
-of_calculate_batch_size(struct of_context *ctx,
-			const struct of_vertex_info *vertex)
+static void
+of_allocate_vertex_buffer(struct of_context *ctx, struct of_vertex_info *vertex)
 {
-#warning TODO
-	return 0;
+	struct of_vertex_transfer *transfer;
+	unsigned batch_size;
+	unsigned size;
+	unsigned sum;
+	unsigned i;
+
+	transfer = vertex->transfers;
+	sum = 0;
+
+	for (i = 0; i < vertex->num_transfers; ++i, ++transfer)
+		sum += ROUND_UP(transfer->width, 4);
+
+	batch_size = VERTEX_BUFFER_SIZE / sum;
+
+	for (; batch_size > 0; --batch_size) {
+		size = 0;
+		for (i = 0; i < vertex->num_transfers; ++i, ++transfer) {
+			transfer->offset = size;
+			size += ROUND_UP(batch_size
+					* ROUND_UP(transfer->width, 4), 32);
+		}
+		if (size <= VERTEX_BUFFER_SIZE)
+			break;
+	}
+
+	vertex->batch_size = batch_size;
 }
 
 static void
@@ -110,14 +133,17 @@ of_primconvert_release(struct of_context *ctx, struct of_vertex_info *vertex)
 	pipe_resource_reference(&new_ib->buffer, NULL);
 }
 
+static unsigned int dummy_const;
+
 static void
 of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 {
-	struct pipe_transfer *buffer_transfer[OF_MAX_ATTRIBS];
+	struct pipe_transfer *vb_transfer[OF_MAX_ATTRIBS];
 	const struct pipe_index_buffer *ib = &vertex->ib;
-	struct of_draw_info *draw = &vertex->key;
+	const struct of_draw_info *draw = &vertex->key;
 	struct pipe_transfer *ib_transfer = NULL;
-	const void *buffer_ptr[OF_MAX_ATTRIBS];
+	struct of_vertex_transfer *transfer;
+	const void *vb_ptr[OF_MAX_ATTRIBS];
 	bool primconvert = false;
 	const void *indices;
 	unsigned i;
@@ -127,11 +153,25 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 		primconvert = true;
 	}
 
-	memset(buffer_ptr, 0, sizeof(buffer_ptr));
-	memset(buffer_transfer, 0, sizeof(buffer_transfer));
+	memset(vb_ptr, 0, sizeof(vb_ptr));
+	memset(vb_transfer, 0, sizeof(vb_transfer));
 
+	transfer = vertex->transfers;
 	for (i = 0; i < vertex->num_transfers; ++i) {
+		unsigned buf_idx = transfer->vertex_buffer_index;
+		const struct pipe_vertex_buffer *vb = &draw->vb[buf_idx];
 
+		if (!vb_ptr[buf_idx]) {
+			if (vb->user_buffer)
+				vb_ptr[buf_idx] = vb->user_buffer;
+			else
+				vb_ptr[buf_idx] = pipe_buffer_map(&ctx->base,
+							vb->buffer,
+							PIPE_TRANSFER_READ,
+							&vb_transfer[buf_idx]);
+		}
+
+		transfer->pointer = vb_ptr[buf_idx] + transfer->src_offset;
 	}
 
 	if (!vertex->indexed) {
@@ -158,16 +198,30 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 			assert(0);
 		}
 
-		if (ib->buffer)
+		if (ib_transfer)
 			pipe_buffer_unmap(&ctx->base, ib_transfer);
 	}
 
 #warning TODO
-	assert(0);
 	// TODO: Prepare constant elements
+	vertex->const_data = &dummy_const;
+	vertex->const_size = 0;
 
 	if (primconvert)
 		of_primconvert_release(ctx, vertex);
+
+	transfer = vertex->transfers;
+	for (i = 0; i < vertex->num_transfers; ++i) {
+		unsigned buf_idx = transfer->vertex_buffer_index;
+
+		if (!vb_ptr[buf_idx])
+			continue;
+
+		if (vb_transfer[buf_idx])
+			pipe_buffer_unmap(&ctx->base, vb_transfer[buf_idx]);
+
+		vb_ptr[buf_idx] = NULL;
+	}
 }
 
 static int
@@ -310,11 +364,9 @@ of_create_vertex_info(struct of_context *ctx,
 		      const struct of_draw_info *draw, bool bypass_cache)
 {
 	struct of_vertex_info *vertex = CALLOC_STRUCT(of_vertex_info);
-
 	struct of_vertex_transfer *transfer;
 	unsigned arrays[OF_MAX_ATTRIBS];
 	unsigned num_arrays;
-	unsigned base;
 	unsigned i;
 
 	if (vertex == NULL)
@@ -322,8 +374,10 @@ of_create_vertex_info(struct of_context *ctx,
 
 	memcpy(&vertex->key, draw, sizeof(*draw));
 
-	vertex->num_transfers = 0;
+	vertex->mode = ctx->primtypes[vertex->mode];
 	vertex->bypass_cache = bypass_cache;
+	vertex->first_draw = true;
+	vertex->num_transfers = 0;
 
 	/* emulate unsupported primitives: */
 	if (of_supported_prim(ctx, draw->info.mode)) {
@@ -403,16 +457,7 @@ of_create_vertex_info(struct of_context *ctx,
 		++vertex->num_transfers;
 	}
 
-	vertex->mode = ctx->primtypes[vertex->mode];
-	vertex->batch_size = of_calculate_batch_size(ctx, vertex);
-
-	base = 0;
-	transfer = vertex->transfers;
-	for (i = 0; i < vertex->num_transfers; ++i, ++transfer) {
-		transfer->offset = base;
-		base += ROUND_UP(vertex->batch_size * transfer->width, 32);
-	}
-
+	of_allocate_vertex_buffer(ctx, vertex);
 	of_build_vertex_data(ctx, vertex);
 
 	return vertex;
@@ -421,13 +466,51 @@ of_create_vertex_info(struct of_context *ctx,
 static void
 of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 {
-	++info->num_draws;
+	const struct of_draw_info *draw = &info->key;
+	struct of_rasterizer_stateobj *rasterizer;
+	struct of_ringbuffer *ring = ctx->ring;
+	struct of_vertex_buffer *buf, *tmp;
+	unsigned i;
 
-#warning TODO
-	assert(0);
+	rasterizer = of_rasterizer_stateobj(ctx->rasterizer);
 
-	// TODO: Emit parameters from of_vertex_info
-	// TODO: Emit draw commands
+	OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE,
+		2 * (draw->num_elements * 3 + 2));
+
+	for (i = 0; i < draw->num_elements; ++i) {
+		struct of_vertex_element *element = &info->elements[i];
+		struct of_vertex_transfer *transfer =
+				&info->transfers[element->transfer_index];
+		unsigned stride = ROUND_UP(transfer->width, 4);
+		unsigned offset = transfer->offset + element->offset;
+
+		OUT_RING(ring, REG_FGHI_ATTRIB(i));
+		OUT_RING(ring, element->attrib);
+		OUT_RING(ring, REG_FGHI_ATTRIB_VBCTRL(i));
+		OUT_RING(ring, FGHI_ATTRIB_VBCTRL_STRIDE(stride)
+				| FGHI_ATTRIB_VBCTRL_RANGE(0xffff));
+		OUT_RING(ring, REG_FGHI_ATTRIB_VBBASE(i));
+		OUT_RING(ring, FGHI_ATTRIB_VBBASE_ADDR(offset));
+	}
+
+	OUT_RING(ring, REG_FGPE_VERTEX_CONTEXT);
+	OUT_RING(ring, rasterizer->fgpe_vertex_context |
+			info->draw_mode | FGPE_VERTEX_CONTEXT_VSOUT(8));
+
+	LIST_FOR_EACH_ENTRY_SAFE(buf, tmp, &info->buffers, list) {
+		OUT_PKT(ring, G3D_REQUEST_DRAW, 4);
+		OUT_RING(ring, buf->nr_vertices);
+		OUT_RING(ring, of_bo_handle(of_resource(buf->buffer)->bo));
+		OUT_RING(ring, 0);
+		OUT_RING(ring, VERTEX_BUFFER_SIZE);
+
+		if (info->first_draw || info->bypass_cache) {
+			LIST_DEL(&buf->list);
+			of_put_batch_buffer(ctx, buf);
+		}
+	}
+
+	info->first_draw = false;
 }
 
 static void
@@ -457,6 +540,8 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		memcpy(&draw.ib, indexbuf, sizeof(draw.ib));
 		if (!indexbuf->buffer)
 			bypass_cache = true;
+		else if (of_resource(indexbuf->buffer)->dirty)
+			index_dirty = true;
 	} else {
 		memset(&draw.ib, 0, sizeof(draw.ib));
 	}
@@ -474,8 +559,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 
 		if (!vb->buffer)
 			bypass_cache = true;
-
-		if (of_resource(vb->buffer)->dirty)
+		else if (of_resource(vb->buffer)->dirty)
 			dirty |= 1 << elem->vertex_buffer_index;
 
 		if (buffer_map[elem->vertex_buffer_index] < 0) {
@@ -495,7 +579,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	if (!vertex) {
 		vertex = of_create_vertex_info(ctx, &draw, bypass_cache);
 		cso_hash_insert(ctx->draw_hash, hash_key, vertex);
-	} else if (dirty || index_dirty) {
+	} else if (dirty || index_dirty || LIST_IS_EMPTY(&vertex->buffers)) {
 		while (dirty) {
 			unsigned buffer = ffs(dirty) - 1;
 			struct pipe_vertex_buffer *vb = &vertexbuf->vb[buffer];
@@ -503,6 +587,15 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 			of_kill_draw_caches(ctx, vb->buffer);
 			dirty &= ~(1 << buffer);
 			of_resource(vb->buffer)->dirty = false;
+
+			vertex->first_draw = true;
+		}
+
+		if (index_dirty) {
+			of_kill_draw_caches(ctx, indexbuf->buffer);
+			of_resource(indexbuf->buffer)->dirty = false;
+
+			vertex->first_draw = true;
 		}
 
 		of_build_vertex_data(ctx, vertex);
@@ -549,8 +642,6 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		buffers |= OF_BUFFER_COLOR;
 	}
 
-	ctx->num_draws++;
-
 	/* any buffers that haven't been cleared, we need to restore: */
 	ctx->restore |= buffers & (OF_BUFFER_ALL & ~ctx->cleared);
 	/* and any buffers used, need to be resolved: */
@@ -570,8 +661,6 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
 
 	util_clear(pctx, pfb, buffers, color, depth, stencil);
-
-#warning TODO
 }
 
 static void
@@ -582,8 +671,6 @@ of_clear_render_target(struct pipe_context *pctx, struct pipe_surface *ps,
 	DBG("TODO: x=%u, y=%u, w=%u, h=%u", x, y, w, h);
 
 	util_clear_render_target(pctx, ps, color, x, y, w, h);
-
-#warning TODO
 }
 
 static void
@@ -595,8 +682,6 @@ of_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *ps,
 			buffers, depth, stencil, x, y, w, h);
 
 	util_clear_depth_stencil(pctx, ps, buffers, depth, stencil, x, y, w, h);
-
-#warning TODO
 }
 
 void

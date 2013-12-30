@@ -145,6 +145,8 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 
 	pctx = &ctx->base;
 
+	LIST_INITHEAD(&ctx->pending_batches);
+
 	of_draw_init(pctx);
 	of_texture_init(pctx);
 	of_prog_init(pctx);

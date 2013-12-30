@@ -75,13 +75,15 @@ struct of_vertex_element {
 struct of_vertex_info {
 	struct of_draw_info key;
 
-	bool bypass_cache;
+	bool first_draw:1;
+	bool bypass_cache:1;
+	bool indexed:1;
+
 	unsigned batch_size;
 	unsigned draw_mode;
 	unsigned num_transfers;
 	unsigned num_draws;
 
-	bool indexed;
 	unsigned mode;
 	unsigned index_size;
 	unsigned count;
@@ -89,16 +91,21 @@ struct of_vertex_info {
 	u_generate_func gen_func;
 	struct pipe_index_buffer ib;
 
+	const void *const_data;
+	unsigned const_size;
+
 	struct of_vertex_transfer transfers[OF_MAX_ATTRIBS];
 	struct of_vertex_element elements[OF_MAX_ATTRIBS];
 	struct list_head buffers;
 };
 
 struct of_vertex_buffer {
-	uint8_t *base;
+	struct pipe_resource *buffer;
 	unsigned nr_vertices;
 	struct list_head list;
 };
+
+void of_put_batch_buffer(struct of_context *ctx, struct of_vertex_buffer *buf);
 
 void of_prepare_draw_idx8(struct of_context *ctx, struct of_vertex_info *vtx,
 			  const uint8_t *indices);

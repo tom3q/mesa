@@ -44,6 +44,7 @@ struct of_rasterizer_stateobj {
 	uint32_t fgra_bfcull;
 	uint32_t fgra_psize_min;
 	uint32_t fgra_psize_max;
+	uint32_t fgpe_vertex_context;
 };
 
 struct of_zsa_stateobj {

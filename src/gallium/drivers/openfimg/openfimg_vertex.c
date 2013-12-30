@@ -116,8 +116,22 @@ const struct of_primitive_data primitive_data[PIPE_PRIM_MAX] = {
 
 static struct of_vertex_buffer *of_get_batch_buffer(struct of_context *ctx)
 {
-#warning TODO
-	return NULL;
+	struct of_vertex_buffer *buffer = CALLOC_STRUCT(of_vertex_buffer);
+
+	if (buffer == NULL)
+		return NULL;
+
+	buffer->buffer = pipe_buffer_create(ctx->base.screen,
+						PIPE_BIND_CUSTOM,
+						PIPE_USAGE_IMMUTABLE,
+						VERTEX_BUFFER_SIZE);
+
+	return buffer;
+}
+
+void of_put_batch_buffer(struct of_context *ctx, struct of_vertex_buffer *buf)
+{
+	LIST_ADDTAIL(&buf->list, &ctx->pending_batches);
 }
 
 /**

@@ -186,7 +186,6 @@ of_set_vertex_buffers(struct pipe_context *pctx,
 {
 	struct of_context *ctx = of_context(pctx);
 	struct of_vertexbuf_stateobj *so = &ctx->vertexbuf;
-	int i;
 
 	util_set_vertex_buffers_mask(so->vb, &so->enabled_mask, vb, start_slot, count);
 	so->count = util_last_bit(so->enabled_mask);

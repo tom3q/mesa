@@ -31,6 +31,7 @@
 #include "draw/draw_context.h"
 #include "pipe/p_context.h"
 #include "util/u_blitter.h"
+#include <util/u_double_list.h>
 #include "util/u_slab.h"
 #include "util/u_string.h"
 #include "indices/u_primconvert.h"
@@ -177,6 +178,7 @@ struct of_context {
 	struct of_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
 	struct of_vertexbuf_stateobj vertexbuf;
 	struct pipe_index_buffer indexbuf;
+	struct list_head pending_batches;
 };
 
 static INLINE struct of_context *
