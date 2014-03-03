@@ -157,7 +157,7 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 	memset(vb_transfer, 0, sizeof(vb_transfer));
 
 	transfer = vertex->transfers;
-	for (i = 0; i < vertex->num_transfers; ++i) {
+	for (i = 0; i < vertex->num_transfers; ++i, ++transfer) {
 		unsigned buf_idx = transfer->vertex_buffer_index;
 		const struct pipe_vertex_buffer *vb = &draw->vb[buf_idx];
 
@@ -211,7 +211,7 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 		of_primconvert_release(ctx, vertex);
 
 	transfer = vertex->transfers;
-	for (i = 0; i < vertex->num_transfers; ++i) {
+	for (i = 0; i < vertex->num_transfers; ++i, ++transfer) {
 		unsigned buf_idx = transfer->vertex_buffer_index;
 
 		if (!vb_ptr[buf_idx])
@@ -408,8 +408,7 @@ of_create_vertex_info(struct of_context *ctx,
 	}
 
 	/* Try to detect interleaved arrays */
-	qsort_r(arrays, num_arrays, sizeof(*arrays), array_compare,
-		vertex->elements);
+	qsort_r(arrays, num_arrays, sizeof(*arrays), array_compare, vertex);
 
 	transfer = vertex->transfers;
 	for (i = 0; i < num_arrays;) {
@@ -535,6 +534,8 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	unsigned hash_key;
 	unsigned i;
 
+	assert(vtx->num_elements > 0);
+
 	memcpy(&draw.info, info, sizeof(draw.info));
 	if (info->indexed) {
 		memcpy(&draw.ib, indexbuf, sizeof(draw.ib));
@@ -542,8 +543,6 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 			bypass_cache = true;
 		else if (of_resource(indexbuf->buffer)->dirty)
 			index_dirty = true;
-	} else {
-		memset(&draw.ib, 0, sizeof(draw.ib));
 	}
 
 	for (i = 0; i < PIPE_MAX_ATTRIBS; ++i)
@@ -551,7 +550,9 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 
 	memcpy(draw.elements, vtx->pipe,
 		vtx->num_elements * sizeof(draw.elements[0]));
+	draw.num_elements = vtx->num_elements;
 
+	draw.num_vb = 0;
 	for (i = 0; i < vtx->num_elements; ++i) {
 		struct pipe_vertex_element *elem = &vtx->pipe[i];
 		struct pipe_vertex_buffer *vb =
