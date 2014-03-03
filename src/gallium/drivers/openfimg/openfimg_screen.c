@@ -217,7 +217,6 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_SEAMLESS_CUBE_MAP_PER_TEXTURE:
 	case PIPE_CAP_TGSI_FS_COORD_ORIGIN_LOWER_LEFT:
 	case PIPE_CAP_TGSI_FS_COORD_PIXEL_CENTER_INTEGER:
-	case PIPE_CAP_SCALED_RESOLVE:
 	case PIPE_CAP_TGSI_CAN_COMPACT_CONSTANTS:
 	case PIPE_CAP_FRAGMENT_COLOR_CLAMPED:
 	case PIPE_CAP_VERTEX_COLOR_CLAMPED:
@@ -253,8 +252,6 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		return 0;
 	case PIPE_CAP_MAX_TEXTURE_ARRAY_LAYERS:
 		return 0;
-	case PIPE_CAP_MAX_COMBINED_SAMPLERS:
-		return 12;
 
 	/* Render targets. */
 	case PIPE_CAP_MAX_RENDER_TARGETS:

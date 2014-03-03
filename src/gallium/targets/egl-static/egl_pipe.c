@@ -28,6 +28,30 @@
 #include "target-helpers/inline_sw_helper.h"
 #include "egl_pipe.h"
 
+/* for openfimg */
+#if _EGL_PIPE_OPENFIMG
+#include "openfimg/drm/openfimg_drm_public.h"
+#endif
+static struct pipe_screen *
+pipe_openfimg_create_screen(int fd)
+{
+#if _EGL_PIPE_FREEDRENO
+   struct pipe_screen *screen;
+
+   screen = of_drm_screen_create(fd);
+   if (!screen)
+      return NULL;
+
+   screen = debug_screen_wrap(screen);
+
+   return screen;
+#else
+   return NULL;
+#endif
+}
+
+   else if (strcmp(name, "exynos") == 0)
+      return pipe_openfimg_create_screen(fd);
 struct pipe_screen *
 egl_pipe_create_swrast_screen(struct sw_winsys *ws)
 {
