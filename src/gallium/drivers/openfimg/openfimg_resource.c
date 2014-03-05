@@ -48,7 +48,7 @@ static void of_resource_transfer_flush_region(struct pipe_context *pctx,
 		of_context_render(pctx);
 
 	if (rsc->timestamp) {
-		of_pipe_wait(ctx->screen->pipe, rsc->timestamp);
+		of_pipe_wait(ctx->pipe, rsc->timestamp);
 		rsc->timestamp = 0;
 	}
 }

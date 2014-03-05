@@ -289,7 +289,7 @@ static struct ir2_register *
 add_dst_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
 		const struct tgsi_dst_register *dst)
 {
-	unsigned flags = 0, num = 0, type = REG_DST_R;
+	unsigned flags = 0, num, type;
 	char swiz[5];
 
 	switch (dst->File) {
@@ -297,19 +297,18 @@ add_dst_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
 		type = REG_DST_O;
 		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
 			if (dst->Index == ctx->position) {
-				num = 62;
-			} else if (dst->Index == ctx->psize) {
-				num = 63;
+				num = 0;
 			} else {
 				num = export_linkage(ctx,
-						ctx->output_export_idx[dst->Index]);
+					ctx->output_export_idx[dst->Index]);
 			}
 		} else {
 			num = dst->Index;
 		}
 		break;
 	case TGSI_FILE_TEMPORARY:
-		num = get_temp_gpr(ctx, dst->Index);
+		type = REG_DST_R;
+		num = dst->Index;
 		break;
 	default:
 		DBG("unsupported dst register file: %s",
@@ -324,7 +323,7 @@ add_dst_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
 	swiz[3] = (dst->WriteMask & TGSI_WRITEMASK_W) ? 'w' : '_';
 	swiz[4] = '\0';
 
-	return ir2_reg_create(alu, num, swiz, flags);
+	return ir2_reg_create(alu, num, swiz, flags, type);
 }
 
 static struct ir2_register *
@@ -335,7 +334,7 @@ add_src_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
 			'x', 'y', 'z', 'w',
 	};
 	char swiz[5];
-	unsigned flags = 0, num = 0, type = REG_SRC_R;
+	unsigned flags = 0, num, type;
 
 	switch (src->File) {
 	case TGSI_FILE_CONSTANT:
@@ -344,14 +343,16 @@ add_src_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
 		break;
 	case TGSI_FILE_INPUT:
 		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
-			num = src->Index + 1;
+			num = src->Index;
 		} else {
 			num = export_linkage(ctx,
 					ctx->input_export_idx[src->Index]);
 		}
+		type = REG_SRC_V;
 		break;
 	case TGSI_FILE_TEMPORARY:
-		num = get_temp_gpr(ctx, src->Index);
+		num = src->Index;
+		type = REG_SRC_R;
 		break;
 	case TGSI_FILE_IMMEDIATE:
 		num = src->Index + ctx->num_regs[TGSI_FILE_CONSTANT];
@@ -381,7 +382,7 @@ add_src_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
 		ctx->need_sync &= ~(uint64_t)(1 << num);
 	}
 
-	return ir2_reg_create(alu, num, swiz, flags);
+	return ir2_reg_create(alu, num, swiz, flags, type);
 }
 
 static void
@@ -406,9 +407,9 @@ add_regs_dummy_vector(struct ir2_instruction *alu)
 	/* create dummy, non-written vector dst/src regs
 	 * for unused vector instr slot:
 	 */
-	ir2_reg_create(alu, 0, "____", 0); /* vector dst */
-	ir2_reg_create(alu, 0, NULL, 0);   /* vector src1 */
-	ir2_reg_create(alu, 0, NULL, 0);   /* vector src2 */
+	ir2_reg_create(alu, 0, "____", 0, REG_DST_R); /* vector dst */
+	ir2_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src1 */
+	ir2_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src2 */
 }
 
 /*
@@ -714,7 +715,7 @@ translate_direct(struct of_compile_context *ctx,
 	assert(inst->Instruction.NumSrcRegs == info->src_count);
 	assert(inst->Instruction.NumDstRegs == 1);
 
-	ins = ir2_instr_create(ctx->shader, info->opcode);
+	ins = ir2_instr_create_alu(ctx->shader, info->opcode);
 	add_dst_reg(ctx, ins, &inst->Dst[0].Register);
 
 	for (src = 0; src < info->src_count; ++src)
@@ -828,7 +829,7 @@ of_compile_shader(struct of_program_stateobj *prog,
 
 	ir2_shader_destroy(so->ir);
 	so->ir = ir2_shader_create();
-	so->num_vfetch_instrs = so->num_tfetch_instrs = so->num_immediates = 0;
+	so->num_immediates = 0;
 
 	if (compile_init(&ctx, prog, so) != TGSI_PARSE_OK)
 		return -1;

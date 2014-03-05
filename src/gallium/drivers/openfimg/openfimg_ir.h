@@ -31,6 +31,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include "openfimg_context.h"
 #include "openfimg_instr.h"
 
 /* low level intermediate representation of an adreno a2xx shader program */
@@ -60,12 +61,14 @@ enum ir2_pred {
 	IR2_PRED_NE = 2,
 };
 
+enum ir2_instr_type {
+	IR2_CF,
+	IR2_ALU,
+};
+
 struct ir2_instruction {
 	struct ir2_shader *shader;
-	enum {
-		IR2_CF,
-		IR2_ALU,
-	} instr_type;
+	enum ir2_instr_type instr_type;
 	enum ir2_pred pred;
 	int sync;
 	unsigned regs_count;
@@ -86,13 +89,16 @@ struct ir2_shader {
 
 struct ir2_shader * ir2_shader_create(void);
 void ir2_shader_destroy(struct ir2_shader *shader);
-void * ir2_shader_assemble(struct ir2_shader *shader,
-		struct ir2_shader_info *info);
+struct pipe_resource *ir2_shader_assemble(struct of_context *ctx,
+					  struct ir2_shader *shader,
+					  struct ir2_shader_info *info);
 
-struct ir2_instruction * ir2_instr_create(struct ir2_shader *shader,
-					  instr_opc_t opc);
-
+struct ir2_instruction * ir2_instr_create_alu(struct ir2_shader *shader,
+					      instr_opc_t opc);
+struct ir2_instruction * ir2_instr_create_cf(struct ir2_shader *shader,
+					     instr_opc_t opc);
 struct ir2_register * ir2_reg_create(struct ir2_instruction *instr,
-		int num, const char *swizzle, int flags);
+				     int num, const char *swizzle, int flags,
+				     int type);
 
 #endif /* IR2_H_ */

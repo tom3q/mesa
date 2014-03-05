@@ -407,6 +407,10 @@ of_create_vertex_info(struct of_context *ctx,
 		arrays[num_arrays++] = i;
 	}
 
+	/* Mark last element with terminating flag */
+	vertex->elements[draw->num_elements - 1].attrib |=
+							FGHI_ATTRIB_LAST_ATTR;
+
 	/* Try to detect interleaved arrays */
 	qsort_r(arrays, num_arrays, sizeof(*arrays), array_compare, vertex);
 
@@ -474,7 +478,7 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 	rasterizer = of_rasterizer_stateobj(ctx->rasterizer);
 
 	OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE,
-		2 * (draw->num_elements * 3 + 2));
+		2 * (draw->num_elements * 3 + 1));
 
 	for (i = 0; i < draw->num_elements; ++i) {
 		struct of_vertex_element *element = &info->elements[i];

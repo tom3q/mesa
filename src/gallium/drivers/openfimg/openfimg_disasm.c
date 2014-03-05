@@ -37,6 +37,7 @@
 
 #include "openfimg_disasm.h"
 #include "openfimg_instr.h"
+#include "openfimg_util.h"
 
 static const char *levels[] = {
 		"\t",
@@ -63,9 +64,21 @@ static enum debug_t debug;
  */
 
 static const char chan_names[] = {
-		'x', 'y', 'z', 'w',
-		/* these only apply to FETCH dst's: */
-		'0', '1', '?', '_',
+	'x', 'y', 'z', 'w',
+};
+
+static const char *src_type_str[] = {
+	[REG_SRC_V] = "V",
+	[REG_SRC_R] = "R",
+	[REG_SRC_C] = "C",
+	[REG_SRC_I] = "I",
+	[REG_SRC_AL] = "AL",
+	[REG_SRC_B] = "B",
+	[REG_SRC_P] = "P",
+	[REG_SRC_S] = "S",
+	[REG_SRC_D] = "D",
+	[REG_SRC_VFACE] = "VFACE",
+	[REG_SRC_VPOS] = "VPOS",
 };
 
 static void print_srcreg(uint32_t num, uint32_t type,
@@ -75,12 +88,17 @@ static void print_srcreg(uint32_t num, uint32_t type,
 		printf("-");
 	if (abs)
 		printf("|");
-	printf("%c%u", type ? 'R' : 'C', num);
-	if (swiz) {
+
+	if (type >= ARRAY_SIZE(src_type_str))
+		printf("?%u", num);
+	else
+		printf("%s%u", src_type_str[type], num);
+
+	if (swiz != 0xe4) {
 		int i;
 		printf(".");
 		for (i = 0; i < 4; i++) {
-			printf("%c", chan_names[(swiz + i) & 0x3]);
+			printf("%c", chan_names[swiz & 0x3]);
 			swiz >>= 2;
 		}
 	}
@@ -88,9 +106,21 @@ static void print_srcreg(uint32_t num, uint32_t type,
 		printf("|");
 }
 
-static void print_dstreg(uint32_t num, uint32_t mask, uint32_t dst_exp)
+static const char *dst_type_str[] = {
+	[REG_DST_O] = "O",
+	[REG_DST_R] = "R",
+	[REG_DST_P] = "P",
+	[REG_DST_A0] = "A",
+	[REG_DST_AL] = "AL",
+};
+
+static void print_dstreg(uint32_t num, uint32_t mask, uint32_t type)
 {
-	printf("%s%u", dst_exp ? "export" : "R", num);
+	if (type >= ARRAY_SIZE(dst_type_str))
+		printf("?%u", num);
+	else
+		printf("%s%u", dst_type_str[type], num);
+
 	if (mask != 0xf) {
 		int i;
 		printf(".");
@@ -246,13 +276,23 @@ static int disasm_alu(uint32_t *dwords, uint32_t alu_off,
  *   2) ALU and FETCH instructions
  */
 
-int disasm_fimg_3dse(uint32_t *dwords, int sizedwords,
-		     int level, enum shader_t type)
+int disasm_fimg_3dse(struct of_context *ctx, struct pipe_resource *buffer,
+		     int sizedwords, int level, enum shader_t type)
 {
+	struct pipe_transfer *transfer;
+	uint32_t *dwords;
 	int idx;
+
+	dwords = pipe_buffer_map(&ctx->base, buffer, PIPE_TRANSFER_WRITE,
+					&transfer);
+	if (!dwords)
+		return -1;
 
 	for (idx = 0; idx < sizedwords / 4; idx++)
 		disasm_alu(dwords + idx * 4, idx, level, type);
+
+	if (transfer)
+		pipe_buffer_unmap(&ctx->base, transfer);
 
 	return 0;
 }

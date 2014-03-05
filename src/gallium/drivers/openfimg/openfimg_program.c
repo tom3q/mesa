@@ -36,6 +36,7 @@
 #include "openfimg_program.h"
 #include "openfimg_compiler.h"
 #include "openfimg_texture.h"
+#include "openfimg_resource.h"
 #include "openfimg_util.h"
 
 static struct of_shader_stateobj *
@@ -53,21 +54,22 @@ delete_shader(struct of_shader_stateobj *so)
 {
 	ir2_shader_destroy(so->ir);
 	free(so->tokens);
-	free(so->bin);
+	pipe_resource_reference(&so->buffer, NULL);
 	free(so);
 }
 
 static struct of_shader_stateobj *
-assemble(struct of_shader_stateobj *so)
+assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 {
-	free(so->bin);
-	so->bin = ir2_shader_assemble(so->ir, &so->info);
-	if (!so->bin)
+	pipe_resource_reference(&so->buffer, NULL);
+	so->buffer = ir2_shader_assemble(ctx, so->ir, &so->info);
+	if (!so->buffer)
 		goto fail;
 
 	if (of_mesa_debug & OF_DBG_DISASM) {
 		DBG("disassemble: type=%d", so->type);
-		disasm_fimg_3dse(so->bin, so->info.sizedwords, 0, so->type);
+		disasm_fimg_3dse(ctx, so->buffer, so->info.sizedwords,
+					0, so->type);
 	}
 
 	return so;
@@ -108,14 +110,26 @@ fail:
 }
 
 static void
-emit(struct of_ringbuffer *ring, struct of_shader_stateobj *so)
+emit(struct of_context *ctx, struct of_shader_stateobj *so)
 {
-	unsigned i;
+	struct of_ringbuffer *ring = ctx->ring;
+	unsigned num_attribs;
 
 	if (so->info.sizedwords == 0)
-		assemble(so);
+		assemble(ctx, so);
 
-#warning TODO
+	if (so->type == SHADER_FRAGMENT)
+		num_attribs = 8;
+	else
+		num_attribs = so->info.max_input_reg + 1;
+
+	OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM, 6);
+	OUT_RING(ring, (so->type << 8) | num_attribs);
+	OUT_RING(ring, 4 * (so->first_immediate + so->num_immediates));
+	OUT_RING(ring, 0);
+	OUT_RING(ring, of_bo_handle(of_resource(so->buffer)->bo));
+	OUT_RING(ring, 0);
+	OUT_RING(ring, so->info.sizedwords);
 }
 
 static void *
@@ -193,23 +207,10 @@ of_program_validate(struct of_context *ctx)
 }
 
 void
-of_program_emit(struct of_ringbuffer *ring,
-		struct of_program_stateobj *prog)
+of_program_emit(struct of_context *ctx, struct of_program_stateobj *prog)
 {
-	struct ir2_shader_info *vsi =
-		&((struct of_shader_stateobj *)prog->vp)->info;
-	struct ir2_shader_info *fsi =
-		&((struct of_shader_stateobj *)prog->fp)->info;
-	uint8_t vs_gprs, fs_gprs, vs_export;
-
-	emit(ring, prog->vp);
-	emit(ring, prog->fp);
-
-	vs_gprs = (vsi->max_reg < 0) ? 0x80 : vsi->max_reg;
-	fs_gprs = (fsi->max_reg < 0) ? 0x80 : fsi->max_reg;
-	vs_export = MAX2(1, prog->num_exports) - 1;
-
-#warning TODO
+	emit(ctx, prog->vp);
+	emit(ctx, prog->fp);
 
 	prog->dirty = 0;
 }

@@ -42,7 +42,6 @@ struct of_screen {
 	struct pipe_screen base;
 
 	struct of_device *dev;
-	struct of_pipe *pipe;
 
 	int64_t cpu_gpu_time_delta;
 };
