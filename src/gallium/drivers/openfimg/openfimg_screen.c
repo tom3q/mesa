@@ -164,9 +164,6 @@ of_screen_destroy(struct pipe_screen *pscreen)
 {
 	struct of_screen *screen = of_screen(pscreen);
 
-	if (screen->pipe)
-		of_pipe_del(screen->pipe);
-
 	if (screen->dev)
 		of_device_del(screen->dev);
 
@@ -416,13 +413,6 @@ of_screen_create(struct of_device *dev)
 	pscreen = &screen->base;
 
 	screen->dev = dev;
-
-	// maybe this should be in context?
-	screen->pipe = of_pipe_new(screen->dev, OF_PIPE_3D);
-	if (!screen->pipe) {
-		DBG("could not create 3d pipe");
-		goto fail;
-	}
 
 	pscreen->context_create = of_context_create;
 	pscreen->is_format_supported = of_screen_is_format_supported;

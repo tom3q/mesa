@@ -75,8 +75,9 @@ void ir2_shader_destroy(struct ir2_shader *shader)
 	free(shader);
 }
 
-struct ir2_instruction * ir2_instr_create(struct ir2_shader *shader,
-					  instr_opc_t opc)
+static struct ir2_instruction * ir2_instr_create(struct ir2_shader *shader,
+						 instr_opc_t opc,
+						 enum ir2_instr_type type)
 {
 	struct ir2_instruction *instr =
 			ir2_alloc(shader, sizeof(struct ir2_instruction));
@@ -84,9 +85,22 @@ struct ir2_instruction * ir2_instr_create(struct ir2_shader *shader,
 	instr->shader = shader;
 	instr->pred = shader->pred;
 	instr->opc = opc;
+	instr->instr_type = type;
 	assert(shader->instrs_count < ARRAY_SIZE(shader->instrs));
 	shader->instrs[shader->instrs_count++] = instr;
 	return instr;
+}
+
+struct ir2_instruction * ir2_instr_create_alu(struct ir2_shader *shader,
+					      instr_opc_t opc)
+{
+	return ir2_instr_create(shader, opc, IR2_ALU);
+}
+
+struct ir2_instruction * ir2_instr_create_cf(struct ir2_shader *shader,
+					     instr_opc_t opc)
+{
+	return ir2_instr_create(shader, opc, IR2_CF);
 }
 
 static void reg_update_stats(struct ir2_register *reg,
@@ -150,13 +164,13 @@ static uint32_t reg_alu_src_swiz(struct ir2_register *reg)
 	if (!reg->swizzle)
 		return 0xe4;
 
-	for (i = 3; i >= 0; i--) {
-		swiz <<= 2;
+	for (i = 0; i < 4; ++i) {
+		swiz >>= 2;
 		switch (reg->swizzle[i]) {
-		case 'x': swiz |= 0x0; break;
-		case 'y': swiz |= 0x1; break;
-		case 'z': swiz |= 0x2; break;
-		case 'w': swiz |= 0x3; break;
+		case 'x': swiz |= 0x0 << 6; break;
+		case 'y': swiz |= 0x1 << 6; break;
+		case 'z': swiz |= 0x2 << 6; break;
+		case 'w': swiz |= 0x3 << 6; break;
 		default:
 			ERROR_MSG("invalid vector src swizzle: %s",
 					reg->swizzle);
@@ -189,33 +203,34 @@ static int instr_emit_alu(struct ir2_instruction *instr, uint32_t *dwords,
 	struct ir2_register *dst_reg  = instr->regs[reg++];
 	struct ir2_register *src0_reg;
 	struct ir2_register *src1_reg;
-	struct ir2_register *src2_reg = NULL;
+	struct ir2_register *src2_reg;
 
 	memset(alu, 0, sizeof(*alu));
 
-	/*
-	 * handle instructions w/ 3 src operands
-	 *
-	 * note: disassembler lists 3rd src first, ie:
-	 *   MULADDv Rdst = Rsrc2 + (Rsrc0 * Rsrc1)
-	 * which is the reason for this strange ordering.
-	 */
-	if (instr->regs_count >= 4)
-		src2_reg = instr->regs[reg++];
-
 	src0_reg = instr->regs[reg++];
 	src1_reg = instr->regs[reg++];
+	src2_reg = instr->regs[reg++];
 
 	reg_update_stats(dst_reg, info, true);
 	reg_update_stats(src0_reg, info, false);
-	reg_update_stats(src1_reg, info, false);
 
 	assert(dst_reg->flags == 0);
 	assert(!dst_reg->swizzle || (strlen(dst_reg->swizzle) == 4));
 	assert(!src0_reg->swizzle || (strlen(src0_reg->swizzle) == 4));
-	assert(!src1_reg->swizzle || (strlen(src1_reg->swizzle) == 4));
 
 	// TODO predicate case/condition.. need to add to parser
+
+	if (src1_reg) {
+		reg_update_stats(src1_reg, info, false);
+
+		assert(!src1_reg->swizzle || (strlen(src1_reg->swizzle) == 4));
+
+		alu->src1_regnum	= src1_reg->num;
+		alu->src1_regtype	= src1_reg->type;
+		alu->src1_negate	= !!(src1_reg->flags & IR2_REG_NEGATE);
+		alu->src1_abs		= !!(src1_reg->flags & IR2_REG_ABS);
+		alu->src1_swizzle	= reg_alu_src_swiz(src1_reg);
+	}
 
 	if (src2_reg) {
 		reg_update_stats(src2_reg, info, false);
@@ -228,12 +243,6 @@ static int instr_emit_alu(struct ir2_instruction *instr, uint32_t *dwords,
 		alu->src2_abs		= !!(src2_reg->flags & IR2_REG_ABS);
 		alu->src2_swizzle	= reg_alu_src_swiz(src2_reg);
 	}
-
-	alu->src1_regnum	= src1_reg->num;
-	alu->src1_regtype	= src1_reg->type;
-	alu->src1_negate	= !!(src1_reg->flags & IR2_REG_NEGATE);
-	alu->src1_abs		= !!(src1_reg->flags & IR2_REG_ABS);
-	alu->src1_swizzle	= reg_alu_src_swiz(src1_reg);
 
 	alu->src0_regnum	= src0_reg->num;
 	alu->src0_regtype	= src0_reg->type;
@@ -268,19 +277,36 @@ static int instr_emit(struct ir2_instruction *instr, uint32_t *dwords,
 	return -1;
 }
 
-void * ir2_shader_assemble(struct ir2_shader *shader, struct ir2_shader_info *info)
+struct pipe_resource *
+ir2_shader_assemble(struct of_context *ctx, struct ir2_shader *shader,
+		    struct ir2_shader_info *info)
 {
 	uint32_t i;
 	uint32_t *ptr, *dwords = NULL;
 	uint32_t idx = 0;
 	int ret;
+	struct pipe_resource *buffer;
+	struct pipe_transfer *transfer;
 
 	info->sizedwords    = 4 * shader->instrs_count;
 	info->max_reg       = -1;
 	info->max_input_reg = 0;
 	info->regs_written  = 0;
 
-	ptr = dwords = calloc(1, 4 * info->sizedwords);
+	buffer = pipe_buffer_create(ctx->base.screen,
+					PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
+					4 * info->sizedwords);
+	if (!buffer) {
+		ERROR_MSG("shader BO allocation failed");
+		return NULL;
+	}
+
+	ptr = dwords = pipe_buffer_map(&ctx->base, buffer, PIPE_TRANSFER_WRITE,
+					&transfer);
+	if (!ptr) {
+		ERROR_MSG("failed to map shader BO");
+		goto fail;
+	}
 
 	/* third pass, emit ALU/FETCH: */
 	for (i = 0; i < shader->instrs_count; i++) {
@@ -293,15 +319,22 @@ void * ir2_shader_assemble(struct ir2_shader *shader, struct ir2_shader_info *in
 		assert((ptr - dwords) <= info->sizedwords);
 	}
 
-	return dwords;
+	if (transfer)
+		pipe_buffer_unmap(&ctx->base, transfer);
+
+	return buffer;
 
 fail:
-	free(dwords);
+	if (transfer)
+		pipe_buffer_unmap(&ctx->base, transfer);
+	if (buffer)
+		pipe_resource_reference(&buffer, NULL);
 	return NULL;
 }
 
 struct ir2_register * ir2_reg_create(struct ir2_instruction *instr,
-		int num, const char *swizzle, int flags)
+				     int num, const char *swizzle, int flags,
+				     int type)
 {
 	struct ir2_register *reg =
 			ir2_alloc(instr->shader, sizeof(struct ir2_register));
@@ -310,6 +343,7 @@ struct ir2_register * ir2_reg_create(struct ir2_instruction *instr,
 	reg->flags = flags;
 	reg->num = num;
 	reg->swizzle = ir2_strdup(instr->shader, swizzle);
+	reg->type = type;
 	assert(instr->regs_count < ARRAY_SIZE(instr->regs));
 	instr->regs[instr->regs_count++] = reg;
 	return reg;

@@ -85,6 +85,7 @@ struct of_vertex_stateobj {
 struct of_context {
 	struct pipe_context base;
 
+	struct of_pipe *pipe;
 	struct of_screen *screen;
 	struct blitter_context *blitter;
 	struct cso_hash *draw_hash;

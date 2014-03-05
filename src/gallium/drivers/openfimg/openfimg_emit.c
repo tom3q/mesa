@@ -112,11 +112,13 @@ emit_constants(struct of_ringbuffer *ring,
 
 			dwords = (uint32_t *)(((uint8_t *)dwords) + cb->buffer_offset);
 
-			OUT_PKT(ring, G3D_REQUEST_SHADER_DATA, size + 1);
-			OUT_RING(ring, RSD_UNIT_TYPE_OFFS(shader->type,
-					G3D_SHADER_DATA_FLOAT, base));
-			for (i = 0; i < size; i++)
-				OUT_RING(ring, *(dwords++));
+			if (size) {
+				OUT_PKT(ring, G3D_REQUEST_SHADER_DATA, size + 1);
+				OUT_RING(ring, RSD_UNIT_TYPE_OFFS(shader->type,
+						G3D_SHADER_DATA_FLOAT, base));
+				for (i = 0; i < size; i++)
+					OUT_RING(ring, *(dwords++));
+			}
 
 			constbuf->dirty_mask &= ~(1 << index);
 		}
@@ -126,7 +128,7 @@ emit_constants(struct of_ringbuffer *ring,
 	}
 
 	/* emit shader immediates: */
-	if (!emit_immediates)
+	if (!emit_immediates || !shader->num_immediates)
 		return;
 
 	OUT_PKT(ring, G3D_REQUEST_SHADER_DATA,
@@ -162,6 +164,8 @@ emit_texture(struct of_ringbuffer *ring, struct of_context *ctx,
 	OUT_RING(ring, sampler->tsta | view->tsta);
 	OUT_RING(ring, view->width);
 	OUT_RING(ring, view->height);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, 0);
 	OUT_RING(ring, 0);
 	OUT_RING(ring, 0);
 	OUT_RING(ring, 0);
@@ -242,7 +246,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		struct of_rasterizer_stateobj *rasterizer =
 				of_rasterizer_stateobj(ctx->rasterizer);
 
-		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 6);
+		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 8);
 		OUT_RING(ring, REG_FGRA_D_OFF_EN);
 		OUT_RING(ring, ctx->rasterizer->offset_tri);
 		OUT_RING(ring, REG_FGRA_D_OFF_FACTOR);
@@ -292,7 +296,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 
 	if (dirty & (OF_DIRTY_PROG | OF_DIRTY_VTXSTATE | OF_DIRTY_TEXSTATE)) {
 		of_program_validate(ctx);
-		of_program_emit(ring, &ctx->prog);
+		of_program_emit(ctx, &ctx->prog);
 	}
 
 	if (dirty & (OF_DIRTY_PROG | OF_DIRTY_CONSTBUF)) {

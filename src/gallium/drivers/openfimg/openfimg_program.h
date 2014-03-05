@@ -38,6 +38,7 @@
 struct of_shader_stateobj {
 	enum shader_t type;
 
+	struct pipe_resource *buffer;
 	uint32_t *bin;
 
 	struct tgsi_token *tokens;
@@ -48,12 +49,6 @@ struct of_shader_stateobj {
 	 */
 	struct ir2_shader_info info;
 	struct ir2_shader *ir;
-
-	/* for vertex shaders, the fetch instructions which need to be
-	 * patched up before assembly:
-	 */
-	unsigned num_vfetch_instrs;
-	struct ir2_instruction *vfetch_instrs[64];
 
 	/* for all shaders, any tex fetch instructions which need to be
 	 * patched before assembly:
@@ -71,8 +66,7 @@ struct of_shader_stateobj {
 	} immediates[64];
 };
 
-void of_program_emit(struct of_ringbuffer *ring,
-		struct of_program_stateobj *prog);
+void of_program_emit(struct of_context *ctx, struct of_program_stateobj *prog);
 void of_program_validate(struct of_context *ctx);
 
 void of_prog_init(struct pipe_context *pctx);
