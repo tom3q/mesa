@@ -28,6 +28,9 @@
 #ifndef DISASM_H_
 #define DISASM_H_
 
+#include "openfimg_context.h"
+#include "openfimg_resource.h"
+
 enum shader_t {
 	SHADER_VERTEX,
 	SHADER_FRAGMENT,
@@ -40,8 +43,8 @@ enum debug_t {
 	PRINT_VERBOSE  = 0x2,
 };
 
-int disasm_fimg_3dse(uint32_t *dwords, int sizedwords,
-		     int level, enum shader_t type);
+int disasm_fimg_3dse(struct of_context *ctx, struct pipe_resource *buffer,
+		     int sizedwords, int level, enum shader_t type);
 void disasm_set_debug(enum debug_t debug);
 
 #endif /* DISASM_H_ */

@@ -25,6 +25,8 @@
  * SOFTWARE.
  */
 
+#include "util/u_format.h"
+
 #include "openfimg_context.h"
 #include "openfimg_draw.h"
 #include "openfimg_emit.h"
@@ -52,9 +54,17 @@ of_context_wait(struct pipe_context *pctx)
 
 	DBG("wait: %u", ts);
 
-	of_pipe_wait(ctx->screen->pipe, ts);
+	of_pipe_wait(ctx->pipe, ts);
 	of_ringbuffer_reset(ctx->ring);
 	of_ringmarker_mark(ctx->draw_start);
+}
+
+static inline enum pipe_format
+pipe_surface_format(struct pipe_surface *psurf)
+{
+	if (!psurf)
+		return PIPE_FORMAT_NONE;
+	return psurf->format;
 }
 
 /* emit accumulated render cmds, needed for example if render target has
@@ -65,13 +75,26 @@ of_context_render(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	uint32_t timestamp = 0;
 
 	DBG("needs_flush: %d", ctx->needs_flush);
 
 	if (!ctx->needs_flush)
 		return;
 
-	/* TODO: Emit render commands here. */
+	of_ringmarker_mark(ctx->draw_end);
+	DBG("rendering sysmem (%s/%s)",
+			util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
+			util_format_short_name(pipe_surface_format(pfb->zsbuf)));
+	of_ringmarker_flush(ctx->draw_start);
+	of_ringmarker_mark(ctx->draw_start);
+
+	/* update timestamps on render targets: */
+	timestamp = of_ringbuffer_timestamp(ctx->ring);
+	if (pfb->cbufs[0])
+		of_resource(pfb->cbufs[0]->texture)->timestamp = timestamp;
+	if (pfb->zsbuf)
+		of_resource(pfb->zsbuf->texture)->timestamp = timestamp;
 
 	DBG("%p/%p/%p", ctx->ring->start, ctx->ring->cur, ctx->ring->end);
 
@@ -113,6 +136,9 @@ of_context_destroy(struct pipe_context *pctx)
 
 	DBG("");
 
+	if (ctx->pipe)
+		of_pipe_del(ctx->pipe);
+
 	if (ctx->blitter)
 		util_blitter_destroy(ctx->blitter);
 
@@ -145,6 +171,12 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 
 	pctx = &ctx->base;
 
+	ctx->pipe = of_pipe_new(screen->dev, OF_PIPE_3D);
+	if (!ctx->pipe) {
+		DBG("could not create 3d pipe");
+		goto fail;
+	}
+
 	LIST_INITHEAD(&ctx->pending_batches);
 
 	of_draw_init(pctx);
@@ -169,7 +201,7 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 	pctx->priv = priv;
 	pctx->flush = of_context_flush;
 
-	ctx->ring = of_ringbuffer_new(screen->pipe, 0x100000);
+	ctx->ring = of_ringbuffer_new(ctx->pipe, 0x100000);
 	if (!ctx->ring)
 		goto fail;
 
