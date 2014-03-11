@@ -239,7 +239,27 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	 */
 
 	if (dirty & OF_DIRTY_FRAMEBUFFER) {
-#warning TODO
+		struct of_framebuffer_stateobj *fb = &ctx->framebuffer;
+		struct of_resource *rsc;
+
+		rsc = of_resource(fb->base.cbufs[0]->texture);
+
+		OUT_PKT(ring, G3D_REQUEST_COLORBUFFER, 5);
+		OUT_RING(ring, fb->fgpf_fbctl);
+		OUT_RING(ring, 0);
+		OUT_RING(ring, fb->base.width);
+		OUT_RING(ring, of_bo_handle(rsc->bo));
+		OUT_RING(ring, 0);
+
+		if (fb->base.zsbuf)
+			rsc = of_resource(fb->base.zsbuf->texture);
+		else
+			rsc = NULL;
+
+		OUT_PKT(ring, G3D_REQUEST_DEPTHBUFFER, 3);
+		OUT_RING(ring, 0);
+		OUT_RING(ring, rsc ? of_bo_handle(rsc->bo) : 0);
+		OUT_RING(ring, rsc ? 0 : G3D_DBUFFER_DETACH);
 	}
 
 	if (dirty & OF_DIRTY_RASTERIZER) {

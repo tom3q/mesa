@@ -333,7 +333,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		<bitfield name="BACK_STENCIL_MASK" high="31" low="24" type="uint"/>
 	</reg32>
 	<reg32 offset="3" name="FGPF_FBCTL">
-		<bitfield name="COLOR_MODE" high="2" low="1" type="fgpf_color_mode"/>
+		<bitfield name="COLOR_MODE" high="2" low="0" type="fgpf_color_mode"/>
 		<bitfield name="DITHER_ON" pos="3"/>
 		<bitfield name="ALPHA_CONST" high="11" low="4" type="uint"/>
 		<bitfield name="ALPHA_THRESHOLD" high="19" low="12" type="uint"/>

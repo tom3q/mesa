@@ -146,7 +146,7 @@ of_resource_create(struct pipe_screen *pscreen,
 	struct pipe_resource *prsc = &rsc->base.b;
 	uint32_t flags, size;
 
-	DBG("target=%d, format=%s, %ux%u@%u, array_size=%u, last_level=%u, "
+	VDBG("target=%d, format=%s, %ux%u@%u, array_size=%u, last_level=%u, "
 			"nr_samples=%u, usage=%u, bind=%x, flags=%x",
 			tmpl->target, util_format_name(tmpl->format),
 			tmpl->width0, tmpl->height0, tmpl->depth0,
@@ -309,7 +309,7 @@ render_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 	util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->zsa);
 	util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);
 	util_blitter_save_sample_mask(ctx->blitter, ctx->sample_mask);
-	util_blitter_save_framebuffer(ctx->blitter, &ctx->framebuffer);
+	util_blitter_save_framebuffer(ctx->blitter, &ctx->framebuffer.base);
 	util_blitter_save_fragment_sampler_states(ctx->blitter,
 			ctx->fragtex.num_samplers,
 			(void **)ctx->fragtex.samplers);

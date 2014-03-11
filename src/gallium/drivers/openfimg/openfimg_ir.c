@@ -187,7 +187,7 @@ static uint32_t reg_alu_src_swiz(struct ir2_register *reg)
 static int instr_emit_cf(struct ir2_instruction *instr, uint32_t *dwords,
 			 struct ir2_shader_info *info)
 {
-#warning TODO
+	DBG("TODO");
 	return 0;
 }
 
@@ -287,6 +287,8 @@ ir2_shader_assemble(struct of_context *ctx, struct ir2_shader *shader,
 	int ret;
 	struct pipe_resource *buffer;
 	struct pipe_transfer *transfer;
+
+	assert(shader->instrs_count);
 
 	info->sizedwords    = 4 * shader->instrs_count;
 	info->max_reg       = -1;

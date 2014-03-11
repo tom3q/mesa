@@ -202,7 +202,7 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 			pipe_buffer_unmap(&ctx->base, ib_transfer);
 	}
 
-#warning TODO
+	VDBG("TODO");
 	// TODO: Prepare constant elements
 	vertex->const_data = &dummy_const;
 	vertex->const_size = 0;
@@ -359,9 +359,8 @@ out_unknown:
 	DBG("unsupported vertex format %s\n", util_format_name(fmt));
 }
 
-static struct of_vertex_info *
-of_create_vertex_info(struct of_context *ctx,
-		      const struct of_draw_info *draw, bool bypass_cache)
+static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
+			const struct of_draw_info *draw, bool bypass_cache)
 {
 	struct of_vertex_info *vertex = CALLOC_STRUCT(of_vertex_info);
 	struct of_vertex_transfer *transfer;
@@ -374,7 +373,6 @@ of_create_vertex_info(struct of_context *ctx,
 
 	memcpy(&vertex->key, draw, sizeof(*draw));
 
-	vertex->mode = ctx->primtypes[vertex->mode];
 	vertex->bypass_cache = bypass_cache;
 	vertex->first_draw = true;
 	vertex->num_transfers = 0;
@@ -390,6 +388,8 @@ of_create_vertex_info(struct of_context *ctx,
 	} else {
 		of_primconvert_prepare(ctx, vertex);
 	}
+
+	vertex->draw_mode = ctx->primtypes[vertex->mode];
 
 	num_arrays = 0;
 	for (i = 0; i < draw->num_elements; ++i) {
@@ -498,7 +498,8 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 
 	OUT_RING(ring, REG_FGPE_VERTEX_CONTEXT);
 	OUT_RING(ring, rasterizer->fgpe_vertex_context |
-			info->draw_mode | FGPE_VERTEX_CONTEXT_VSOUT(8));
+			FGPE_VERTEX_CONTEXT_TYPE(info->draw_mode) |
+			FGPE_VERTEX_CONTEXT_VSOUT(8));
 
 	LIST_FOR_EACH_ENTRY_SAFE(buf, tmp, &info->buffers, list) {
 		OUT_PKT(ring, G3D_REQUEST_DRAW, 4);
@@ -519,7 +520,7 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 static void
 of_kill_draw_caches(struct of_context *ctx, struct pipe_resource *buf)
 {
-#warning TODO
+	DBG("TODO");
 	assert(0);
 }
 
@@ -614,7 +615,7 @@ static void
 of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 {
 	struct of_context *ctx = of_context(pctx);
-	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct pipe_framebuffer_state *pfb = &ctx->framebuffer.base;
 	struct pipe_scissor_state *scissor = of_context_get_scissor(ctx);
 	unsigned i, buffers = 0;
 
@@ -663,7 +664,7 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 		const union pipe_color_union *color, double depth, unsigned stencil)
 {
 	struct of_context *ctx = of_context(pctx);
-	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct pipe_framebuffer_state *pfb = &ctx->framebuffer.base;
 
 	util_clear(pctx, pfb, buffers, color, depth, stencil);
 }

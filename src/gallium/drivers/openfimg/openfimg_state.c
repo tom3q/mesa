@@ -118,31 +118,39 @@ of_set_framebuffer_state(struct pipe_context *pctx,
 		const struct pipe_framebuffer_state *framebuffer)
 {
 	struct of_context *ctx = of_context(pctx);
-	struct pipe_framebuffer_state *cso = &ctx->framebuffer;
+	struct of_framebuffer_stateobj *cso = &ctx->framebuffer;
 	unsigned i;
 
 	DBG("%d: cbufs[0]=%p, zsbuf=%p", ctx->needs_flush,
-			cso->cbufs[0], cso->zsbuf);
+			cso->base.cbufs[0], cso->base.zsbuf);
 
 	of_context_render(pctx);
 
 	for (i = 0; i < framebuffer->nr_cbufs; i++)
-		pipe_surface_reference(&cso->cbufs[i], framebuffer->cbufs[i]);
-	for (; i < ctx->framebuffer.nr_cbufs; i++)
-		pipe_surface_reference(&cso->cbufs[i], NULL);
+		pipe_surface_reference(&cso->base.cbufs[i],
+					framebuffer->cbufs[i]);
+	for (; i < cso->base.nr_cbufs; i++)
+		pipe_surface_reference(&cso->base.cbufs[i], NULL);
 
-	cso->nr_cbufs = framebuffer->nr_cbufs;
-	cso->width = framebuffer->width;
-	cso->height = framebuffer->height;
+	cso->base.nr_cbufs = framebuffer->nr_cbufs;
+	cso->base.width = framebuffer->width;
+	cso->base.height = framebuffer->height;
 
-	pipe_surface_reference(&cso->zsbuf, framebuffer->zsbuf);
+	if (framebuffer->nr_cbufs > 0) {
+		unsigned fmt;
+
+		fmt = cso->base.cbufs[0]->format;
+		cso->fgpf_fbctl = FGPF_FBCTL_COLOR_MODE(of_pipe2color(fmt));
+	}
+
+	pipe_surface_reference(&cso->base.zsbuf, framebuffer->zsbuf);
 
 	ctx->dirty |= OF_DIRTY_FRAMEBUFFER;
 
 	ctx->disabled_scissor.minx = 0;
 	ctx->disabled_scissor.miny = 0;
-	ctx->disabled_scissor.maxx = cso->width;
-	ctx->disabled_scissor.maxy = cso->height;
+	ctx->disabled_scissor.maxx = cso->base.width;
+	ctx->disabled_scissor.maxy = cso->base.height;
 
 	ctx->dirty |= OF_DIRTY_SCISSOR;
 }
