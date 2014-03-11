@@ -82,6 +82,11 @@ struct of_vertex_stateobj {
 	unsigned num_elements;
 };
 
+struct of_framebuffer_stateobj {
+	struct pipe_framebuffer_state base;
+	uint32_t fgpf_fbctl;
+};
+
 struct of_context {
 	struct pipe_context base;
 
@@ -173,7 +178,7 @@ struct of_context {
 	uint32_t blend_color;
 	struct pipe_stencil_ref stencil_ref;
 	unsigned sample_mask;
-	struct pipe_framebuffer_state framebuffer;
+	struct of_framebuffer_stateobj framebuffer;
 	struct pipe_poly_stipple stipple;
 	struct pipe_viewport_state viewport;
 	struct of_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];

@@ -129,7 +129,7 @@ emit(struct of_context *ctx, struct of_shader_stateobj *so)
 	OUT_RING(ring, 0);
 	OUT_RING(ring, of_bo_handle(of_resource(so->buffer)->bo));
 	OUT_RING(ring, 0);
-	OUT_RING(ring, so->info.sizedwords);
+	OUT_RING(ring, so->info.sizedwords * 4);
 }
 
 static void *
@@ -218,8 +218,6 @@ of_program_emit(struct of_context *ctx, struct of_program_stateobj *prog)
 void
 of_prog_init(struct pipe_context *pctx)
 {
-	struct of_context *ctx = of_context(pctx);
-
 	pctx->create_fs_state = of_fp_state_create;
 	pctx->bind_fs_state = of_fp_state_bind;
 	pctx->delete_fs_state = of_fp_state_delete;
