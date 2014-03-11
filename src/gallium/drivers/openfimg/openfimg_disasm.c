@@ -131,33 +131,33 @@ static void print_dstreg(uint32_t num, uint32_t mask, uint32_t type)
 	}
 }
 
-static void print_export_comment(uint32_t num, enum shader_t type)
-{
-	const char *name = NULL;
-	switch (type) {
-	case SHADER_VERTEX:
-		switch (num) {
-		case 62: name = "gl_Position";  break;
-		case 63: name = "gl_PointSize"; break;
-		}
-		break;
-	case SHADER_FRAGMENT:
-		switch (num) {
-		case 0:  name = "gl_FragColor"; break;
-		}
-		break;
-	default:
-		fprintf(stderr, "unsupported shader type: %u\n", type);
-		assert(0);
-		break;
-	}
-	/* if we had a symbol table here, we could look
-	 * up the name of the varying..
-	 */
-	if (name) {
-		printf("\t; %s", name);
-	}
-}
+// static void print_export_comment(uint32_t num, enum shader_t type)
+// {
+// 	const char *name = NULL;
+// 	switch (type) {
+// 	case SHADER_VERTEX:
+// 		switch (num) {
+// 		case 62: name = "gl_Position";  break;
+// 		case 63: name = "gl_PointSize"; break;
+// 		}
+// 		break;
+// 	case SHADER_FRAGMENT:
+// 		switch (num) {
+// 		case 0:  name = "gl_FragColor"; break;
+// 		}
+// 		break;
+// 	default:
+// 		fprintf(stderr, "unsupported shader type: %u\n", type);
+// 		assert(0);
+// 		break;
+// 	}
+// 	/* if we had a symbol table here, we could look
+// 	 * up the name of the varying..
+// 	 */
+// 	if (name) {
+// 		printf("\t; %s", name);
+// 	}
+// }
 
 typedef struct {
 	instr_opc_t opcode;

@@ -74,7 +74,7 @@ void
 of_context_render(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
-	struct pipe_framebuffer_state *pfb = &ctx->framebuffer;
+	struct pipe_framebuffer_state *pfb = &ctx->framebuffer.base;
 	uint32_t timestamp = 0;
 
 	DBG("needs_flush: %d", ctx->needs_flush);
@@ -200,6 +200,7 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 	pctx->screen = pscreen;
 	pctx->priv = priv;
 	pctx->flush = of_context_flush;
+	pctx->destroy = of_context_destroy;
 
 	ctx->ring = of_ringbuffer_new(ctx->pipe, 0x100000);
 	if (!ctx->ring)

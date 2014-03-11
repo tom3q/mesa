@@ -56,6 +56,7 @@ static const struct debug_named_value debug_options[] = {
 		{"disasm",    OF_DBG_DISASM, "Dump TGSI and adreno shader disassembly"},
 		{"dclear",    OF_DBG_DCLEAR, "Mark all state dirty after clear"},
 		{"dgmem",     OF_DBG_DGMEM,  "Mark all state dirty after GMEM tile pass"},
+		{"vmsgs",     OF_DBG_VMSGS,  "Print verbose debug messages (flood warning!)"},
 		DEBUG_NAMED_VALUE_END
 };
 
@@ -178,6 +179,7 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	switch (param) {
 	/* Supported features (boolean caps). */
 	case PIPE_CAP_NPOT_TEXTURES:
+	case PIPE_CAP_MIXED_FRAMEBUFFER_SIZES:
 	case PIPE_CAP_TWO_SIDED_STENCIL:
 	case PIPE_CAP_POINT_SPRITE:
 	case PIPE_CAP_TEXTURE_MIRROR_CLAMP:
@@ -222,6 +224,12 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_BUFFER_OFFSET_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_VERTEX_BUFFER_STRIDE_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
+	case PIPE_CAP_CUBE_MAP_ARRAY:
+	case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
+        case PIPE_CAP_TGSI_VS_LAYER:
+	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
+	case PIPE_CAP_TEXTURE_GATHER_SM5:
+        case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
 		return 0;
 
 	case PIPE_CAP_TGSI_TEXCOORD:
@@ -239,6 +247,11 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
 	case PIPE_CAP_MAX_STREAM_OUTPUT_SEPARATE_COMPONENTS:
 	case PIPE_CAP_MAX_STREAM_OUTPUT_INTERLEAVED_COMPONENTS:
+		return 0;
+
+	/* Geometry shader output, unsupported. */
+	case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
+	case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
 		return 0;
 
 	/* Texturing. */
@@ -266,6 +279,9 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
 	case PIPE_CAP_ENDIANNESS:
 		return PIPE_ENDIAN_LITTLE;
+
+        case PIPE_CAP_MIN_MAP_BUFFER_ALIGNMENT:
+		return 64;
 
 	default:
 		DBG("unknown param %d", param);
@@ -403,7 +419,6 @@ of_screen_create(struct of_device *dev)
 {
 	struct of_screen *screen = CALLOC_STRUCT(of_screen);
 	struct pipe_screen *pscreen;
-	uint64_t val;
 
 	of_mesa_debug = debug_get_option_of_mesa_debug();
 
@@ -436,8 +451,4 @@ of_screen_create(struct of_device *dev)
 	util_format_s3tc_init();
 
 	return pscreen;
-
-fail:
-	of_screen_destroy(pscreen);
-	return NULL;
 }

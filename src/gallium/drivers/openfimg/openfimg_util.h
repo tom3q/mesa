@@ -41,10 +41,16 @@
 #define OF_DBG_DISASM 0x2
 #define OF_DBG_DCLEAR 0x4
 #define OF_DBG_DGMEM  0x8
+#define OF_DBG_VMSGS  0x10
 extern int of_mesa_debug;
 
 #define DBG(fmt, ...) \
 		do { if (of_mesa_debug & OF_DBG_MSGS) \
+			debug_printf("%s:%d: "fmt "\n", \
+				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
+
+#define VDBG(fmt, ...) \
+		do { if (of_mesa_debug & OF_DBG_VMSGS) \
 			debug_printf("%s:%d: "fmt "\n", \
 				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
 
@@ -61,11 +67,19 @@ enum of_request_type {
 	G3D_REQUEST_SHADER_PROGRAM = 1,
 	G3D_REQUEST_SHADER_DATA = 2,
 	G3D_REQUEST_TEXTURE = 3,
+#define G3D_TEXTURE_DIRTY	(1 << 0)
+#define G3D_TEXTURE_DETACH	(1 << 1)
 	G3D_REQUEST_COLORBUFFER = 4,
+#define G3D_CBUFFER_DIRTY	(1 << 0)
+#define G3D_CBUFFER_DETACH	(1 << 1)
 	G3D_REQUEST_DEPTHBUFFER = 5,
+#define G3D_DBUFFER_DIRTY	(1 << 0)
+#define G3D_DBUFFER_DETACH	(1 << 1)
 	G3D_REQUEST_DRAW = 6,
 	G3D_REQUEST_VTX_TEXTURE = 7,
 };
+
+
 
 enum fgtu_tex_format of_pipe2texture(enum pipe_format format);
 enum fgpf_color_mode of_pipe2color(enum pipe_format format);

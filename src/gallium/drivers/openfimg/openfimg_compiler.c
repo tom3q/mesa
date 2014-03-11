@@ -276,18 +276,18 @@ compile_free(struct of_compile_context *ctx)
  *
  */
 
-static unsigned
-get_temp_gpr(struct of_compile_context *ctx, int idx)
-{
-	unsigned num = idx + ctx->num_regs[TGSI_FILE_INPUT];
-	if (ctx->type == TGSI_PROCESSOR_VERTEX)
-		num++;
-	return num;
-}
+// static unsigned
+// get_temp_gpr(struct of_compile_context *ctx, int idx)
+// {
+// 	unsigned num = idx + ctx->num_regs[TGSI_FILE_INPUT];
+// 	if (ctx->type == TGSI_PROCESSOR_VERTEX)
+// 		num++;
+// 	return num;
+// }
 
-static struct ir2_register *
-add_dst_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
-		const struct tgsi_dst_register *dst)
+static struct ir2_register *add_dst_reg(struct of_compile_context *ctx,
+					struct ir2_instruction *alu,
+					const struct tgsi_dst_register *dst)
 {
 	unsigned flags = 0, num, type;
 	char swiz[5];
@@ -299,7 +299,7 @@ add_dst_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
 			if (dst->Index == ctx->position) {
 				num = 0;
 			} else {
-				num = export_linkage(ctx,
+				num = 1 + export_linkage(ctx,
 					ctx->output_export_idx[dst->Index]);
 			}
 		} else {
@@ -326,9 +326,9 @@ add_dst_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
 	return ir2_reg_create(alu, num, swiz, flags, type);
 }
 
-static struct ir2_register *
-add_src_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
-		const struct tgsi_src_register *src)
+static struct ir2_register *add_src_reg(struct of_compile_context *ctx,
+					struct ir2_instruction *alu,
+					const struct tgsi_src_register *src)
 {
 	static const char swiz_vals[] = {
 			'x', 'y', 'z', 'w',
@@ -357,6 +357,12 @@ add_src_reg(struct of_compile_context *ctx, struct ir2_instruction *alu,
 	case TGSI_FILE_IMMEDIATE:
 		num = src->Index + ctx->num_regs[TGSI_FILE_CONSTANT];
 		type = REG_SRC_C;
+		break;
+	case TGSI_FILE_SAMPLER:
+	case TGSI_FILE_SAMPLER_VIEW:
+		DBG("sampler source %d (File = %d)", src->Index, src->File);
+		num = src->Index;
+		type = REG_SRC_S;
 		break;
 	default:
 		DBG("unsupported src register file: %s",
@@ -401,16 +407,16 @@ add_vector_clamp(struct tgsi_full_instruction *inst, struct ir2_instruction *alu
 	}
 }
 
-static void
-add_regs_dummy_vector(struct ir2_instruction *alu)
-{
-	/* create dummy, non-written vector dst/src regs
-	 * for unused vector instr slot:
-	 */
-	ir2_reg_create(alu, 0, "____", 0, REG_DST_R); /* vector dst */
-	ir2_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src1 */
-	ir2_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src2 */
-}
+// static void
+// add_regs_dummy_vector(struct ir2_instruction *alu)
+// {
+// 	/* create dummy, non-written vector dst/src regs
+// 	 * for unused vector instr slot:
+// 	 */
+// 	ir2_reg_create(alu, 0, "____", 0, REG_DST_R); /* vector dst */
+// 	ir2_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src1 */
+// 	ir2_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src2 */
+// }
 
 /*
  * Helpers for TGSI instructions that don't map to a single shader instr:
@@ -456,99 +462,148 @@ get_internal_temp(struct of_compile_context *ctx,
 	src_from_dst(tmp_src, tmp_dst);
 }
 
-static void
-get_predicate(struct of_compile_context *ctx, struct tgsi_dst_register *dst,
-		struct tgsi_src_register *src)
-{
-	assert(ctx->pred_reg != -1);
+// static void
+// get_predicate(struct of_compile_context *ctx, struct tgsi_dst_register *dst,
+// 		struct tgsi_src_register *src)
+// {
+// 	assert(ctx->pred_reg != -1);
+//
+// 	dst->File      = TGSI_FILE_TEMPORARY;
+// 	dst->WriteMask = TGSI_WRITEMASK_W;
+// 	dst->Indirect  = 0;
+// 	dst->Dimension = 0;
+// 	dst->Index     = get_temp_gpr(ctx, ctx->pred_reg);
+//
+// 	if (src) {
+// 		src_from_dst(src, dst);
+// 		src->SwizzleX  = TGSI_SWIZZLE_W;
+// 		src->SwizzleY  = TGSI_SWIZZLE_W;
+// 		src->SwizzleZ  = TGSI_SWIZZLE_W;
+// 		src->SwizzleW  = TGSI_SWIZZLE_W;
+// 	}
+// }
 
-	dst->File      = TGSI_FILE_TEMPORARY;
-	dst->WriteMask = TGSI_WRITEMASK_W;
-	dst->Indirect  = 0;
-	dst->Dimension = 0;
-	dst->Index     = get_temp_gpr(ctx, ctx->pred_reg);
+// static void
+// push_predicate(struct of_compile_context *ctx, struct tgsi_src_register *src)
+// {
+// 	DBG("TODO");
+// }
 
-	if (src) {
-		src_from_dst(src, dst);
-		src->SwizzleX  = TGSI_SWIZZLE_W;
-		src->SwizzleY  = TGSI_SWIZZLE_W;
-		src->SwizzleZ  = TGSI_SWIZZLE_W;
-		src->SwizzleW  = TGSI_SWIZZLE_W;
-	}
-}
+// static void
+// pop_predicate(struct of_compile_context *ctx)
+// {
+// 	DBG("TODO");
+// }
 
-static void
-push_predicate(struct of_compile_context *ctx, struct tgsi_src_register *src)
-{
-#warning TODO
-}
-
-static void
-pop_predicate(struct of_compile_context *ctx)
-{
-#warning TODO
-}
-
-static void
-get_immediate(struct of_compile_context *ctx,
-		struct tgsi_src_register *reg, uint32_t val)
-{
-	unsigned neg, swiz, idx, i;
-	/* actually maps 1:1 currently.. not sure if that is safe to rely on: */
-	static const unsigned swiz2tgsi[] = {
-			TGSI_SWIZZLE_X, TGSI_SWIZZLE_Y, TGSI_SWIZZLE_Z, TGSI_SWIZZLE_W,
-	};
-
-	for (i = 0; i < ctx->immediate_idx; i++) {
-		swiz = i % 4;
-		idx  = i / 4;
-
-		if (ctx->so->immediates[idx].val[swiz] == val) {
-			neg = 0;
-			break;
-		}
-
-		if (ctx->so->immediates[idx].val[swiz] == -val) {
-			neg = 1;
-			break;
-		}
-	}
-
-	if (i == ctx->immediate_idx) {
-		/* need to generate a new immediate: */
-		swiz = i % 4;
-		idx  = i / 4;
-		neg  = 0;
-		ctx->so->immediates[idx].val[swiz] = val;
-		ctx->so->num_immediates = idx + 1;
-		ctx->immediate_idx++;
-	}
-
-	reg->File      = TGSI_FILE_IMMEDIATE;
-	reg->Indirect  = 0;
-	reg->Dimension = 0;
-	reg->Index     = idx;
-	reg->Absolute  = 0;
-	reg->Negate    = neg;
-	reg->SwizzleX  = swiz2tgsi[swiz];
-	reg->SwizzleY  = swiz2tgsi[swiz];
-	reg->SwizzleZ  = swiz2tgsi[swiz];
-	reg->SwizzleW  = swiz2tgsi[swiz];
-}
+// static void
+// get_immediate(struct of_compile_context *ctx,
+// 		struct tgsi_src_register *reg, uint32_t val)
+// {
+// 	unsigned neg, swiz, idx, i;
+// 	/* actually maps 1:1 currently.. not sure if that is safe to rely on: */
+// 	static const unsigned swiz2tgsi[] = {
+// 			TGSI_SWIZZLE_X, TGSI_SWIZZLE_Y, TGSI_SWIZZLE_Z, TGSI_SWIZZLE_W,
+// 	};
+//
+// 	for (i = 0; i < ctx->immediate_idx; i++) {
+// 		swiz = i % 4;
+// 		idx  = i / 4;
+//
+// 		if (ctx->so->immediates[idx].val[swiz] == val) {
+// 			neg = 0;
+// 			break;
+// 		}
+//
+// 		if (ctx->so->immediates[idx].val[swiz] == -val) {
+// 			neg = 1;
+// 			break;
+// 		}
+// 	}
+//
+// 	if (i == ctx->immediate_idx) {
+// 		/* need to generate a new immediate: */
+// 		swiz = i % 4;
+// 		idx  = i / 4;
+// 		neg  = 0;
+// 		ctx->so->immediates[idx].val[swiz] = val;
+// 		ctx->so->num_immediates = idx + 1;
+// 		ctx->immediate_idx++;
+// 	}
+//
+// 	reg->File      = TGSI_FILE_IMMEDIATE;
+// 	reg->Indirect  = 0;
+// 	reg->Dimension = 0;
+// 	reg->Index     = idx;
+// 	reg->Absolute  = 0;
+// 	reg->Negate    = neg;
+// 	reg->SwizzleX  = swiz2tgsi[swiz];
+// 	reg->SwizzleY  = swiz2tgsi[swiz];
+// 	reg->SwizzleZ  = swiz2tgsi[swiz];
+// 	reg->SwizzleW  = swiz2tgsi[swiz];
+// }
 
 /* POW(a,b) = EXP2(b * LOG2(a)) */
 static void
 translate_pow(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_tex(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	unsigned opc = inst->Instruction.Opcode;
+	struct ir2_instruction *instr;
+	struct tgsi_dst_register tmp_dst;
+	struct tgsi_src_register tmp_src;
+	const struct tgsi_src_register *coord = &inst->Src[0].Register;
+
+	if (opc == TGSI_OPCODE_TXP) {
+		static const char *swiz[] = {
+			[TGSI_SWIZZLE_X] = "xxxx",
+			[TGSI_SWIZZLE_Y] = "yyyy",
+			[TGSI_SWIZZLE_Z] = "zzzz",
+			[TGSI_SWIZZLE_W] = "wwww",
+		};
+
+		/* TXP - Projective Texture Lookup:
+		 *
+		 *  coord.x = src0.x / src.w
+		 *  coord.y = src0.y / src.w
+		 *  coord.z = src0.z / src.w
+		 *  coord.w = src0.w
+		 *  bias = 0.0
+		 *
+		 *  dst = texture_sample(unit, coord, bias)
+		 */
+
+		get_internal_temp(ctx, &tmp_dst, &tmp_src);
+
+		/* tmp_dst.x___ = 1.0 / src.wwww */
+		instr = ir2_instr_create_alu(ctx->shader, OP_RCP);
+
+		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "x___";
+		add_src_reg(ctx, instr, &inst->Src[0].Register)->swizzle =
+					swiz[inst->Src[0].Register.SwizzleW];
+
+		/* tmp_dst.xyz_ = src0.xyzw * src.xxxx */
+		instr = ir2_instr_create_alu(ctx->shader, OP_MUL);
+		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "xyz_";
+		add_src_reg(ctx, instr, &tmp_src)->swizzle = "xxxx";
+		add_src_reg(ctx, instr, &inst->Src[0].Register);
+
+		coord = &tmp_src;
+	}
+
+	assert(inst->Texture.NumOffsets <= 1); // TODO what to do in other cases?
+
+	instr = ir2_instr_create_alu(ctx->shader, OP_TEXLD);
+
+	add_dst_reg(ctx, instr, &inst->Dst[0].Register);
+	add_src_reg(ctx, instr, coord);
+	add_src_reg(ctx, instr, &inst->Src[1].Register);
 }
 
 /* LRP(a,b,c) = (a * b) + ((1 - a) * c) */
@@ -556,91 +611,91 @@ static void
 translate_lrp(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_trig(struct of_compile_context *ctx,
 	       struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_lit(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_sub(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_cnd(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_clamp(struct of_compile_context *ctx,
 		struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_round(struct of_compile_context *ctx,
 		struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_xpd(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_abs(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_rcc(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_if(struct of_compile_context *ctx,
 	     struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_else(struct of_compile_context *ctx,
 	       struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 static void
 translate_endif(struct of_compile_context *ctx,
 		struct tgsi_full_instruction *inst, const void *data)
 {
-#warning TODO
+	DBG("TODO");
 }
 
 #define OP_FLOW(_op, _srcs)		\

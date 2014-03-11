@@ -51,7 +51,7 @@ struct ir2_register {
 		IR2_REG_ABS    = 0x8,
 	} flags;
 	int num;
-	char *swizzle;
+	const char *swizzle;
 	uint8_t type;
 };
 
