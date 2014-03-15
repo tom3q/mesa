@@ -90,7 +90,7 @@ struct of_framebuffer_stateobj {
 struct of_context {
 	struct pipe_context base;
 
-	struct of_pipe *pipe;
+	struct fd_pipe *pipe;
 	struct of_screen *screen;
 	struct blitter_context *blitter;
 	struct cso_hash *draw_hash;
@@ -126,8 +126,11 @@ struct of_context {
 	bool needs_flush;
 	unsigned num_draws;
 
-	struct of_ringbuffer *ring;
-	struct of_ringmarker *draw_start, *draw_end;
+	struct fd_ringbuffer *rings[4];
+	unsigned rings_idx;
+
+	struct fd_ringbuffer *ring;
+	struct fd_ringmarker *draw_start, *draw_end;
 
 	struct pipe_scissor_state scissor;
 

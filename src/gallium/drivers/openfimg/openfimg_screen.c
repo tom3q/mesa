@@ -166,7 +166,7 @@ of_screen_destroy(struct pipe_screen *pscreen)
 	struct of_screen *screen = of_screen(pscreen);
 
 	if (screen->dev)
-		of_device_del(screen->dev);
+		fd_device_del(screen->dev);
 
 	free(screen);
 }
@@ -379,31 +379,31 @@ of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 
 boolean
 of_screen_bo_get_handle(struct pipe_screen *pscreen,
-		struct of_bo *bo,
+		struct fd_bo *bo,
 		unsigned stride,
 		struct winsys_handle *whandle)
 {
 	whandle->stride = stride;
 
 	if (whandle->type == DRM_API_HANDLE_TYPE_SHARED) {
-		return of_bo_get_name(bo, &whandle->handle) == 0;
+		return fd_bo_get_name(bo, &whandle->handle) == 0;
 	} else if (whandle->type == DRM_API_HANDLE_TYPE_KMS) {
-		whandle->handle = of_bo_handle(bo);
+		whandle->handle = fd_bo_handle(bo);
 		return TRUE;
 	} else {
 		return FALSE;
 	}
 }
 
-struct of_bo *
+struct fd_bo *
 of_screen_bo_from_handle(struct pipe_screen *pscreen,
 		struct winsys_handle *whandle,
 		unsigned *out_stride)
 {
 	struct of_screen *screen = of_screen(pscreen);
-	struct of_bo *bo;
+	struct fd_bo *bo;
 
-	bo = of_bo_from_name(screen->dev, whandle->handle);
+	bo = fd_bo_from_name(screen->dev, whandle->handle);
 	if (!bo) {
 		DBG("ref name 0x%08x failed", whandle->handle);
 		return NULL;
@@ -415,7 +415,7 @@ of_screen_bo_from_handle(struct pipe_screen *pscreen,
 }
 
 struct pipe_screen *
-of_screen_create(struct of_device *dev)
+of_screen_create(struct fd_device *dev)
 {
 	struct of_screen *screen = CALLOC_STRUCT(of_screen);
 	struct pipe_screen *pscreen;

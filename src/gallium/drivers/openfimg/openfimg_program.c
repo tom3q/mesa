@@ -112,7 +112,7 @@ fail:
 static void
 emit(struct of_context *ctx, struct of_shader_stateobj *so)
 {
-	struct of_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = ctx->ring;
 	unsigned num_attribs;
 
 	if (so->info.sizedwords == 0)
@@ -127,7 +127,7 @@ emit(struct of_context *ctx, struct of_shader_stateobj *so)
 	OUT_RING(ring, (so->type << 8) | num_attribs);
 	OUT_RING(ring, 4 * (so->first_immediate + so->num_immediates));
 	OUT_RING(ring, 0);
-	OUT_RING(ring, of_bo_handle(of_resource(so->buffer)->bo));
+	OUT_RING(ring, fd_bo_handle(of_resource(so->buffer)->bo));
 	OUT_RING(ring, 0);
 	OUT_RING(ring, so->info.sizedwords * 4);
 }

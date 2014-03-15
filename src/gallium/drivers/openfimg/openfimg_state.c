@@ -122,7 +122,7 @@ of_set_framebuffer_state(struct pipe_context *pctx,
 	unsigned i;
 
 	DBG("%d: cbufs[0]=%p, zsbuf=%p", ctx->needs_flush,
-			cso->base.cbufs[0], cso->base.zsbuf);
+			framebuffer->cbufs[0], framebuffer->zsbuf);
 
 	of_context_render(pctx);
 

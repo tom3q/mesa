@@ -30,10 +30,19 @@
 
 #include "util/u_transfer.h"
 
+#include "openfimg_util.h"
+
+struct of_resource_slice {
+	uint32_t offset;         /* offset of first layer in slice */
+	uint32_t pitch;
+	uint32_t size0;          /* size of first layer in slice */
+};
+
 struct of_resource {
 	struct u_resource base;
-	struct of_bo *bo;
-	uint32_t pitch, cpp;
+	struct fd_bo *bo;
+	uint32_t cpp;
+	struct of_resource_slice slices[MAX_MIP_LEVELS];
 	uint32_t timestamp;
 	bool dirty;
 };
@@ -42,6 +51,13 @@ static INLINE struct of_resource *
 of_resource(struct pipe_resource *ptex)
 {
 	return (struct of_resource *)ptex;
+}
+
+static INLINE struct of_resource_slice *
+of_resource_slice(struct of_resource *rsc, unsigned level)
+{
+	assert(level <= rsc->base.b.last_level);
+	return &rsc->slices[level];
 }
 
 void of_resource_screen_init(struct pipe_screen *pscreen);

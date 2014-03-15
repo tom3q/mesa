@@ -33,7 +33,7 @@
 
 #include "openfimg_context.h"
 
-struct of_ringbuffer;
+struct fd_ringbuffer;
 
 void of_draw_emit(struct of_context *ctx, const struct pipe_draw_info *info);
 
