@@ -471,7 +471,7 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 {
 	const struct of_draw_info *draw = &info->key;
 	struct of_rasterizer_stateobj *rasterizer;
-	struct of_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = ctx->ring;
 	struct of_vertex_buffer *buf, *tmp;
 	unsigned i;
 
@@ -504,7 +504,7 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 	LIST_FOR_EACH_ENTRY_SAFE(buf, tmp, &info->buffers, list) {
 		OUT_PKT(ring, G3D_REQUEST_DRAW, 4);
 		OUT_RING(ring, buf->nr_vertices);
-		OUT_RING(ring, of_bo_handle(of_resource(buf->buffer)->bo));
+		OUT_RING(ring, fd_bo_handle(of_resource(buf->buffer)->bo));
 		OUT_RING(ring, 0);
 		OUT_RING(ring, VERTEX_BUFFER_SIZE);
 
@@ -642,7 +642,12 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	}
 
 	for (i = 0; i < pfb->nr_cbufs; i++) {
-		struct pipe_resource *surf = pfb->cbufs[i]->texture;
+		struct pipe_resource *surf;
+
+		if (!pfb->cbufs[i])
+			continue;
+
+		surf = pfb->cbufs[i]->texture;
 
 		of_resource(surf)->dirty = true;
 		buffers |= OF_BUFFER_COLOR;

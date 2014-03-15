@@ -28,20 +28,20 @@
 #ifndef OPENFIMG_SCREEN_H_
 #define OPENFIMG_SCREEN_H_
 
-#include <openfimg_drmif.h>
-#include <openfimg_ringbuffer.h>
+#include <freedreno_drmif.h>
+#include <freedreno_ringbuffer.h>
 
 #include "pipe/p_screen.h"
 #include "util/u_memory.h"
 
 typedef uint32_t u32;
 
-struct of_bo;
+struct fd_bo;
 
 struct of_screen {
 	struct pipe_screen base;
 
-	struct of_device *dev;
+	struct fd_device *dev;
 
 	int64_t cpu_gpu_time_delta;
 };
@@ -53,13 +53,13 @@ of_screen(struct pipe_screen *pscreen)
 }
 
 boolean of_screen_bo_get_handle(struct pipe_screen *pscreen,
-		struct of_bo *bo,
+		struct fd_bo *bo,
 		unsigned stride,
 		struct winsys_handle *whandle);
-struct of_bo * of_screen_bo_from_handle(struct pipe_screen *pscreen,
+struct fd_bo * of_screen_bo_from_handle(struct pipe_screen *pscreen,
 		struct winsys_handle *whandle,
 		unsigned *out_stride);
 
-struct pipe_screen * of_screen_create(struct of_device *dev);
+struct pipe_screen * of_screen_create(struct fd_device *dev);
 
 #endif /* OPENFIMG_SCREEN_H_ */

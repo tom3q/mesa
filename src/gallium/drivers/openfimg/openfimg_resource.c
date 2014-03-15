@@ -37,6 +37,23 @@
 #include "openfimg_context.h"
 #include "openfimg_util.h"
 
+#include <errno.h>
+
+static void
+realloc_bo(struct of_resource *rsc, uint32_t size)
+{
+	struct of_screen *screen = of_screen(rsc->base.b.screen);
+	uint32_t flags = DRM_FREEDRENO_GEM_CACHE_WCOMBINE |
+			DRM_FREEDRENO_GEM_TYPE_KMEM; /* TODO */
+
+	if (rsc->bo)
+		fd_bo_del(rsc->bo);
+
+	rsc->bo = fd_bo_new(screen->dev, size, flags);
+	rsc->timestamp = 0;
+	rsc->dirty = false;
+}
+
 static void of_resource_transfer_flush_region(struct pipe_context *pctx,
 		struct pipe_transfer *ptrans,
 		const struct pipe_box *box)
@@ -48,7 +65,7 @@ static void of_resource_transfer_flush_region(struct pipe_context *pctx,
 		of_context_render(pctx);
 
 	if (rsc->timestamp) {
-		of_pipe_wait(ctx->pipe, rsc->timestamp);
+		fd_pipe_wait(ctx->pipe, rsc->timestamp);
 		rsc->timestamp = 0;
 	}
 }
@@ -58,6 +75,9 @@ of_resource_transfer_unmap(struct pipe_context *pctx,
 		struct pipe_transfer *ptrans)
 {
 	struct of_context *ctx = of_context(pctx);
+	struct of_resource *rsc = of_resource(ptrans->resource);
+	if (!(ptrans->usage & PIPE_TRANSFER_UNSYNCHRONIZED))
+		fd_bo_cpu_fini(rsc->bo);
 	pipe_resource_reference(&ptrans->resource, NULL);
 	util_slab_free(&ctx->transfer_pool, ptrans);
 }
@@ -71,27 +91,49 @@ of_resource_transfer_map(struct pipe_context *pctx,
 {
 	struct of_context *ctx = of_context(pctx);
 	struct of_resource *rsc = of_resource(prsc);
-	struct pipe_transfer *ptrans = util_slab_alloc(&ctx->transfer_pool);
+	struct of_resource_slice *slice = of_resource_slice(rsc, level);
+	struct pipe_transfer *ptrans;
 	enum pipe_format format = prsc->format;
+	uint32_t op = 0;
 	char *buf;
+	int ret = 0;
 
+	ptrans = util_slab_alloc(&ctx->transfer_pool);
 	if (!ptrans)
 		return NULL;
 
-	/* util_slap_alloc() doesn't zero: */
+	/* util_slab_alloc() doesn't zero: */
 	memset(ptrans, 0, sizeof(*ptrans));
 
 	pipe_resource_reference(&ptrans->resource, prsc);
 	ptrans->level = level;
 	ptrans->usage = usage;
 	ptrans->box = *box;
-	ptrans->stride = rsc->pitch * rsc->cpp;
+	ptrans->stride = slice->pitch * rsc->cpp;
 	ptrans->layer_stride = ptrans->stride;
 
-	/* some state trackers (at least XA) don't do this.. */
-	of_resource_transfer_flush_region(pctx, ptrans, box);
+	if (usage & PIPE_TRANSFER_READ)
+		op |= DRM_FREEDRENO_PREP_READ;
 
-	buf = of_bo_map(rsc->bo);
+	if (usage & PIPE_TRANSFER_WRITE)
+		op |= DRM_FREEDRENO_PREP_WRITE;
+
+	if (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE)
+		op |= DRM_FREEDRENO_PREP_NOSYNC;
+
+	/* some state trackers (at least XA) don't do this.. */
+	if (!(usage & (PIPE_TRANSFER_FLUSH_EXPLICIT | PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE)))
+		of_resource_transfer_flush_region(pctx, ptrans, box);
+
+	if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
+		ret = fd_bo_cpu_prep(rsc->bo, ctx->pipe, op);
+		if ((ret == -EBUSY) && (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE))
+			realloc_bo(rsc, fd_bo_size(rsc->bo));
+		else if (ret)
+			goto fail;
+	}
+
+	buf = fd_bo_map(rsc->bo);
 	if (!buf) {
 		of_resource_transfer_unmap(pctx, ptrans);
 		return NULL;
@@ -99,9 +141,14 @@ of_resource_transfer_map(struct pipe_context *pctx,
 
 	*pptrans = ptrans;
 
-	return buf +
+	return buf + slice->offset +
 		box->y / util_format_get_blockheight(format) * ptrans->stride +
-		box->x / util_format_get_blockwidth(format) * rsc->cpp;
+		box->x / util_format_get_blockwidth(format) * rsc->cpp +
+		box->z * slice->size0;
+
+fail:
+	of_resource_transfer_unmap(pctx, ptrans);
+	return NULL;
 }
 
 static void
@@ -109,7 +156,8 @@ of_resource_destroy(struct pipe_screen *pscreen,
 		struct pipe_resource *prsc)
 {
 	struct of_resource *rsc = of_resource(prsc);
-	of_bo_del(rsc->bo);
+	if (rsc->bo)
+		fd_bo_del(rsc->bo);
 	FREE(rsc);
 }
 
@@ -121,7 +169,7 @@ of_resource_get_handle(struct pipe_screen *pscreen,
 	struct of_resource *rsc = of_resource(prsc);
 
 	return of_screen_bo_get_handle(pscreen, rsc->bo,
-			rsc->pitch * rsc->cpp, handle);
+			rsc->slices[0].pitch * rsc->cpp, handle);
 }
 
 
@@ -134,6 +182,33 @@ static const struct u_resource_vtbl of_resource_vtbl = {
 		.transfer_inline_write    = u_default_transfer_inline_write,
 };
 
+static uint32_t
+setup_slices(struct of_resource *rsc)
+{
+	struct pipe_resource *prsc = &rsc->base.b;
+	uint32_t level, size = 0;
+	uint32_t width = prsc->width0;
+	uint32_t height = prsc->height0;
+	uint32_t depth = prsc->depth0;
+
+	for (level = 0; level <= prsc->last_level; level++) {
+		struct of_resource_slice *slice = of_resource_slice(rsc, level);
+		uint32_t aligned_width = align(width, 32);
+
+		slice->pitch = aligned_width;
+		slice->offset = size;
+		slice->size0 = slice->pitch * height * rsc->cpp;
+
+		size += slice->size0 * depth * prsc->array_size;
+
+		width = u_minify(width, 1);
+		height = u_minify(height, 1);
+		depth = u_minify(depth, 1);
+	}
+
+	return size;
+}
+
 /**
  * Create a new texture object, using the given template info.
  */
@@ -141,12 +216,11 @@ static struct pipe_resource *
 of_resource_create(struct pipe_screen *pscreen,
 		const struct pipe_resource *tmpl)
 {
-	struct of_screen *screen = of_screen(pscreen);
 	struct of_resource *rsc = CALLOC_STRUCT(of_resource);
 	struct pipe_resource *prsc = &rsc->base.b;
-	uint32_t flags, size;
+	uint32_t size;
 
-	VDBG("target=%d, format=%s, %ux%u@%u, array_size=%u, last_level=%u, "
+	DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
 			"nr_samples=%u, usage=%u, bind=%x, flags=%x",
 			tmpl->target, util_format_name(tmpl->format),
 			tmpl->width0, tmpl->height0, tmpl->depth0,
@@ -162,17 +236,20 @@ of_resource_create(struct pipe_screen *pscreen,
 	prsc->screen = pscreen;
 
 	rsc->base.vtbl = &of_resource_vtbl;
-	rsc->pitch = align(tmpl->width0, 32);
 	rsc->cpp = util_format_get_blocksize(tmpl->format);
 
 	assert(rsc->cpp);
 
-	size = rsc->pitch * tmpl->height0 * rsc->cpp;
-	flags = DRM_OPENFIMG_GEM_WBACK;
+	size = setup_slices(rsc);
 
-	rsc->bo = of_bo_new(screen->dev, size, flags);
+	realloc_bo(rsc, size);
+	if (!rsc->bo)
+		goto fail;
 
 	return prsc;
+fail:
+	of_resource_destroy(pscreen, prsc);
+	return NULL;
 }
 
 /**
@@ -186,9 +263,10 @@ of_resource_from_handle(struct pipe_screen *pscreen,
 		struct winsys_handle *handle)
 {
 	struct of_resource *rsc = CALLOC_STRUCT(of_resource);
+	struct of_resource_slice *slice = &rsc->slices[0];
 	struct pipe_resource *prsc = &rsc->base.b;
 
-	DBG("target=%d, format=%s, %ux%u@%u, array_size=%u, last_level=%u, "
+	DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
 			"nr_samples=%u, usage=%u, bind=%x, flags=%x",
 			tmpl->target, util_format_name(tmpl->format),
 			tmpl->width0, tmpl->height0, tmpl->depth0,
@@ -203,15 +281,21 @@ of_resource_from_handle(struct pipe_screen *pscreen,
 	pipe_reference_init(&prsc->reference, 1);
 	prsc->screen = pscreen;
 
-	rsc->bo = of_screen_bo_from_handle(pscreen, handle, &rsc->pitch);
+	rsc->bo = of_screen_bo_from_handle(pscreen, handle, &slice->pitch);
+	if (!rsc->bo)
+		goto fail;
 
 	rsc->base.vtbl = &of_resource_vtbl;
 	rsc->cpp = util_format_get_blocksize(tmpl->format);
-	rsc->pitch /= rsc->cpp;
+	slice->pitch /= rsc->cpp;
 
 	assert(rsc->cpp);
 
 	return prsc;
+
+fail:
+	of_resource_destroy(pscreen, prsc);
+	return NULL;
 }
 
 static bool render_blit(struct pipe_context *pctx, struct pipe_blit_info *info);
@@ -321,6 +405,11 @@ render_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 	return true;
 }
 
+static void
+of_flush_resource(struct pipe_context *ctx, struct pipe_resource *resource)
+{
+}
+
 void
 of_resource_screen_init(struct pipe_screen *pscreen)
 {
@@ -341,4 +430,5 @@ of_resource_context_init(struct pipe_context *pctx)
 	pctx->surface_destroy = of_surface_destroy;
 	pctx->resource_copy_region = of_resource_copy_region;
 	pctx->blit = of_blit;
+	pctx->flush_resource = of_flush_resource;
 }

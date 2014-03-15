@@ -32,7 +32,7 @@
 
 #include "openfimg_context.h"
 
-struct of_ringbuffer;
+struct fd_ringbuffer;
 
 struct of_vertex_buf {
 	unsigned offset, size;

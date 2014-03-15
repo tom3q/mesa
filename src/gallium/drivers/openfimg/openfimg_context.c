@@ -36,35 +36,42 @@
 #include "openfimg_state.h"
 #include "openfimg_util.h"
 
-/* there are two cases where we currently need to wait for render complete:
- * 1) pctx->flush() .. since at the moment we have no way for DDX to sync
- *    the presentation blit with the 3d core
- * 2) wrap-around for ringbuffer.. possibly we can do something more
- *    Intelligent here.  Right now we need to ensure there is enough room
- *    at the end of the drawcmds in the cmdstream buffer for all the per-
- *    tile cmds.  We do this the lamest way possible, by making the ringbuffer
- *    big, and flushing and resetting back to the beginning if we get too
- *    close to the end.
- */
-static void
-of_context_wait(struct pipe_context *pctx)
+static struct fd_ringbuffer *next_rb(struct of_context *ctx)
 {
-	struct of_context *ctx = of_context(pctx);
-	uint32_t ts = of_ringbuffer_timestamp(ctx->ring);
+	struct fd_ringbuffer *ring;
+	uint32_t ts;
 
-	DBG("wait: %u", ts);
+	/* grab next ringbuffer: */
+	ring = ctx->rings[(ctx->rings_idx++) % ARRAY_SIZE(ctx->rings)];
 
-	of_pipe_wait(ctx->pipe, ts);
-	of_ringbuffer_reset(ctx->ring);
-	of_ringmarker_mark(ctx->draw_start);
+	/* wait for new rb to be idle: */
+	ts = fd_ringbuffer_timestamp(ring);
+	if (ts) {
+		DBG("wait: %u", ts);
+		fd_pipe_wait(ctx->pipe, ts);
+	}
+
+	fd_ringbuffer_reset(ring);
+
+	return ring;
 }
 
-static inline enum pipe_format
-pipe_surface_format(struct pipe_surface *psurf)
+static void
+of_context_next_rb(struct pipe_context *pctx)
 {
-	if (!psurf)
-		return PIPE_FORMAT_NONE;
-	return psurf->format;
+	struct of_context *ctx = of_context(pctx);
+	struct fd_ringbuffer *ring;
+
+	fd_ringmarker_del(ctx->draw_start);
+	fd_ringmarker_del(ctx->draw_end);
+
+	ring = next_rb(ctx);
+
+	ctx->draw_start = fd_ringmarker_new(ring);
+	ctx->draw_end = fd_ringmarker_new(ring);
+
+	fd_ringbuffer_set_parent(ring, NULL);
+	ctx->ring = ring;
 }
 
 /* emit accumulated render cmds, needed for example if render target has
@@ -82,15 +89,15 @@ of_context_render(struct pipe_context *pctx)
 	if (!ctx->needs_flush)
 		return;
 
-	of_ringmarker_mark(ctx->draw_end);
+	fd_ringmarker_mark(ctx->draw_end);
 	DBG("rendering sysmem (%s/%s)",
 			util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 			util_format_short_name(pipe_surface_format(pfb->zsbuf)));
-	of_ringmarker_flush(ctx->draw_start);
-	of_ringmarker_mark(ctx->draw_start);
+	fd_ringmarker_flush(ctx->draw_start);
+	fd_ringmarker_mark(ctx->draw_start);
 
 	/* update timestamps on render targets: */
-	timestamp = of_ringbuffer_timestamp(ctx->ring);
+	timestamp = fd_ringbuffer_timestamp(ctx->ring);
 	if (pfb->cbufs[0])
 		of_resource(pfb->cbufs[0]->texture)->timestamp = timestamp;
 	if (pfb->zsbuf)
@@ -102,13 +109,14 @@ of_context_render(struct pipe_context *pctx)
 	 * wrap around:
 	 */
 	if ((ctx->ring->cur - ctx->ring->start) > ctx->ring->size/8)
-		of_context_wait(pctx);
+		of_context_next_rb(pctx);
 
 	ctx->needs_flush = false;
 	ctx->cleared = ctx->restore = ctx->resolve = 0;
 	ctx->num_draws = 0;
 
-	of_resource(pfb->cbufs[0]->texture)->dirty = false;
+	if (pfb->cbufs[0])
+		of_resource(pfb->cbufs[0]->texture)->dirty = false;
 	if (pfb->zsbuf)
 		of_resource(pfb->zsbuf->texture)->dirty = false;
 }
@@ -137,14 +145,14 @@ of_context_destroy(struct pipe_context *pctx)
 	DBG("");
 
 	if (ctx->pipe)
-		of_pipe_del(ctx->pipe);
+		fd_pipe_del(ctx->pipe);
 
 	if (ctx->blitter)
 		util_blitter_destroy(ctx->blitter);
 
-	of_ringmarker_del(ctx->draw_start);
-	of_ringmarker_del(ctx->draw_end);
-	of_ringbuffer_del(ctx->ring);
+	fd_ringmarker_del(ctx->draw_start);
+	fd_ringmarker_del(ctx->draw_end);
+	fd_ringbuffer_del(ctx->ring);
 
 	FREE(ctx);
 }
@@ -171,7 +179,7 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 
 	pctx = &ctx->base;
 
-	ctx->pipe = of_pipe_new(screen->dev, OF_PIPE_3D);
+	ctx->pipe = fd_pipe_new(screen->dev, FD_PIPE_3D);
 	if (!ctx->pipe) {
 		DBG("could not create 3d pipe");
 		goto fail;
@@ -202,12 +210,13 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 	pctx->flush = of_context_flush;
 	pctx->destroy = of_context_destroy;
 
-	ctx->ring = of_ringbuffer_new(ctx->pipe, 0x100000);
-	if (!ctx->ring)
-		goto fail;
+	for (i = 0; i < ARRAY_SIZE(ctx->rings); i++) {
+		ctx->rings[i] = fd_ringbuffer_new(ctx->pipe, 0x100000);
+		if (!ctx->rings[i])
+			goto fail;
+	}
 
-	ctx->draw_start = of_ringmarker_new(ctx->ring);
-	ctx->draw_end = of_ringmarker_new(ctx->ring);
+	of_context_next_rb(pctx);
 
 	util_slab_create(&ctx->transfer_pool, sizeof(struct pipe_transfer),
 			16, UTIL_SLAB_SINGLETHREADED);
