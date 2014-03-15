@@ -86,6 +86,7 @@ static struct ir2_instruction * ir2_instr_create(struct ir2_shader *shader,
 	instr->pred = shader->pred;
 	instr->opc = opc;
 	instr->instr_type = type;
+	instr->next_3arg = false;
 	assert(shader->instrs_count < ARRAY_SIZE(shader->instrs));
 	shader->instrs[shader->instrs_count++] = instr;
 	return instr;
@@ -261,6 +262,7 @@ static int instr_emit_alu(struct ir2_instruction *instr, uint32_t *dwords,
 	alu->pred_enable	= (instr->pred != IR2_PRED_NONE);
 	alu->pred_negate	= (instr->pred == IR2_PRED_NE);
 	alu->opcode		= instr->opc;
+	alu->next_3src		= instr->next_3arg;
 
 	return 0;
 }
@@ -348,5 +350,15 @@ struct ir2_register * ir2_reg_create(struct ir2_instruction *instr,
 	reg->type = type;
 	assert(instr->regs_count < ARRAY_SIZE(instr->regs));
 	instr->regs[instr->regs_count++] = reg;
+
+	if (instr->regs_count == 4) {
+		struct ir2_shader *shader = instr->shader;
+
+		assert(shader->instrs_count > 1);
+
+		instr = shader->instrs[shader->instrs_count - 2];
+		instr->next_3arg = true;
+	}
+
 	return reg;
 }

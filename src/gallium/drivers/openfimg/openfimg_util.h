@@ -28,10 +28,11 @@
 #ifndef OPENFIMG_UTIL_H_
 #define OPENFIMG_UTIL_H_
 
-#include <openfimg_drmif.h>
-#include <openfimg_ringbuffer.h>
+#include <freedreno_drmif.h>
+#include <freedreno_ringbuffer.h>
 
 #include "pipe/p_format.h"
+#include "pipe/p_state.h"
 #include "util/u_debug.h"
 #include "util/u_math.h"
 
@@ -61,6 +62,8 @@ extern int of_mesa_debug;
 #define COND(bool, val) ((bool) ? (val) : 0)
 
 #define LOG_DWORDS 0
+
+#define MAX_MIP_LEVELS 12
 
 enum of_request_type {
 	G3D_REQUEST_REGISTER_WRITE = 0,
@@ -101,7 +104,7 @@ static inline uint32_t xy2d(uint16_t x, uint16_t y)
 }
 
 static inline void
-OUT_RING(struct of_ringbuffer *ring, uint32_t data)
+OUT_RING(struct fd_ringbuffer *ring, uint32_t data)
 {
 	if (LOG_DWORDS) {
 		DBG("ring[%p]: OUT_RING   %04x:  %08x", ring,
@@ -110,7 +113,7 @@ OUT_RING(struct of_ringbuffer *ring, uint32_t data)
 	*(ring->cur++) = data;
 }
 
-static inline void BEGIN_RING(struct of_ringbuffer *ring, uint32_t ndwords)
+static inline void BEGIN_RING(struct fd_ringbuffer *ring, uint32_t ndwords)
 {
 	if ((ring->cur + ndwords) >= ring->end) {
 		/* this probably won't really work if we have multiple tiles..
@@ -122,10 +125,18 @@ static inline void BEGIN_RING(struct of_ringbuffer *ring, uint32_t ndwords)
 }
 
 static inline void
-OUT_PKT(struct of_ringbuffer *ring, uint8_t opcode, uint32_t cnt)
+OUT_PKT(struct fd_ringbuffer *ring, uint8_t opcode, uint32_t cnt)
 {
 	BEGIN_RING(ring, cnt+1);
 	OUT_RING(ring, ((opcode) << 24) | ((cnt * 4) & 0xffffff));
+}
+
+static inline enum pipe_format
+pipe_surface_format(struct pipe_surface *psurf)
+{
+	if (!psurf)
+		return PIPE_FORMAT_NONE;
+	return psurf->format;
 }
 
 #endif /* OPENFIMG_UTIL_H_ */

@@ -770,6 +770,9 @@ translate_direct(struct of_compile_context *ctx,
 	assert(inst->Instruction.NumSrcRegs == info->src_count);
 	assert(inst->Instruction.NumDstRegs == 1);
 
+	if (info->src_count == 3 && !ctx->shader->instrs_count)
+		ir2_instr_create_alu(ctx->shader, OP_NOP);
+
 	ins = ir2_instr_create_alu(ctx->shader, info->opcode);
 	add_dst_reg(ctx, ins, &inst->Dst[0].Register);
 

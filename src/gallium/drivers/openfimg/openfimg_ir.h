@@ -76,6 +76,7 @@ struct ir2_instruction {
 
 	instr_opc_t opc;
 	bool clamp :1;
+	bool next_3arg :1;
 };
 
 struct ir2_shader {
