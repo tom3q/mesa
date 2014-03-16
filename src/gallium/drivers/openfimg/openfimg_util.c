@@ -186,8 +186,7 @@ of_depth_supported(enum pipe_format format)
 	switch (format) {
 	case PIPE_FORMAT_Z24X8_UNORM:
 	case PIPE_FORMAT_Z24_UNORM_S8_UINT:
-	case PIPE_FORMAT_X8Z24_UNORM:
-	case PIPE_FORMAT_S8_UINT_Z24_UNORM:
+	case PIPE_FORMAT_X24S8_UINT:
 		return 1;
 	default:
 		return 0;

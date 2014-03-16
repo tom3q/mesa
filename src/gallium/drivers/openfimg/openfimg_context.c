@@ -30,6 +30,7 @@
 #include "openfimg_context.h"
 #include "openfimg_draw.h"
 #include "openfimg_emit.h"
+#include "openfimg_fence.h"
 #include "openfimg_program.h"
 #include "openfimg_resource.h"
 #include "openfimg_texture.h"
@@ -102,6 +103,7 @@ of_context_render(struct pipe_context *pctx)
 		of_resource(pfb->cbufs[0]->texture)->timestamp = timestamp;
 	if (pfb->zsbuf)
 		of_resource(pfb->zsbuf->texture)->timestamp = timestamp;
+	ctx->last_timestamp = timestamp;
 
 	DBG("%p/%p/%p", ctx->ring->start, ctx->ring->cur, ctx->ring->end);
 
@@ -127,14 +129,14 @@ of_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
 {
 	DBG("fence=%p", fence);
 
-#if 0
+	of_context_render(pctx);
+
 	if (fence) {
-		of_fence_ref(ctx->screen->fence.current,
+		struct of_context *ctx = of_context(pctx);
+
+		of_fence_new(ctx, ctx->last_timestamp,
 				(struct of_fence **)fence);
 	}
-#endif
-
-	of_context_render(pctx);
 }
 
 void
