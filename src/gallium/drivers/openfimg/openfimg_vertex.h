@@ -102,6 +102,7 @@ struct of_vertex_info {
 struct of_vertex_buffer {
 	struct pipe_resource *buffer;
 	unsigned nr_vertices;
+	unsigned bytes_used;
 	struct list_head list;
 };
 

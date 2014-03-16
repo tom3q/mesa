@@ -303,7 +303,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		<bitfield name="DPPASS" high="31" low="29" type="fgpf_stencil_action"/>
 	</reg32>
 	<reg32 offset="1" name="FGPF_DEPTHT">
-		<bitfield name="ENABLE" pos="1"/>
+		<bitfield name="ENABLE" pos="0"/>
 		<bitfield name="MODE" high="3" low="1" type="fgpf_test_mode"/>
 	</reg32>
 	<reg32 offset="59" name="FGPF_CCLR" type="uint"/>

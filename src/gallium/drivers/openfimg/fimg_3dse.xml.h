@@ -8,7 +8,7 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- ./fimg_3dse.xml (  15069 bytes, from 2014-03-10 17:30:29)
+- ./fimg_3dse.xml (  15069 bytes, from 2014-03-16 17:27:26)
 
 Copyright (C) 2013-2014 by the following authors:
 - Tomasz Figa <tomasz.figa@gmail.com> (t.figa)
@@ -582,7 +582,7 @@ static inline uint32_t FGPF_BACKST_DPPASS(enum fgpf_stencil_action val)
 }
 
 #define REG_FGPF_DEPTHT						0x00000001
-#define FGPF_DEPTHT_ENABLE					0x00000002
+#define FGPF_DEPTHT_ENABLE					0x00000001
 #define FGPF_DEPTHT_MODE__MASK					0x0000000e
 #define FGPF_DEPTHT_MODE__SHIFT					1
 static inline uint32_t FGPF_DEPTHT_MODE(enum fgpf_test_mode val)

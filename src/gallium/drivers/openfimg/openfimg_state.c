@@ -349,8 +349,9 @@ of_zsa_state_create(struct pipe_context *pctx,
 	so->base = *cso;
 
 	if (cso->depth.enabled) {
-		so->fgpf_deptht |= FGPF_DEPTHT_ENABLE;
-		so->fgpf_deptht = FGPF_DEPTHT_MODE(of_test_mode(cso->depth.func));
+		so->fgpf_deptht =
+			FGPF_DEPTHT_ENABLE |
+			FGPF_DEPTHT_MODE(of_test_mode(cso->depth.func));
 	}
 
 	if (!cso->depth.writemask)
