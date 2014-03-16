@@ -126,11 +126,20 @@ of_resource_transfer_map(struct pipe_context *pctx,
 		of_resource_transfer_flush_region(pctx, ptrans, box);
 
 	if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
+#if 1
+		if (rsc->timestamp) {
+			ret = fd_pipe_wait(ctx->pipe, rsc->timestamp);
+			if (ret)
+				goto fail;
+			rsc->timestamp = 0;
+		}
+#else
 		ret = fd_bo_cpu_prep(rsc->bo, ctx->pipe, op);
 		if ((ret == -EBUSY) && (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE))
 			realloc_bo(rsc, fd_bo_size(rsc->bo));
 		else if (ret)
 			goto fail;
+#endif
 	}
 
 	buf = fd_bo_map(rsc->bo);
@@ -401,6 +410,10 @@ render_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 			ctx->fragtex.num_textures, ctx->fragtex.textures);
 
 	util_blitter_blit(ctx->blitter, info);
+
+	/* FIXME: Add proper synchronization to wait only when needed */
+	of_context_render(&ctx->base);
+	fd_pipe_wait(ctx->pipe, ctx->last_timestamp);
 
 	return true;
 }

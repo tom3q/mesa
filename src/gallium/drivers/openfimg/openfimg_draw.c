@@ -541,6 +541,8 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 
 	assert(vtx->num_elements > 0);
 
+	memset(&draw, 0, sizeof(draw));
+
 	memcpy(&draw.info, info, sizeof(draw.info));
 	if (info->indexed) {
 		memcpy(&draw.ib, indexbuf, sizeof(draw.ib));

@@ -25,27 +25,41 @@
  * SOFTWARE.
  */
 
+#include "util/u_memory.h"
+
+#include "openfimg_context.h"
 #include "openfimg_fence.h"
 #include "openfimg_util.h"
 
 boolean
 of_fence_wait(struct of_fence *fence)
 {
-	DBG("TODO: ");
-	return false;
+	DBG("fence = %p", fence);
+	return !fd_pipe_wait(fence->pipe, fence->timestamp);
 }
 
 boolean
 of_fence_signalled(struct of_fence *fence)
 {
-	DBG("TODO: ");
+	DBG("TODO: fence = %p", fence);
 	return false;
 }
 
 void
 of_fence_del(struct of_fence *fence)
 {
-
+	FREE(fence);
 }
 
+void of_fence_new(struct of_context *ctx, uint32_t timestamp,
+		  struct of_fence **fence)
+{
+	struct of_fence *of_fence = CALLOC_STRUCT(of_fence);
 
+	if (of_fence) {
+		of_fence->pipe = ctx->pipe;
+		of_fence->timestamp = timestamp;
+	}
+
+	of_fence_ref(of_fence, fence);
+}
