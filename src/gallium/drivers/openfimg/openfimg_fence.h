@@ -31,14 +31,19 @@
 #include "util/u_inlines.h"
 #include "util/u_double_list.h"
 
+struct of_context;
 
 struct of_fence {
+	struct fd_pipe *pipe;
+	uint32_t timestamp;
 	int ref;
 };
 
 boolean of_fence_wait(struct of_fence *fence);
 boolean of_fence_signalled(struct of_fence *fence);
 void of_fence_del(struct of_fence *fence);
+void of_fence_new(struct of_context *ctx, uint32_t timestamp,
+		  struct of_fence **fence);
 
 static INLINE void
 of_fence_ref(struct of_fence *fence, struct of_fence **ref)

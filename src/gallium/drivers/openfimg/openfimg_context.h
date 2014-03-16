@@ -125,6 +125,7 @@ struct of_context {
 
 	bool needs_flush;
 	unsigned num_draws;
+	uint32_t last_timestamp;
 
 	struct fd_ringbuffer *rings[4];
 	unsigned rings_idx;
