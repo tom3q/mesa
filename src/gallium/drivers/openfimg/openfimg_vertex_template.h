@@ -97,6 +97,7 @@ COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
 	struct of_vertex_buffer *buffer;
 	struct of_vertex_transfer *t;
 	unsigned batch_size;
+	unsigned bytes_used;
 	uint8_t *buf;
 	unsigned i;
 	void *dst;
@@ -127,25 +128,32 @@ COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
 #ifdef SEQUENTIAL
 		if (ROUND_UP(t->width, 4) == t->stride) {
 			if (prim_data->repeat_first) {
-				memcpy(buf, t->pointer, t->width);
+				memcpy(buf, BUF_ADDR_8(t->pointer,
+					indices * t->stride), t->width);
 				buf += t->stride;
-				memcpy(buf, t->pointer, t->width);
+				memcpy(buf, BUF_ADDR_8(t->pointer,
+					indices * t->stride), t->width);
 				buf += t->stride;
-				memcpy(buf, t->pointer, t->width);
+				memcpy(buf, BUF_ADDR_8(t->pointer,
+					indices * t->stride), t->width);
 				buf += t->stride;
 			}
 
 			memcpy(buf, BUF_ADDR_8(t->pointer,
-				(*pos + prim_data->shift) * t->stride),
+				(indices + *pos + prim_data->shift) * t->stride),
 				(batch_size - prim_data->shift) * t->stride);
 			buf += (batch_size - prim_data->shift) * t->stride;
 
 			if (prim_data->repeat_last) {
 				memcpy(buf, BUF_ADDR_8(t->pointer,
-					(*pos + batch_size - 1) * t->stride),
+					(indices + *pos + batch_size - 1) * t->stride),
 					t->width);
 				buf += t->stride;
 			}
+
+			bytes_used = ROUND_UP(buf - (uint8_t *)dst, 32);
+			if (bytes_used > buffer->bytes_used)
+				buffer->bytes_used = bytes_used;
 
 			continue;
 		}
@@ -162,6 +170,10 @@ COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
 		if (prim_data->repeat_last)
 			buf += PACK_ATTRIBUTE(buf, t,
 					indices + *pos + batch_size - 1, 1);
+
+		bytes_used = ROUND_UP(buf - (uint8_t *)dst, 32);
+		if (bytes_used > buffer->bytes_used)
+			buffer->bytes_used = bytes_used;
 	}
 
 	*pos += batch_size - prim_data->overlap;

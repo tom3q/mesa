@@ -506,7 +506,7 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 		OUT_RING(ring, buf->nr_vertices);
 		OUT_RING(ring, fd_bo_handle(of_resource(buf->buffer)->bo));
 		OUT_RING(ring, 0);
-		OUT_RING(ring, VERTEX_BUFFER_SIZE);
+		OUT_RING(ring, buf->bytes_used);
 
 		if (info->first_draw || info->bypass_cache) {
 			LIST_DEL(&buf->list);
