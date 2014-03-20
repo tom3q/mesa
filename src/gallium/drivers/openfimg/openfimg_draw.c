@@ -40,6 +40,7 @@
 #include "openfimg_emit.h"
 #include "openfimg_context.h"
 #include "openfimg_state.h"
+#include "openfimg_program.h"
 #include "openfimg_resource.h"
 #include "openfimg_vertex.h"
 #include "openfimg_util.h"
@@ -408,7 +409,8 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 	}
 
 	/* Mark last element with terminating flag */
-	vertex->elements[draw->num_elements - 1].attrib |=
+	if (draw->num_elements > 0 && draw->num_elements < OF_MAX_ATTRIBS)
+		vertex->elements[draw->num_elements - 1].attrib |=
 							FGHI_ATTRIB_LAST_ATTR;
 
 	/* Try to detect interleaved arrays */
@@ -471,14 +473,13 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 {
 	const struct of_draw_info *draw = &info->key;
 	struct of_rasterizer_stateobj *rasterizer;
-	struct fd_ringbuffer *ring = ctx->ring;
+	struct of_ringbuffer *ring = ctx->ring;
 	struct of_vertex_buffer *buf, *tmp;
 	unsigned i;
 
 	rasterizer = of_rasterizer_stateobj(ctx->rasterizer);
 
-	OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE,
-		2 * (draw->num_elements * 3 + 1));
+	OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
 	for (i = 0; i < draw->num_elements; ++i) {
 		struct of_vertex_element *element = &info->elements[i];
@@ -502,7 +503,7 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 			FGPE_VERTEX_CONTEXT_VSOUT(8));
 
 	LIST_FOR_EACH_ENTRY_SAFE(buf, tmp, &info->buffers, list) {
-		OUT_PKT(ring, G3D_REQUEST_DRAW, 4);
+		OUT_PKT(ring, G3D_REQUEST_DRAW);
 		OUT_RING(ring, buf->nr_vertices);
 		OUT_RING(ring, fd_bo_handle(of_resource(buf->buffer)->bo));
 		OUT_RING(ring, 0);
@@ -531,7 +532,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	struct pipe_index_buffer *indexbuf = &ctx->indexbuf;
 	struct of_vertex_stateobj *vtx = ctx->vtx;
 	struct of_vertex_info *vertex = NULL;
-	int buffer_map[PIPE_MAX_ATTRIBS];
+	uint8_t buffer_map[OF_MAX_ATTRIBS];
 	bool bypass_cache = false;
 	struct of_draw_info draw;
 	bool index_dirty = false;
@@ -539,9 +540,8 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	unsigned hash_key;
 	unsigned i;
 
-	assert(vtx->num_elements > 0);
-
-	memset(&draw, 0, sizeof(draw));
+	if (vtx->num_elements < 1 || vtx->num_elements >= OF_MAX_ATTRIBS)
+		return;
 
 	memcpy(&draw.info, info, sizeof(draw.info));
 	if (info->indexed) {
@@ -550,13 +550,16 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 			bypass_cache = true;
 		else if (of_resource(indexbuf->buffer)->dirty)
 			index_dirty = true;
+	} else {
+		memset(&draw.ib, 0, sizeof(draw.ib));
 	}
 
-	for (i = 0; i < PIPE_MAX_ATTRIBS; ++i)
-		buffer_map[i] = -1;
+	memset(buffer_map, 0xff, sizeof(buffer_map));
 
 	memcpy(draw.elements, vtx->pipe,
 		vtx->num_elements * sizeof(draw.elements[0]));
+	memset(&draw.elements[vtx->num_elements], 0, sizeof(draw.elements)
+		- vtx->num_elements * sizeof(draw.elements[0]));
 	draw.num_elements = vtx->num_elements;
 
 	draw.num_vb = 0;
@@ -570,7 +573,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		else if (of_resource(vb->buffer)->dirty)
 			dirty |= 1 << elem->vertex_buffer_index;
 
-		if (buffer_map[elem->vertex_buffer_index] < 0) {
+		if (buffer_map[elem->vertex_buffer_index] == 0xff) {
 			memcpy(&draw.vb[draw.num_vb], vb, sizeof(draw.vb[0]));
 			buffer_map[elem->vertex_buffer_index] = draw.num_vb;
 			++draw.num_vb;
@@ -579,6 +582,8 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		draw.elements[i].vertex_buffer_index =
 					buffer_map[elem->vertex_buffer_index];
 	}
+	memset(&draw.vb[draw.num_vb], 0, sizeof(draw.vb)
+		- draw.num_vb * sizeof(draw.vb[0]));
 
 	hash_key = of_draw_hash(&draw);
 	vertex = cso_hash_find_data_from_template(ctx->draw_hash, hash_key,
@@ -672,8 +677,116 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 {
 	struct of_context *ctx = of_context(pctx);
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer.base;
+	struct of_ringbuffer *ring = ctx->ring;
 
-	util_clear(pctx, pfb, buffers, color, depth, stencil);
+	if (!ctx->solid_prog.fp)
+		of_context_init_solid(ctx);
+
+	ctx->cleared |= buffers;
+	ctx->resolve |= buffers;
+	ctx->needs_flush = true;
+
+	if (buffers & PIPE_CLEAR_COLOR)
+		of_resource(pfb->cbufs[0]->texture)->dirty = true;
+
+	if (buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))
+		of_resource(pfb->zsbuf->texture)->dirty = true;
+
+	DBG("%x depth=%f, stencil=%u (%s/%s)", buffers, depth, stencil,
+		util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
+		util_format_short_name(pipe_surface_format(pfb->zsbuf)));
+
+	/* emit clear program */
+	of_program_emit(ctx, &ctx->solid_prog);
+
+	/* emit clear color */
+	OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
+	OUT_RING(ring, RSD_UNIT_TYPE_OFFS(SHADER_FRAGMENT,
+			G3D_SHADER_DATA_FLOAT, 0));
+	OUT_RING(ring, color->ui[0]);
+	OUT_RING(ring, color->ui[1]);
+	OUT_RING(ring, color->ui[2]);
+	OUT_RING(ring, color->ui[3]);
+
+	/* emit applicable generic state */
+	of_emit_state(ctx, ctx->dirty &
+			(OF_DIRTY_BLEND | OF_DIRTY_VIEWPORT |
+			OF_DIRTY_FRAMEBUFFER | OF_DIRTY_SCISSOR));
+
+	/* emit clear-specific state */
+	OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
+
+	OUT_RING(ring, REG_FGRA_D_OFF_EN);
+	OUT_RING(ring, 1);
+	OUT_RING(ring, REG_FGRA_D_OFF_FACTOR);
+	OUT_RING(ring, fui(depth));
+	OUT_RING(ring, REG_FGRA_D_OFF_UNITS);
+	OUT_RING(ring, fui(0.0f));
+	OUT_RING(ring, REG_FGRA_BFCULL);
+	OUT_RING(ring, 0);
+
+	OUT_RING(ring, REG_FGPE_DEPTHRANGE_HALF_F_ADD_N);
+	OUT_RING(ring, fui(0.0f));
+	OUT_RING(ring, REG_FGPE_DEPTHRANGE_HALF_F_SUB_N);
+	OUT_RING(ring, fui(1.0f));
+
+	OUT_RING(ring, REG_FGPF_BLEND);
+	OUT_RING(ring, 0);
+	OUT_RING(ring, REG_FGPF_LOGOP);
+	OUT_RING(ring, 0);
+
+	if (!(buffers & PIPE_CLEAR_COLOR)) {
+		OUT_RING(ring, REG_FGPF_CBMSK);
+		OUT_RING(ring, FGPF_CBMSK_RED | FGPF_CBMSK_GREEN |
+				FGPF_CBMSK_BLUE | FGPF_CBMSK_ALPHA);
+	}
+
+	OUT_RING(ring, REG_FGPF_ALPHAT);
+	OUT_RING(ring, 0);
+
+	if (buffers & PIPE_CLEAR_DEPTH) {
+		OUT_RING(ring, REG_FGPF_DEPTHT);
+		OUT_RING(ring, FGPF_DEPTHT_ENABLE |
+				FGPF_DEPTHT_MODE(TEST_ALWAYS));
+	} else {
+		OUT_RING(ring, REG_FGPF_DEPTHT);
+		OUT_RING(ring, 0);
+	}
+
+	if (buffers & PIPE_CLEAR_STENCIL) {
+		OUT_RING(ring, REG_FGPF_FRONTST);
+		OUT_RING(ring, FGPF_FRONTST_ENABLE |
+				FGPF_FRONTST_MODE(TEST_ALWAYS) |
+				FGPF_FRONTST_MASK(0xff) |
+				FGPF_FRONTST_VALUE(stencil) |
+				FGPF_FRONTST_SFAIL(STENCIL_KEEP) |
+				FGPF_FRONTST_DPPASS(STENCIL_REPLACE) |
+				FGPF_FRONTST_DPFAIL(STENCIL_KEEP));
+		OUT_RING(ring, REG_FGPF_BACKST);
+		OUT_RING(ring, FGPF_BACKST_MODE(TEST_NEVER) |
+				FGPF_BACKST_MASK(0xff) |
+				FGPF_BACKST_VALUE(stencil) |
+				FGPF_BACKST_SFAIL(STENCIL_KEEP) |
+				FGPF_BACKST_DPPASS(STENCIL_REPLACE) |
+				FGPF_BACKST_DPFAIL(STENCIL_KEEP));
+	} else {
+		OUT_RING(ring, REG_FGPF_FRONTST);
+		OUT_RING(ring, 0);
+	}
+
+	/* emit draw */
+	of_emit_draw(ctx, ctx->clear_vertex_info);
+
+	ctx->dirty |= OF_DIRTY_ZSA |
+			OF_DIRTY_VIEWPORT |
+			OF_DIRTY_RASTERIZER |
+			OF_DIRTY_SAMPLE_MASK |
+			OF_DIRTY_PROG |
+			OF_DIRTY_CONSTBUF |
+			OF_DIRTY_BLEND;
+
+	if (of_mesa_debug & OF_DBG_DCLEAR)
+		ctx->dirty = 0xffffffff;
 }
 
 static void
@@ -682,8 +795,6 @@ of_clear_render_target(struct pipe_context *pctx, struct pipe_surface *ps,
 		unsigned x, unsigned y, unsigned w, unsigned h)
 {
 	DBG("TODO: x=%u, y=%u, w=%u, h=%u", x, y, w, h);
-
-	util_clear_render_target(pctx, ps, color, x, y, w, h);
 }
 
 static void
@@ -693,8 +804,68 @@ of_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *ps,
 {
 	DBG("TODO: buffers=%u, depth=%f, stencil=%u, x=%u, y=%u, w=%u, h=%u",
 			buffers, depth, stencil, x, y, w, h);
+}
 
-	util_clear_depth_stencil(pctx, ps, buffers, depth, stencil, x, y, w, h);
+static const float clear_vertices[] = {
+	+1.0f, +1.0f, +1.0f, // RT
+	-1.0f, +1.0f, +1.0f, // LT
+	-1.0f, -1.0f, +1.0f, // LB
+
+	+1.0f, +1.0f, +1.0f, // LT
+	-1.0f, -1.0f, +1.0f, // RB
+	+1.0f, -1.0f, +1.0f, // LB
+};
+
+struct of_vertex_info *
+of_draw_init_solid(struct of_context *ctx)
+{
+	struct of_vertex_info *info = CALLOC_STRUCT(of_vertex_info);
+	struct of_draw_info *draw = &info->key;
+	struct of_vertex_transfer *transfer = &info->transfers[0];
+	struct of_vertex_element *element = &info->elements[0];
+	struct pipe_transfer *dst_transfer = NULL;
+	struct of_vertex_buffer *buffer;
+	float *dst;
+
+	if (!info)
+		return NULL;
+
+	draw->num_elements = 1;
+	info->num_transfers = 1;
+	info->draw_mode = PTYPE_TRIANGLES;
+	info->first_draw = false;
+	info->bypass_cache = false;
+	LIST_INITHEAD(&info->buffers);
+
+	transfer->width = 3 * sizeof(float);
+	transfer->offset = 0;
+
+	element->transfer_index = 0;
+	element->offset = 0;
+	element->attrib = FGHI_ATTRIB_LAST_ATTR | FGHI_ATTRIB_DT(DT_FLOAT) |
+				FGHI_ATTRIB_NUM_COMP(3 - 1) |
+				FGHI_ATTRIB_SRCX(0) | FGHI_ATTRIB_SRCY(1) |
+				FGHI_ATTRIB_SRCZ(2) | FGHI_ATTRIB_SRCW(3);
+
+	buffer = of_get_batch_buffer(ctx);
+	if (!buffer) {
+		FREE(info);
+		return NULL;
+	}
+
+	dst = pipe_buffer_map(&ctx->base, buffer->buffer, PIPE_TRANSFER_WRITE,
+				&dst_transfer);
+
+	memcpy(dst, clear_vertices, sizeof(clear_vertices));
+
+	if (dst_transfer)
+		pipe_buffer_unmap(&ctx->base, dst_transfer);
+
+	buffer->bytes_used = ROUND_UP(sizeof(clear_vertices), 32);
+	buffer->nr_vertices = sizeof(clear_vertices) / (3 * sizeof(float));
+	LIST_ADDTAIL(&buffer->list, &info->buffers);
+
+	return info;
 }
 
 void
@@ -708,4 +879,22 @@ of_draw_init(struct pipe_context *pctx)
 	pctx->clear_depth_stencil = of_clear_depth_stencil;
 
 	ctx->draw_hash = cso_hash_create();
+}
+
+void
+of_draw_fini(struct pipe_context *pctx)
+{
+	struct of_context *ctx = of_context(pctx);
+	struct of_vertex_info *info = ctx->clear_vertex_info;
+
+	if (info) {
+		struct of_vertex_buffer *buf, *n;
+
+		LIST_FOR_EACH_ENTRY_SAFE(buf, n, &info->buffers, list) {
+			pipe_resource_reference(&buf->buffer, NULL);
+			FREE(buf);
+		}
+
+		FREE(info);
+	}
 }

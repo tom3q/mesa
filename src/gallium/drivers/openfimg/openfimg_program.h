@@ -69,6 +69,9 @@ struct of_shader_stateobj {
 void of_program_emit(struct of_context *ctx, struct of_program_stateobj *prog);
 void of_program_validate(struct of_context *ctx);
 
+void of_prog_init_solid(struct of_context *ctx);
+void of_prog_init_blit(struct of_context *ctx);
+
 void of_prog_init(struct pipe_context *pctx);
 void of_prog_fini(struct pipe_context *pctx);
 

@@ -38,5 +38,8 @@ struct fd_ringbuffer;
 void of_draw_emit(struct of_context *ctx, const struct pipe_draw_info *info);
 
 void of_draw_init(struct pipe_context *pctx);
+void of_draw_fini(struct pipe_context *pctx);
+
+struct of_vertex_info *of_draw_init_solid(struct of_context *ctx);
 
 #endif /* OPENFIMG_DRAW_H_ */

@@ -38,43 +38,12 @@
 #include "openfimg_util.h"
 #include "openfimg_state.h"
 
-enum g3d_shader_type {
-	G3D_SHADER_VERTEX,
-	G3D_SHADER_PIXEL,
-
-	G3D_NUM_SHADERS
-};
-
-enum g3d_shader_data_type {
-	G3D_SHADER_DATA_FLOAT,
-	G3D_SHADER_DATA_INT,
-	G3D_SHADER_DATA_BOOL,
-
-	G3D_NUM_SHADER_DATA_TYPES
-};
-
 /*
  * Utility functions
  */
 
-static inline uint32_t RSP_UNIT_NATTRIB(uint8_t unit, uint8_t nattrib)
-{
-	return (unit << 8) | nattrib;
-}
-
-static inline uint32_t RSP_DCOUNT(uint16_t type1, uint16_t type2)
-{
-	return (type2 << 16) | type1;
-}
-
-static inline uint32_t RSD_UNIT_TYPE_OFFS(uint8_t unit, uint8_t type,
-					  uint16_t offs)
-{
-	return (unit << 24) | (type << 16) | offs;
-}
-
 static void
-emit_constants(struct fd_ringbuffer *ring,
+emit_constants(struct of_ringbuffer *ring,
 	       struct of_constbuf_stateobj *constbuf, bool emit_immediates,
 	       struct of_shader_stateobj *shader)
 {
@@ -113,7 +82,7 @@ emit_constants(struct fd_ringbuffer *ring,
 			dwords = (uint32_t *)(((uint8_t *)dwords) + cb->buffer_offset);
 
 			if (size) {
-				OUT_PKT(ring, G3D_REQUEST_SHADER_DATA, size + 1);
+				OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
 				OUT_RING(ring, RSD_UNIT_TYPE_OFFS(shader->type,
 						G3D_SHADER_DATA_FLOAT, base));
 				for (i = 0; i < size; i++)
@@ -131,8 +100,7 @@ emit_constants(struct fd_ringbuffer *ring,
 	if (!emit_immediates || !shader->num_immediates)
 		return;
 
-	OUT_PKT(ring, G3D_REQUEST_SHADER_DATA,
-			1 + 4 * shader->num_immediates);
+	OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
 	OUT_RING(ring, RSD_UNIT_TYPE_OFFS(shader->type,
 			G3D_SHADER_DATA_FLOAT, 4 * shader->first_immediate));
 
@@ -147,7 +115,7 @@ emit_constants(struct fd_ringbuffer *ring,
 typedef uint32_t texmask;
 
 static texmask
-emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
+emit_texture(struct of_ringbuffer *ring, struct of_context *ctx,
 	     struct of_texture_stateobj *tex, unsigned samp_id, texmask emitted)
 {
 	unsigned const_idx = of_get_const_idx(ctx, tex, samp_id);
@@ -160,7 +128,7 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
 	view = of_pipe_sampler_view(tex->textures[samp_id]);
 
-	OUT_PKT(ring, G3D_REQUEST_TEXTURE, 20);
+	OUT_PKT(ring, G3D_REQUEST_TEXTURE);
 	OUT_RING(ring, sampler->tsta | view->tsta);
 	OUT_RING(ring, view->width);
 	OUT_RING(ring, view->height);
@@ -186,7 +154,7 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 }
 
 static texmask
-emit_vtx_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
+emit_vtx_texture(struct of_ringbuffer *ring, struct of_context *ctx,
 		 struct of_texture_stateobj *tex, unsigned samp_id,
 		 texmask emitted)
 {
@@ -200,7 +168,7 @@ emit_vtx_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
 	view = of_pipe_sampler_view(tex->textures[samp_id]);
 
-	OUT_PKT(ring, G3D_REQUEST_VTX_TEXTURE, 4);
+	OUT_PKT(ring, G3D_REQUEST_VTX_TEXTURE);
 	OUT_RING(ring, sampler->vtx_tsta | view->vtx_tsta);
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(view->tex_resource->bo));
@@ -210,7 +178,7 @@ emit_vtx_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 }
 
 static void
-emit_textures(struct fd_ringbuffer *ring, struct of_context *ctx)
+emit_textures(struct of_ringbuffer *ring, struct of_context *ctx)
 {
 	texmask emitted = 0;
 	unsigned i;
@@ -229,7 +197,7 @@ emit_textures(struct fd_ringbuffer *ring, struct of_context *ctx)
 void
 of_emit_state(struct of_context *ctx, uint32_t dirty)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
+	struct of_ringbuffer *ring = ctx->ring;
 
 	/* NOTE: we probably want to eventually refactor this so each state
 	 * object handles emitting it's own state..  although the mapping of
@@ -247,7 +215,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		else
 			rsc = NULL;
 
-		OUT_PKT(ring, G3D_REQUEST_COLORBUFFER, 5);
+		OUT_PKT(ring, G3D_REQUEST_COLORBUFFER);
 		OUT_RING(ring, fb->fgpf_fbctl);
 		OUT_RING(ring, 0);
 		OUT_RING(ring, fb->base.width);
@@ -259,17 +227,33 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		else
 			rsc = NULL;
 
-		OUT_PKT(ring, G3D_REQUEST_DEPTHBUFFER, 3);
+		OUT_PKT(ring, G3D_REQUEST_DEPTHBUFFER);
 		OUT_RING(ring, 0);
 		OUT_RING(ring, rsc ? fd_bo_handle(rsc->bo) : 0);
 		OUT_RING(ring, rsc ? G3D_DBUFFER_DIRTY : G3D_DBUFFER_DETACH);
 	}
 
+	if (dirty & (OF_DIRTY_PROG | OF_DIRTY_VTXSTATE | OF_DIRTY_TEXSTATE)) {
+		of_program_validate(ctx);
+		of_program_emit(ctx, &ctx->prog);
+	}
+
+	if (dirty & (OF_DIRTY_PROG | OF_DIRTY_CONSTBUF)) {
+		emit_constants(ring, &ctx->constbuf[PIPE_SHADER_VERTEX],
+				dirty & OF_DIRTY_PROG, ctx->prog.vp);
+		emit_constants(ring, &ctx->constbuf[PIPE_SHADER_FRAGMENT],
+				dirty & OF_DIRTY_PROG, ctx->prog.fp);
+	}
+
+	if (dirty & (OF_DIRTY_VERTTEX | OF_DIRTY_FRAGTEX | OF_DIRTY_PROG))
+		emit_textures(ring, ctx);
+
+	OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
+
 	if (dirty & OF_DIRTY_RASTERIZER) {
 		struct of_rasterizer_stateobj *rasterizer =
 				of_rasterizer_stateobj(ctx->rasterizer);
 
-		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 8);
 		OUT_RING(ring, REG_FGRA_D_OFF_EN);
 		OUT_RING(ring, ctx->rasterizer->offset_tri);
 		OUT_RING(ring, REG_FGRA_D_OFF_FACTOR);
@@ -292,7 +276,6 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		struct pipe_scissor_state *scissor =
 				of_context_get_scissor(ctx);
 
-		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 2);
 		OUT_RING(ring, REG_FGRA_XCLIP);
 		OUT_RING(ring, (scissor->maxx << 16) | scissor->minx);
 		OUT_RING(ring, REG_FGRA_YCLIP);
@@ -302,7 +285,6 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	if (dirty & OF_DIRTY_VIEWPORT) {
 		struct pipe_viewport_state *viewport = &ctx->viewport;
 
-		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 6);
 		OUT_RING(ring, REG_FGPE_VIEWPORT_OX);
 		OUT_RING(ring, fui(viewport->translate[0]));
 		OUT_RING(ring, REG_FGPE_VIEWPORT_OY);
@@ -317,23 +299,10 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		OUT_RING(ring, fui(viewport->scale[2]));
 	}
 
-	if (dirty & (OF_DIRTY_PROG | OF_DIRTY_VTXSTATE | OF_DIRTY_TEXSTATE)) {
-		of_program_validate(ctx);
-		of_program_emit(ctx, &ctx->prog);
-	}
-
-	if (dirty & (OF_DIRTY_PROG | OF_DIRTY_CONSTBUF)) {
-		emit_constants(ring, &ctx->constbuf[PIPE_SHADER_VERTEX],
-				dirty & OF_DIRTY_PROG, ctx->prog.vp);
-		emit_constants(ring, &ctx->constbuf[PIPE_SHADER_FRAGMENT],
-				dirty & OF_DIRTY_PROG, ctx->prog.fp);
-	}
-
 	if (dirty & OF_DIRTY_BLEND) {
 		struct of_blend_stateobj *blend =
 				of_blend_stateobj(ctx->blend);
 
-		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 4);
 		OUT_RING(ring, REG_FGPF_BLEND);
 		OUT_RING(ring, blend->fgpf_blend);
 		OUT_RING(ring, REG_FGPF_LOGOP);
@@ -345,7 +314,6 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	}
 
 	if (dirty & OF_DIRTY_BLEND_COLOR) {
-		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 1);
 		OUT_RING(ring, REG_FGPF_CCLR);
 		OUT_RING(ring, ctx->blend_color);
 	}
@@ -354,7 +322,6 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		struct of_zsa_stateobj *zsa = of_zsa_stateobj(ctx->zsa);
 		struct pipe_stencil_ref *sr = &ctx->stencil_ref;
 
-		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 2);
 		OUT_RING(ring, REG_FGPF_FRONTST);
 		OUT_RING(ring, zsa->fgpf_frontst |
 				FGPF_FRONTST_VALUE(sr->ref_value[0]));
@@ -366,7 +333,6 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	if (dirty & OF_DIRTY_ZSA) {
 		struct of_zsa_stateobj *zsa = of_zsa_stateobj(ctx->zsa);
 
-		OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE, 2 * 3);
 		OUT_RING(ring, REG_FGPF_ALPHAT);
 		OUT_RING(ring, zsa->fgpf_alphat);
 		OUT_RING(ring, REG_FGPF_DEPTHT);
@@ -375,14 +341,23 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		OUT_RING(ring, zsa->fgpf_dbmsk);
 	}
 
-	if (dirty & (OF_DIRTY_VERTTEX | OF_DIRTY_FRAGTEX | OF_DIRTY_PROG))
-		emit_textures(ring, ctx);
-
 	ctx->dirty &= ~dirty;
 }
 
 /* emit per-context initialization:
  */
+void
+of_emit_setup_solid(struct of_context *ctx)
+{
+
+}
+
+void
+of_emit_setup_blit(struct of_context *ctx)
+{
+	DBG("TODO");
+}
+
 void
 of_emit_setup(struct of_context *ctx)
 {

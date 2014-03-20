@@ -32,6 +32,7 @@
 #include "util/u_format.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_parse.h"
+#include "tgsi/tgsi_text.h"
 
 #include "openfimg_program.h"
 #include "openfimg_compiler.h"
@@ -112,7 +113,7 @@ fail:
 static void
 emit(struct of_context *ctx, struct of_shader_stateobj *so)
 {
-	struct fd_ringbuffer *ring = ctx->ring;
+	struct of_ringbuffer *ring = ctx->ring;
 	unsigned num_attribs;
 
 	if (so->info.sizedwords == 0)
@@ -123,7 +124,7 @@ emit(struct of_context *ctx, struct of_shader_stateobj *so)
 	else
 		num_attribs = so->info.max_input_reg + 1;
 
-	OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM, 6);
+	OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM);
 	OUT_RING(ring, (so->type << 8) | num_attribs);
 	OUT_RING(ring, 4 * (so->first_immediate + so->num_immediates));
 	OUT_RING(ring, 0);
@@ -186,6 +187,56 @@ of_vp_state_bind(struct pipe_context *pctx, void *hwcso)
 	ctx->dirty |= OF_DIRTY_PROG;
 }
 
+static const char *solid_fp =
+	"FRAG                                        \n"
+	"PROPERTY FS_COLOR0_WRITES_ALL_CBUFS 1       \n"
+	"DCL CONST[0]                                \n"
+	"DCL OUT[0], COLOR                           \n"
+	"  0: MOV OUT[0], CONST[0]                   \n"
+	"  1: END                                    \n";
+
+static const char *solid_vp =
+	"VERT                                        \n"
+	"DCL IN[0]                                   \n"
+	"DCL OUT[0], POSITION                        \n"
+	"  0: MOV OUT[0], IN[0]                      \n"
+	"  1: END                                    \n";
+
+static const char *blit_fp =
+	"FRAG                                        \n"
+	"PROPERTY FS_COLOR0_WRITES_ALL_CBUFS 1       \n"
+	"DCL IN[0], TEXCOORD                         \n"
+	"DCL OUT[0], COLOR                           \n"
+	"DCL SAMP[0]                                 \n"
+	"  0: TEX OUT[0], IN[0], SAMP[0], 2D         \n"
+	"  1: END                                    \n";
+
+static const char *blit_vp =
+	"VERT                                        \n"
+	"DCL IN[0]                                   \n"
+	"DCL IN[1]                                   \n"
+	"DCL OUT[0], TEXCOORD                        \n"
+	"DCL OUT[1], POSITION                        \n"
+	"  0: MOV OUT[0], IN[0]                      \n"
+	"  0: MOV OUT[1], IN[1]                      \n"
+	"  1: END                                    \n";
+
+static void * assemble_tgsi(struct pipe_context *pctx,
+		const char *src, bool frag)
+{
+	struct tgsi_token toks[32];
+	struct pipe_shader_state cso = {
+			.tokens = toks,
+	};
+
+	tgsi_text_translate(src, toks, ARRAY_SIZE(toks));
+
+	if (frag)
+		return pctx->create_fs_state(pctx, &cso);
+	else
+		return pctx->create_vs_state(pctx, &cso);
+}
+
 void
 of_program_validate(struct of_context *ctx)
 {
@@ -216,6 +267,22 @@ of_program_emit(struct of_context *ctx, struct of_program_stateobj *prog)
 }
 
 void
+of_prog_init_solid(struct of_context *ctx)
+{
+	ctx->solid_prog.fp = assemble_tgsi(&ctx->base, solid_fp, true);
+	compile(&ctx->solid_prog, ctx->solid_prog.fp);
+	ctx->solid_prog.vp = assemble_tgsi(&ctx->base, solid_vp, false);
+	compile(&ctx->solid_prog, ctx->solid_prog.vp);
+}
+
+void
+of_prog_init_blit(struct of_context *ctx)
+{
+	ctx->blit_prog.fp = assemble_tgsi(&ctx->base, blit_fp, true);
+	ctx->blit_prog.vp = assemble_tgsi(&ctx->base, blit_vp, false);
+}
+
+void
 of_prog_init(struct pipe_context *pctx)
 {
 	pctx->create_fs_state = of_fp_state_create;
@@ -230,5 +297,15 @@ of_prog_init(struct pipe_context *pctx)
 void
 of_prog_fini(struct pipe_context *pctx)
 {
+	struct of_context *ctx = of_context(pctx);
 
+	if (ctx->solid_prog.vp)
+		pctx->delete_vs_state(pctx, ctx->solid_prog.vp);
+	if (ctx->solid_prog.fp)
+		pctx->delete_fs_state(pctx, ctx->solid_prog.fp);
+
+	if (ctx->blit_prog.vp)
+		pctx->delete_vs_state(pctx, ctx->blit_prog.vp);
+	if (ctx->blit_prog.fp)
+		pctx->delete_fs_state(pctx, ctx->blit_prog.fp);
 }
