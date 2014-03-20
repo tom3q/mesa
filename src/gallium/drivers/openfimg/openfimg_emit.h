@@ -39,7 +39,40 @@ struct of_vertex_buf {
 	struct pipe_resource *prsc;
 };
 
+enum g3d_shader_type {
+	G3D_SHADER_VERTEX,
+	G3D_SHADER_PIXEL,
+
+	G3D_NUM_SHADERS
+};
+
+enum g3d_shader_data_type {
+	G3D_SHADER_DATA_FLOAT,
+	G3D_SHADER_DATA_INT,
+	G3D_SHADER_DATA_BOOL,
+
+	G3D_NUM_SHADER_DATA_TYPES
+};
+
+static inline uint32_t RSP_UNIT_NATTRIB(uint8_t unit, uint8_t nattrib)
+{
+	return (unit << 8) | nattrib;
+}
+
+static inline uint32_t RSP_DCOUNT(uint16_t type1, uint16_t type2)
+{
+	return (type2 << 16) | type1;
+}
+
+static inline uint32_t RSD_UNIT_TYPE_OFFS(uint8_t unit, uint8_t type,
+					  uint16_t offs)
+{
+	return (unit << 24) | (type << 16) | offs;
+}
+
 void of_emit_state(struct of_context *ctx, uint32_t dirty);
 void of_emit_setup(struct of_context *ctx);
+void of_emit_setup_blit(struct of_context *ctx);
+void of_emit_setup_solid(struct of_context *ctx);
 
 #endif /* OF_EMIT_H */

@@ -41,6 +41,7 @@
 #define OF_MAX_ATTRIBS		9
 
 struct of_vertex_stateobj;
+struct of_vertex_info;
 
 struct of_texture_stateobj {
 	struct pipe_sampler_view *textures[PIPE_MAX_SAMPLERS];
@@ -104,10 +105,11 @@ struct of_context {
 	const uint8_t *primtypes;
 	uint32_t primtype_mask;
 
-	/* shaders used by clear, and gmem->mem blits: */
+	/* optional state used for hardware clear */
 	struct of_program_stateobj solid_prog; // TODO move to screen?
+	struct of_vertex_info *clear_vertex_info;
 
-	/* shaders used by mem->gmem blits: */
+	/* optional state used for hardware blitting */
 	struct of_program_stateobj blit_prog; // TODO move to screen?
 
 	/* do we need to mem2gmem before rendering.  We don't, if for example,
@@ -127,10 +129,10 @@ struct of_context {
 	unsigned num_draws;
 	uint32_t last_timestamp;
 
-	struct fd_ringbuffer *rings[4];
+	struct of_ringbuffer *rings[2];
 	unsigned rings_idx;
 
-	struct fd_ringbuffer *ring;
+	struct of_ringbuffer *ring;
 	struct fd_ringmarker *draw_start, *draw_end;
 
 	struct pipe_scissor_state scissor;
@@ -217,5 +219,8 @@ struct pipe_context * of_context_create(struct pipe_screen *pscreen,
 		void *priv);
 
 void of_context_destroy(struct pipe_context *pctx);
+
+void of_context_init_solid(struct of_context *ctx);
+void of_context_init_blit(struct of_context *ctx);
 
 #endif /* OPENFIMG_CONTEXT_H_ */

@@ -114,7 +114,7 @@ const struct of_primitive_data primitive_data[PIPE_PRIM_MAX] = {
 	},
 };
 
-static struct of_vertex_buffer *of_get_batch_buffer(struct of_context *ctx)
+struct of_vertex_buffer *of_get_batch_buffer(struct of_context *ctx)
 {
 	struct of_vertex_buffer *buffer = CALLOC_STRUCT(of_vertex_buffer);
 
