@@ -106,6 +106,7 @@ struct of_vertex_buffer {
 	struct list_head list;
 };
 
+struct of_vertex_buffer *of_get_batch_buffer(struct of_context *ctx);
 void of_put_batch_buffer(struct of_context *ctx, struct of_vertex_buffer *buf);
 
 void of_prepare_draw_idx8(struct of_context *ctx, struct of_vertex_info *vtx,
