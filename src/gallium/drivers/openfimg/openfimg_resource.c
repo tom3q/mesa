@@ -202,9 +202,8 @@ setup_slices(struct of_resource *rsc)
 
 	for (level = 0; level <= prsc->last_level; level++) {
 		struct of_resource_slice *slice = of_resource_slice(rsc, level);
-		uint32_t aligned_width = align(width, 32);
 
-		slice->pitch = aligned_width;
+		slice->pitch = width;
 		slice->offset = size;
 		slice->size0 = slice->pitch * height * rsc->cpp;
 
@@ -410,10 +409,6 @@ render_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 			ctx->fragtex.num_textures, ctx->fragtex.textures);
 
 	util_blitter_blit(ctx->blitter, info);
-
-	/* FIXME: Add proper synchronization to wait only when needed */
-	of_context_render(&ctx->base);
-	fd_pipe_wait(ctx->pipe, ctx->last_timestamp);
 
 	return true;
 }
