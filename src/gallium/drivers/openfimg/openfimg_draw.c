@@ -686,6 +686,12 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	ctx->resolve |= buffers;
 	ctx->needs_flush = true;
 
+	if (!pfb->cbufs[0])
+		buffers &= ~PIPE_CLEAR_COLOR;
+
+	if (!pfb->zsbuf)
+		buffers &= ~(PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL);
+
 	if (buffers & PIPE_CLEAR_COLOR)
 		of_resource(pfb->cbufs[0]->texture)->dirty = true;
 
