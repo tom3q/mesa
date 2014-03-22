@@ -136,7 +136,7 @@ of_set_framebuffer_state(struct pipe_context *pctx,
 	cso->base.width = framebuffer->width;
 	cso->base.height = framebuffer->height;
 
-	if (framebuffer->nr_cbufs > 0) {
+	if (cso->base.cbufs[0]) {
 		unsigned fmt;
 
 		fmt = cso->base.cbufs[0]->format;

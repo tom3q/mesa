@@ -229,7 +229,7 @@ pipe_freedreno_create_screen(int fd)
 static struct pipe_screen *
 pipe_openfimg_create_screen(int fd)
 {
-#if _EGL_PIPE_FREEDRENO
+#if _EGL_PIPE_OPENFIMG
    struct pipe_screen *screen;
 
    screen = of_drm_screen_create(fd);
@@ -263,7 +263,8 @@ egl_pipe_create_drm_screen(const char *name, int fd)
       return pipe_vmwgfx_create_screen(fd);
    else if ((strcmp(name, "kgsl") == 0) || (strcmp(name, "msm") == 0))
       return pipe_freedreno_create_screen(fd);
-   else if (strcmp(name, "exynos") == 0)
+   // FIXME: "exynos" and "armsoc" might be used with different pipes as well
+   else if ((strcmp(name, "exynos") == 0) || (strcmp(name, "armsoc") == 0))
       return pipe_openfimg_create_screen(fd);
    else
       return NULL;
