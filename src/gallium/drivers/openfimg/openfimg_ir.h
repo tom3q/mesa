@@ -39,10 +39,10 @@
 struct ir2_shader;
 
 struct ir2_shader_info {
+	uint64_t regs_written;
 	uint16_t sizedwords;
 	int8_t   max_reg;   /* highest GPR # used by shader */
 	uint8_t  max_input_reg;
-	uint64_t regs_written;
 };
 
 struct ir2_register {

@@ -38,22 +38,22 @@
 #include "openfimg_vertex.h"
 #include "openfimg_util.h"
 
-static struct of_ringbuffer *next_rb(struct of_context *ctx)
+static struct fd_ringbuffer *next_rb(struct of_context *ctx)
 {
-	struct of_ringbuffer *ring;
+	struct fd_ringbuffer *ring;
 	uint32_t ts;
 
 	/* grab next ringbuffer: */
 	ring = ctx->rings[(ctx->rings_idx++) % ARRAY_SIZE(ctx->rings)];
 
 	/* wait for new rb to be idle: */
-	ts = of_ringbuffer_timestamp(ring);
+	ts = fd_ringbuffer_timestamp(ring);
 	if (ts) {
 		DBG("wait: %u", ts);
 		fd_pipe_wait(ctx->pipe, ts);
 	}
 
-	of_ringbuffer_reset(ring);
+	fd_ringbuffer_reset(ring);
 
 	return ring;
 }
@@ -62,46 +62,18 @@ static void
 of_context_next_rb(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
-	struct of_ringbuffer *ring;
+	struct fd_ringbuffer *ring;
 
-	of_ringmarker_del(ctx->draw_start);
-	of_ringmarker_del(ctx->draw_end);
+	fd_ringmarker_del(ctx->draw_start);
+	fd_ringmarker_del(ctx->draw_end);
 
 	ring = next_rb(ctx);
 
-	ctx->draw_start = of_ringmarker_new(ring);
-	ctx->draw_end = of_ringmarker_new(ring);
+	ctx->draw_start = fd_ringmarker_new(ring);
+	ctx->draw_end = fd_ringmarker_new(ring);
 
-	of_ringbuffer_set_parent(ring, NULL);
+	fd_ringbuffer_set_parent(ring, NULL);
 	ctx->ring = ring;
-}
-
-static struct of_ringbuffer *
-of_ringbuffer_new(struct of_context *ctx, uint32_t size)
-{
-	struct of_ringbuffer *rb = CALLOC_STRUCT(of_ringbuffer);
-
-	if (!rb)
-		return NULL;
-
-	rb->base = fd_ringbuffer_new(ctx->pipe, size);
-	if (!rb->base) {
-		FREE(rb);
-		return NULL;
-	}
-
-	rb->last_pkt = rb->base->cur;
-
-	return rb;
-}
-
-static void
-of_ringbuffer_del(struct of_ringbuffer *ring)
-{
-	if (ring) {
-		fd_ringbuffer_del(ring->base);
-		FREE(ring);
-	}
 }
 
 /* emit accumulated render cmds, needed for example if render target has
@@ -120,32 +92,28 @@ of_context_render(struct pipe_context *pctx)
 	if (!ctx->needs_flush)
 		return;
 
-	/* Terminate last packet */
-	BEGIN_RING(ctx->ring);
-
-	of_ringmarker_mark(ctx->draw_end);
+	fd_ringmarker_mark(ctx->draw_end);
 	DBG("rendering sysmem (%s/%s)",
 			util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 			util_format_short_name(pipe_surface_format(pfb->zsbuf)));
-	of_ringmarker_flush(ctx->draw_start);
-	of_ringmarker_mark(ctx->draw_start);
+	fd_ringmarker_flush(ctx->draw_start);
+	fd_ringmarker_mark(ctx->draw_start);
 
 	/* update timestamps on render targets: */
-	timestamp = of_ringbuffer_timestamp(ctx->ring);
+	timestamp = fd_ringbuffer_timestamp(ctx->ring);
 	if (pfb->cbufs[0])
 		of_resource(pfb->cbufs[0]->texture)->timestamp = timestamp;
 	if (pfb->zsbuf)
 		of_resource(pfb->zsbuf->texture)->timestamp = timestamp;
 	ctx->last_timestamp = timestamp;
 
-	DBG("%p/%p/%p", ctx->ring->base->start, ctx->ring->base->cur,
-		ctx->ring->base->end);
+	DBG("%p/%p/%p", ctx->ring->start, ctx->ring->cur,
+		ctx->ring->end);
 
 	/* if size in dwords is more than half the buffer size, then wait and
 	 * wrap around:
 	 */
-	if ((ctx->ring->base->cur - ctx->ring->base->start)
-	     > ctx->ring->base->size/8)
+	if ((ctx->ring->cur - ctx->ring->start) > ctx->ring->size/8)
 		of_context_next_rb(pctx);
 
 	ctx->needs_flush = false;
@@ -194,11 +162,11 @@ of_context_destroy(struct pipe_context *pctx)
 	if (ctx->blitter)
 		util_blitter_destroy(ctx->blitter);
 
-	of_ringmarker_del(ctx->draw_start);
-	of_ringmarker_del(ctx->draw_end);
+	fd_ringmarker_del(ctx->draw_start);
+	fd_ringmarker_del(ctx->draw_end);
 
 	for (i = 0; i < ARRAY_SIZE(ctx->rings); ++i)
-		of_ringbuffer_del(ctx->rings[i]);
+		fd_ringbuffer_del(ctx->rings[i]);
 
 	of_draw_fini(pctx);
 	of_prog_fini(pctx);
@@ -276,7 +244,7 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 	pctx->destroy = of_context_destroy;
 
 	for (i = 0; i < ARRAY_SIZE(ctx->rings); i++) {
-		ctx->rings[i] = of_ringbuffer_new(ctx, 1024 * 1024);
+		ctx->rings[i] = fd_ringbuffer_new(ctx->pipe, 1024 * 1024);
 		if (!ctx->rings[i])
 			goto fail;
 	}
