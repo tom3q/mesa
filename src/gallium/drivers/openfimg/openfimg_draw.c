@@ -58,6 +58,7 @@ of_draw_hash(struct of_draw_info *req)
 static void
 of_allocate_vertex_buffer(struct of_context *ctx, struct of_vertex_info *vertex)
 {
+	const struct of_draw_info *draw = &vertex->key;
 	struct of_vertex_transfer *transfer;
 	unsigned batch_size;
 	unsigned size;
@@ -84,6 +85,18 @@ of_allocate_vertex_buffer(struct of_context *ctx, struct of_vertex_info *vertex)
 	}
 
 	vertex->batch_size = batch_size;
+
+	for (i = 0; i < draw->num_elements; ++i) {
+		struct of_vertex_element *element = &vertex->elements[i];
+		struct of_vertex_transfer *transfer =
+				&vertex->transfers[element->transfer_index];
+		unsigned offset = transfer->offset + element->offset;
+		unsigned stride = ROUND_UP(transfer->width, 4);
+
+		element->vbctrl = FGHI_ATTRIB_VBCTRL_STRIDE(stride)
+					| FGHI_ATTRIB_VBCTRL_RANGE(0xffff);
+		element->vbbase = FGHI_ATTRIB_VBBASE_ADDR(offset);
+	}
 }
 
 static void
@@ -473,28 +486,24 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 {
 	const struct of_draw_info *draw = &info->key;
 	struct of_rasterizer_stateobj *rasterizer;
-	struct of_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = ctx->ring;
 	struct of_vertex_buffer *buf, *tmp;
+	uint32_t *pkt;
 	unsigned i;
 
 	rasterizer = of_rasterizer_stateobj(ctx->rasterizer);
 
-	OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
+	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
 	for (i = 0; i < draw->num_elements; ++i) {
 		struct of_vertex_element *element = &info->elements[i];
-		struct of_vertex_transfer *transfer =
-				&info->transfers[element->transfer_index];
-		unsigned stride = ROUND_UP(transfer->width, 4);
-		unsigned offset = transfer->offset + element->offset;
 
 		OUT_RING(ring, REG_FGHI_ATTRIB(i));
 		OUT_RING(ring, element->attrib);
 		OUT_RING(ring, REG_FGHI_ATTRIB_VBCTRL(i));
-		OUT_RING(ring, FGHI_ATTRIB_VBCTRL_STRIDE(stride)
-				| FGHI_ATTRIB_VBCTRL_RANGE(0xffff));
+		OUT_RING(ring, element->vbctrl);
 		OUT_RING(ring, REG_FGHI_ATTRIB_VBBASE(i));
-		OUT_RING(ring, FGHI_ATTRIB_VBBASE_ADDR(offset));
+		OUT_RING(ring, element->vbbase);
 	}
 
 	OUT_RING(ring, REG_FGPE_VERTEX_CONTEXT);
@@ -502,12 +511,15 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 			FGPE_VERTEX_CONTEXT_TYPE(info->draw_mode) |
 			FGPE_VERTEX_CONTEXT_VSOUT(8));
 
+	END_PKT(ring, pkt);
+
 	LIST_FOR_EACH_ENTRY_SAFE(buf, tmp, &info->buffers, list) {
-		OUT_PKT(ring, G3D_REQUEST_DRAW);
+		pkt = OUT_PKT(ring, G3D_REQUEST_DRAW);
 		OUT_RING(ring, buf->nr_vertices);
-		OUT_RING(ring, fd_bo_handle(of_resource(buf->buffer)->bo));
+		OUT_RING(ring, buf->handle);
 		OUT_RING(ring, 0);
 		OUT_RING(ring, buf->bytes_used);
+		END_PKT(ring, pkt);
 
 		if (info->first_draw || info->bypass_cache) {
 			LIST_DEL(&buf->list);
@@ -528,74 +540,92 @@ of_kill_draw_caches(struct of_context *ctx, struct pipe_resource *buf)
 static void
 of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 {
-	struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
-	struct pipe_index_buffer *indexbuf = &ctx->indexbuf;
-	struct of_vertex_stateobj *vtx = ctx->vtx;
+	struct of_draw_info *draw = ctx->draw;
 	struct of_vertex_info *vertex = NULL;
-	uint8_t buffer_map[OF_MAX_ATTRIBS];
 	bool bypass_cache = false;
-	struct of_draw_info draw;
 	bool index_dirty = false;
 	unsigned dirty = 0;
 	unsigned hash_key;
 	unsigned i;
 
-	if (vtx->num_elements < 1 || vtx->num_elements >= OF_MAX_ATTRIBS)
-		return;
+	if (draw->info.indexed != info->indexed
+	    || ctx->dirty & OF_DIRTY_INDEXBUF) {
+		struct pipe_index_buffer *indexbuf = &ctx->indexbuf;
 
-	memcpy(&draw.info, info, sizeof(draw.info));
-	if (info->indexed) {
-		memcpy(&draw.ib, indexbuf, sizeof(draw.ib));
-		if (!indexbuf->buffer)
-			bypass_cache = true;
-		else if (of_resource(indexbuf->buffer)->dirty)
-			index_dirty = true;
-	} else {
-		memset(&draw.ib, 0, sizeof(draw.ib));
+		if (info->indexed)
+			memcpy(&draw->ib, indexbuf, sizeof(draw->ib));
+		else
+			memset(&draw->ib, 0, sizeof(draw->ib));
 	}
 
-	memset(buffer_map, 0xff, sizeof(buffer_map));
+	if (info->indexed) {
+		if (!draw->ib.buffer)
+			bypass_cache = true;
+		else if (of_resource(draw->ib.buffer)->dirty)
+			index_dirty = true;
+	}
 
-	memcpy(draw.elements, vtx->pipe,
-		vtx->num_elements * sizeof(draw.elements[0]));
-	memset(&draw.elements[vtx->num_elements], 0, sizeof(draw.elements)
-		- vtx->num_elements * sizeof(draw.elements[0]));
-	draw.num_elements = vtx->num_elements;
+	if (ctx->dirty & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF)) {
+		struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
+		struct of_vertex_stateobj *vtx = ctx->vtx;
+		uint8_t buffer_map[OF_MAX_ATTRIBS];
 
-	draw.num_vb = 0;
-	for (i = 0; i < vtx->num_elements; ++i) {
-		struct pipe_vertex_element *elem = &vtx->pipe[i];
-		struct pipe_vertex_buffer *vb =
+		if (vtx->num_elements < 1
+		    || vtx->num_elements >= OF_MAX_ATTRIBS)
+			return;
+
+		memcpy(draw->elements, vtx->pipe,
+			vtx->num_elements * sizeof(draw->elements[0]));
+		memset(&draw->elements[vtx->num_elements], 0,
+			sizeof(draw->elements)
+			- vtx->num_elements * sizeof(draw->elements[0]));
+		draw->num_elements = vtx->num_elements;
+
+		memset(buffer_map, 0xff, sizeof(buffer_map));
+
+		draw->num_vb = 0;
+		for (i = 0; i < vtx->num_elements; ++i) {
+			struct pipe_vertex_element *elem = &vtx->pipe[i];
+			struct pipe_vertex_buffer *vb =
 				&vertexbuf->vb[elem->vertex_buffer_index];
+
+			if (buffer_map[elem->vertex_buffer_index] == 0xff) {
+				memcpy(&draw->vb[draw->num_vb], vb,
+					sizeof(draw->vb[0]));
+				buffer_map[elem->vertex_buffer_index] =
+					draw->num_vb;
+				++draw->num_vb;
+			}
+
+			draw->elements[i].vertex_buffer_index =
+					buffer_map[elem->vertex_buffer_index];
+		}
+		memset(&draw->vb[draw->num_vb], 0, sizeof(draw->vb)
+			- draw->num_vb * sizeof(draw->vb[0]));
+	}
+
+	for (i = 0; i < draw->num_vb; ++i) {
+		struct pipe_vertex_buffer *vb = &draw->vb[i];
 
 		if (!vb->buffer)
 			bypass_cache = true;
 		else if (of_resource(vb->buffer)->dirty)
-			dirty |= 1 << elem->vertex_buffer_index;
-
-		if (buffer_map[elem->vertex_buffer_index] == 0xff) {
-			memcpy(&draw.vb[draw.num_vb], vb, sizeof(draw.vb[0]));
-			buffer_map[elem->vertex_buffer_index] = draw.num_vb;
-			++draw.num_vb;
-		}
-
-		draw.elements[i].vertex_buffer_index =
-					buffer_map[elem->vertex_buffer_index];
+			dirty |= 1 << i;
 	}
-	memset(&draw.vb[draw.num_vb], 0, sizeof(draw.vb)
-		- draw.num_vb * sizeof(draw.vb[0]));
 
-	hash_key = of_draw_hash(&draw);
+	memcpy(&draw->info, info, sizeof(draw->info));
+
+	hash_key = of_draw_hash(draw);
 	vertex = cso_hash_find_data_from_template(ctx->draw_hash, hash_key,
-							&draw, sizeof(draw));
+							draw, sizeof(*draw));
 
 	if (!vertex) {
-		vertex = of_create_vertex_info(ctx, &draw, bypass_cache);
+		vertex = of_create_vertex_info(ctx, draw, bypass_cache);
 		cso_hash_insert(ctx->draw_hash, hash_key, vertex);
 	} else if (dirty || index_dirty || LIST_IS_EMPTY(&vertex->buffers)) {
 		while (dirty) {
 			unsigned buffer = ffs(dirty) - 1;
-			struct pipe_vertex_buffer *vb = &vertexbuf->vb[buffer];
+			struct pipe_vertex_buffer *vb = &draw->vb[buffer];
 
 			of_kill_draw_caches(ctx, vb->buffer);
 			dirty &= ~(1 << buffer);
@@ -605,8 +635,8 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		}
 
 		if (index_dirty) {
-			of_kill_draw_caches(ctx, indexbuf->buffer);
-			of_resource(indexbuf->buffer)->dirty = false;
+			of_kill_draw_caches(ctx, draw->ib.buffer);
+			of_resource(draw->ib.buffer)->dirty = false;
 
 			vertex->first_draw = true;
 		}
@@ -677,7 +707,8 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 {
 	struct of_context *ctx = of_context(pctx);
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer.base;
-	struct of_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = ctx->ring;
+	uint32_t *pkt;
 
 	if (!ctx->solid_prog.fp)
 		of_context_init_solid(ctx);
@@ -706,13 +737,14 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	of_program_emit(ctx, &ctx->solid_prog);
 
 	/* emit clear color */
-	OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
+	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
 	OUT_RING(ring, RSD_UNIT_TYPE_OFFS(SHADER_FRAGMENT,
 			G3D_SHADER_DATA_FLOAT, 0));
 	OUT_RING(ring, color->ui[0]);
 	OUT_RING(ring, color->ui[1]);
 	OUT_RING(ring, color->ui[2]);
 	OUT_RING(ring, color->ui[3]);
+	END_PKT(ring, pkt);
 
 	/* emit applicable generic state */
 	of_emit_state(ctx, ctx->dirty &
@@ -720,7 +752,7 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 			OF_DIRTY_FRAMEBUFFER | OF_DIRTY_SCISSOR));
 
 	/* emit clear-specific state */
-	OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
+	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
 	OUT_RING(ring, REG_FGRA_D_OFF_EN);
 	OUT_RING(ring, 1);
@@ -779,6 +811,8 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 		OUT_RING(ring, REG_FGPF_FRONTST);
 		OUT_RING(ring, 0);
 	}
+
+	END_PKT(ring, pkt);
 
 	/* emit draw */
 	of_emit_draw(ctx, ctx->clear_vertex_info);
@@ -852,6 +886,9 @@ of_draw_init_solid(struct of_context *ctx)
 				FGHI_ATTRIB_NUM_COMP(3 - 1) |
 				FGHI_ATTRIB_SRCX(0) | FGHI_ATTRIB_SRCY(1) |
 				FGHI_ATTRIB_SRCZ(2) | FGHI_ATTRIB_SRCW(3);
+	element->vbctrl = FGHI_ATTRIB_VBCTRL_STRIDE(transfer->width)
+				| FGHI_ATTRIB_VBCTRL_RANGE(0xffff);
+	element->vbbase = FGHI_ATTRIB_VBBASE_ADDR(0);
 
 	buffer = of_get_batch_buffer(ctx);
 	if (!buffer) {
@@ -885,6 +922,7 @@ of_draw_init(struct pipe_context *pctx)
 	pctx->clear_depth_stencil = of_clear_depth_stencil;
 
 	ctx->draw_hash = cso_hash_create();
+	ctx->draw = CALLOC_STRUCT(of_draw_info);
 }
 
 void
@@ -892,6 +930,9 @@ of_draw_fini(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
 	struct of_vertex_info *info = ctx->clear_vertex_info;
+
+	if (ctx->draw)
+		FREE(ctx->draw);
 
 	if (info) {
 		struct of_vertex_buffer *buf, *n;

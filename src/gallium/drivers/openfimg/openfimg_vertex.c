@@ -125,6 +125,7 @@ struct of_vertex_buffer *of_get_batch_buffer(struct of_context *ctx)
 						PIPE_BIND_CUSTOM,
 						PIPE_USAGE_IMMUTABLE,
 						VERTEX_BUFFER_SIZE);
+	buffer->handle = fd_bo_handle(of_resource(buffer->buffer)->bo);
 
 	return buffer;
 }

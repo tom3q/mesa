@@ -113,8 +113,9 @@ fail:
 static void
 emit(struct of_context *ctx, struct of_shader_stateobj *so)
 {
-	struct of_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = ctx->ring;
 	unsigned num_attribs;
+	uint32_t *pkt;
 
 	if (so->info.sizedwords == 0)
 		assemble(ctx, so);
@@ -124,13 +125,14 @@ emit(struct of_context *ctx, struct of_shader_stateobj *so)
 	else
 		num_attribs = so->info.max_input_reg + 1;
 
-	OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM);
+	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM);
 	OUT_RING(ring, (so->type << 8) | num_attribs);
 	OUT_RING(ring, 4 * (so->first_immediate + so->num_immediates));
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(of_resource(so->buffer)->bo));
 	OUT_RING(ring, 0);
 	OUT_RING(ring, so->info.sizedwords * 4);
+	END_PKT(ring, pkt);
 }
 
 static void *

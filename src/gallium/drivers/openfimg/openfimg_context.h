@@ -42,6 +42,7 @@
 
 struct of_vertex_stateobj;
 struct of_vertex_info;
+struct of_draw_info;
 
 struct of_texture_stateobj {
 	struct pipe_sampler_view *textures[PIPE_MAX_SAMPLERS];
@@ -57,12 +58,12 @@ struct of_program_stateobj {
 		OF_SHADER_DIRTY_VP = (1 << 0),
 		OF_SHADER_DIRTY_FP = (1 << 1),
 	} dirty;
-	uint8_t num_exports;
 	/* Indexed by semantic name or TGSI_SEMANTIC_COUNT + semantic index
 	 * for TGSI_SEMANTIC_GENERIC.  Special vs exports (position and point-
 	 * size) are not included in this
 	 */
 	uint8_t export_linkage[63];
+	uint8_t num_exports;
 };
 
 struct of_constbuf_stateobj {
@@ -129,10 +130,10 @@ struct of_context {
 	unsigned num_draws;
 	uint32_t last_timestamp;
 
-	struct of_ringbuffer *rings[2];
+	struct fd_ringbuffer *rings[2];
 	unsigned rings_idx;
 
-	struct of_ringbuffer *ring;
+	struct fd_ringbuffer *ring;
 	struct fd_ringmarker *draw_start, *draw_end;
 
 	struct pipe_scissor_state scissor;
@@ -180,6 +181,7 @@ struct of_context {
 	struct of_program_stateobj prog;
 
 	struct of_vertex_stateobj *vtx;
+	struct of_draw_info *draw;
 
 	uint32_t blend_color;
 	struct pipe_stencil_ref stencil_ref;

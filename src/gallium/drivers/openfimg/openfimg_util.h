@@ -103,67 +103,9 @@ static inline uint32_t xy2d(uint16_t x, uint16_t y)
 	return ((y & 0x3fff) << 16) | (x & 0x3fff);
 }
 
-struct of_ringbuffer {
-	struct fd_ringbuffer *base;
-
-	uint32_t *last_pkt;
-};
-
 static inline void
-of_ringbuffer_reset(struct of_ringbuffer *ring)
+OUT_RING(struct fd_ringbuffer *ring, uint32_t data)
 {
-	fd_ringbuffer_reset(ring->base);
-}
-
-static inline uint32_t
-of_ringbuffer_timestamp(struct of_ringbuffer *ring)
-{
-	return fd_ringbuffer_timestamp(ring->base);
-}
-
-static inline void
-of_ringbuffer_set_parent(struct of_ringbuffer *ring,
-			 struct of_ringbuffer *parent)
-{
-	fd_ringbuffer_set_parent(ring->base, parent ? parent->base : NULL);
-}
-
-static inline struct fd_ringmarker *
-of_ringmarker_new(struct of_ringbuffer *ring)
-{
-	return fd_ringmarker_new(ring->base);
-}
-
-static inline void
-of_ringmarker_del(struct fd_ringmarker *marker)
-{
-	fd_ringmarker_del(marker);
-}
-
-static inline void
-of_ringmarker_mark(struct fd_ringmarker *marker)
-{
-	fd_ringmarker_mark(marker);
-}
-
-static inline uint32_t
-of_ringmarker_dwords(struct fd_ringmarker *start,
-			struct fd_ringmarker *end)
-{
-	return fd_ringmarker_dwords(start, end);
-}
-
-static inline int
-of_ringmarker_flush(struct fd_ringmarker *marker)
-{
-	return fd_ringmarker_flush(marker);
-}
-
-static inline void
-OUT_RING(struct of_ringbuffer *rb, uint32_t data)
-{
-	struct fd_ringbuffer *ring = rb->base;
-
 	if (LOG_DWORDS) {
 		DBG("ring[%p]: OUT_RING   %04x:  %08x", ring,
 				(uint32_t)(ring->cur - ring->last_start), data);
@@ -171,22 +113,22 @@ OUT_RING(struct of_ringbuffer *rb, uint32_t data)
 	*(ring->cur++) = data;
 }
 
-static inline void BEGIN_RING(struct of_ringbuffer *rb)
+static inline uint32_t *
+OUT_PKT(struct fd_ringbuffer *ring, uint8_t opcode)
 {
-	struct fd_ringbuffer *ring = rb->base;
+	uint32_t *pkt = ring->cur;
 
-	if (rb->last_pkt != ring->cur) {
-		*rb->last_pkt |= sizeof(uint32_t) *
-					((ring->cur - rb->last_pkt) - 1);
-		rb->last_pkt = ring->cur;
-	}
+	OUT_RING(ring, (opcode) << 24);
+
+	return pkt;
 }
 
 static inline void
-OUT_PKT(struct of_ringbuffer *rb, uint8_t opcode)
+END_PKT(struct fd_ringbuffer *ring, uint32_t *pkt)
 {
-	BEGIN_RING(rb);
-	OUT_RING(rb, (opcode) << 24);
+	assert(pkt >= ring->last_start && pkt < ring->cur);
+
+	*pkt |= sizeof(uint32_t) * ((ring->cur - pkt) - 1);
 }
 
 static inline enum pipe_format
