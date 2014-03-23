@@ -43,12 +43,13 @@
  */
 
 static void
-emit_constants(struct of_ringbuffer *ring,
+emit_constants(struct fd_ringbuffer *ring,
 	       struct of_constbuf_stateobj *constbuf, bool emit_immediates,
 	       struct of_shader_stateobj *shader)
 {
 	uint32_t enabled_mask = constbuf->enabled_mask;
 	uint32_t base = 0;
+	uint32_t *pkt;
 	unsigned i;
 
 	// XXX TODO only emit dirty consts.. but we need to keep track if
@@ -82,11 +83,12 @@ emit_constants(struct of_ringbuffer *ring,
 			dwords = (uint32_t *)(((uint8_t *)dwords) + cb->buffer_offset);
 
 			if (size) {
-				OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
+				pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
 				OUT_RING(ring, RSD_UNIT_TYPE_OFFS(shader->type,
 						G3D_SHADER_DATA_FLOAT, base));
 				for (i = 0; i < size; i++)
 					OUT_RING(ring, *(dwords++));
+				END_PKT(ring, pkt);
 			}
 
 			constbuf->dirty_mask &= ~(1 << index);
@@ -100,7 +102,7 @@ emit_constants(struct of_ringbuffer *ring,
 	if (!emit_immediates || !shader->num_immediates)
 		return;
 
-	OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
+	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
 	OUT_RING(ring, RSD_UNIT_TYPE_OFFS(shader->type,
 			G3D_SHADER_DATA_FLOAT, 4 * shader->first_immediate));
 
@@ -110,17 +112,20 @@ emit_constants(struct of_ringbuffer *ring,
 		OUT_RING(ring, shader->immediates[i].val[2]);
 		OUT_RING(ring, shader->immediates[i].val[3]);
 	}
+
+	END_PKT(ring, pkt);
 }
 
 typedef uint32_t texmask;
 
 static texmask
-emit_texture(struct of_ringbuffer *ring, struct of_context *ctx,
+emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 	     struct of_texture_stateobj *tex, unsigned samp_id, texmask emitted)
 {
 	unsigned const_idx = of_get_const_idx(ctx, tex, samp_id);
 	struct of_sampler_stateobj *sampler;
 	struct of_pipe_sampler_view *view;
+	uint32_t *pkt;
 
 	if (emitted & (1 << const_idx))
 		return 0;
@@ -128,7 +133,7 @@ emit_texture(struct of_ringbuffer *ring, struct of_context *ctx,
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
 	view = of_pipe_sampler_view(tex->textures[samp_id]);
 
-	OUT_PKT(ring, G3D_REQUEST_TEXTURE);
+	pkt = OUT_PKT(ring, G3D_REQUEST_TEXTURE);
 	OUT_RING(ring, sampler->tsta | view->tsta);
 	OUT_RING(ring, view->width);
 	OUT_RING(ring, view->height);
@@ -149,18 +154,20 @@ emit_texture(struct of_ringbuffer *ring, struct of_context *ctx,
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(view->tex_resource->bo));
 	OUT_RING(ring, (samp_id << 24) | view->tex_resource->dirty ? 1 : 0);
+	END_PKT(ring, pkt);
 
 	return (1 << const_idx);
 }
 
 static texmask
-emit_vtx_texture(struct of_ringbuffer *ring, struct of_context *ctx,
+emit_vtx_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 		 struct of_texture_stateobj *tex, unsigned samp_id,
 		 texmask emitted)
 {
 	unsigned const_idx = of_get_const_idx(ctx, tex, samp_id);
 	struct of_sampler_stateobj *sampler;
 	struct of_pipe_sampler_view *view;
+	uint32_t *pkt;
 
 	if (emitted & (1 << const_idx))
 		return 0;
@@ -168,17 +175,18 @@ emit_vtx_texture(struct of_ringbuffer *ring, struct of_context *ctx,
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
 	view = of_pipe_sampler_view(tex->textures[samp_id]);
 
-	OUT_PKT(ring, G3D_REQUEST_VTX_TEXTURE);
+	pkt = OUT_PKT(ring, G3D_REQUEST_VTX_TEXTURE);
 	OUT_RING(ring, sampler->vtx_tsta | view->vtx_tsta);
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(view->tex_resource->bo));
 	OUT_RING(ring, (samp_id << 24) | view->tex_resource->dirty ? 1 : 0);
+	END_PKT(ring, pkt);
 
 	return (1 << const_idx);
 }
 
 static void
-emit_textures(struct of_ringbuffer *ring, struct of_context *ctx)
+emit_textures(struct fd_ringbuffer *ring, struct of_context *ctx)
 {
 	texmask emitted = 0;
 	unsigned i;
@@ -197,7 +205,11 @@ emit_textures(struct of_ringbuffer *ring, struct of_context *ctx)
 void
 of_emit_state(struct of_context *ctx, uint32_t dirty)
 {
-	struct of_ringbuffer *ring = ctx->ring;
+	struct fd_ringbuffer *ring = ctx->ring;
+	uint32_t *pkt;
+
+	if (!dirty)
+		goto done;
 
 	/* NOTE: we probably want to eventually refactor this so each state
 	 * object handles emitting it's own state..  although the mapping of
@@ -215,22 +227,24 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		else
 			rsc = NULL;
 
-		OUT_PKT(ring, G3D_REQUEST_COLORBUFFER);
+		pkt = OUT_PKT(ring, G3D_REQUEST_COLORBUFFER);
 		OUT_RING(ring, fb->fgpf_fbctl);
 		OUT_RING(ring, 0);
 		OUT_RING(ring, fb->base.width);
 		OUT_RING(ring, rsc ? fd_bo_handle(rsc->bo) : 0);
 		OUT_RING(ring, rsc ? G3D_CBUFFER_DIRTY : G3D_CBUFFER_DETACH);
+		END_PKT(ring, pkt);
 
 		if (fb->base.zsbuf)
 			rsc = of_resource(fb->base.zsbuf->texture);
 		else
 			rsc = NULL;
 
-		OUT_PKT(ring, G3D_REQUEST_DEPTHBUFFER);
+		pkt = OUT_PKT(ring, G3D_REQUEST_DEPTHBUFFER);
 		OUT_RING(ring, 0);
 		OUT_RING(ring, rsc ? fd_bo_handle(rsc->bo) : 0);
 		OUT_RING(ring, rsc ? G3D_DBUFFER_DIRTY : G3D_DBUFFER_DETACH);
+		END_PKT(ring, pkt);
 	}
 
 	if (dirty & (OF_DIRTY_PROG | OF_DIRTY_VTXSTATE | OF_DIRTY_TEXSTATE)) {
@@ -248,7 +262,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	if (dirty & (OF_DIRTY_VERTTEX | OF_DIRTY_FRAGTEX | OF_DIRTY_PROG))
 		emit_textures(ring, ctx);
 
-	OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
+	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
 	if (dirty & OF_DIRTY_RASTERIZER) {
 		struct of_rasterizer_stateobj *rasterizer =
@@ -341,6 +355,9 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		OUT_RING(ring, zsa->fgpf_dbmsk);
 	}
 
+	END_PKT(ring, pkt);
+
+done:
 	ctx->dirty &= ~dirty;
 }
 

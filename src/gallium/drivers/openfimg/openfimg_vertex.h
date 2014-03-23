@@ -60,24 +60,22 @@ struct of_vertex_transfer {
 	const void *pointer;
 	unsigned vertex_buffer_index;
 	uint32_t src_offset;
+	uint16_t offset;
 	uint8_t stride;
 	uint8_t width;
-	uint16_t offset;
 };
 
 struct of_vertex_element {
+	uint32_t attrib;
+	uint32_t vbctrl;
+	uint32_t vbbase;
+	uint16_t offset;
 	uint8_t transfer_index;
 	uint8_t width;
-	uint16_t offset;
-	uint32_t attrib;
 };
 
 struct of_vertex_info {
 	struct of_draw_info key;
-
-	bool first_draw:1;
-	bool bypass_cache:1;
-	bool indexed:1;
 
 	unsigned batch_size;
 	unsigned draw_mode;
@@ -97,10 +95,15 @@ struct of_vertex_info {
 	struct of_vertex_transfer transfers[OF_MAX_ATTRIBS];
 	struct of_vertex_element elements[OF_MAX_ATTRIBS];
 	struct list_head buffers;
+
+	bool first_draw:1;
+	bool bypass_cache:1;
+	bool indexed:1;
 };
 
 struct of_vertex_buffer {
 	struct pipe_resource *buffer;
+	uint32_t handle;
 	unsigned nr_vertices;
 	unsigned bytes_used;
 	struct list_head list;
