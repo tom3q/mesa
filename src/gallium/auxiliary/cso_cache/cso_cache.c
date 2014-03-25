@@ -221,6 +221,25 @@ void *cso_hash_find_data_from_template( struct cso_hash *hash,
    return NULL;
 }
 
+void *cso_hash_find_data_from_template_c( struct cso_hash *hash,
+				        unsigned hash_key,
+				        void *templ,
+				        int size,
+					compare_func_t *compare)
+{
+   struct cso_hash_iter iter = cso_hash_find(hash, hash_key);
+   while (!cso_hash_iter_is_null(iter)) {
+      void *iter_data = cso_hash_iter_data(iter);
+      if (!compare(iter_data, templ, size)) {
+	 /* We found a match
+	  */
+         return iter_data;
+      }
+      iter = cso_hash_iter_next(iter);
+   }
+   return NULL;
+}
+
 
 struct cso_hash_iter cso_find_state_template(struct cso_cache *sc,
                                              unsigned hash_key, enum cso_cache_type type,
