@@ -121,6 +121,13 @@ void *cso_hash_find_data_from_template( struct cso_hash *hash,
 				        void *templ,
 				        int size );
 
+typedef int compare_func_t(const void *, const void *, size_t);
+
+void *cso_hash_find_data_from_template_c( struct cso_hash *hash,
+				        unsigned hash_key,
+				        void *templ,
+				        int size,
+					compare_func_t *compare);
 
 #ifdef	__cplusplus
 }
