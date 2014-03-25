@@ -102,7 +102,7 @@ COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
 	unsigned i;
 	void *dst;
 
-	prim_data = &primitive_data[draw->key.info.mode];
+	prim_data = &primitive_data[draw->key.base.info.mode];
 	batch_size = draw->batch_size - prim_data->extra;
 
 	if (batch_size > *count)

@@ -260,7 +260,7 @@ void of_prepare_draw_idx32(struct of_context *ctx, struct of_vertex_info *vtx,
  */
 void of_prepare_draw_seq(struct of_context *ctx, struct of_vertex_info *vtx)
 {
-	PREPARE_DRAW(ctx, vtx, vtx->count, vtx->key.info.start);
+	PREPARE_DRAW(ctx, vtx, vtx->count, vtx->key.base.info.start);
 }
 
 #undef INDEX_TYPE
