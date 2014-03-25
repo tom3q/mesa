@@ -47,12 +47,72 @@
 
 #include <stdlib.h>
 
+static uint32_t
+add_to_hash(uint32_t hash, const void *data, size_t size)
+{
+	const uint32_t *key = data;
+	uint32_t i;
+
+	for (i = 0; i < size / 4; ++i) {
+		hash += key[i];
+		hash += (hash << 10);
+		hash ^= (hash >> 6);
+	}
+
+	return hash;
+}
+
+static uint32_t
+finish_hash(uint32_t hash)
+{
+	hash += (hash << 3);
+	hash ^= (hash >> 11);
+	hash += (hash << 15);
+
+	return hash;
+}
+
 static INLINE unsigned
 of_draw_hash(struct of_draw_info *req)
 {
-	unsigned hash_key;
-	hash_key = cso_construct_key(req, sizeof(*req));
-	return hash_key;
+	uint32_t hash;
+
+	hash = add_to_hash(0, &req->base, sizeof(req->base));
+	hash = add_to_hash(hash, req->elements,
+			req->base.num_elements * sizeof(req->elements[0]));
+	hash = add_to_hash(hash, req->vb,
+			req->base.num_vb * sizeof(req->vb[0]));
+	if (req->base.info.indexed)
+		hash = add_to_hash(hash, &req->ib, sizeof(req->ib));
+
+	return finish_hash(hash);
+}
+
+static int
+draw_info_compare(const void *a, const void *b, size_t size)
+{
+	const struct of_draw_info *req1 = a;
+	const struct of_draw_info *req2 = b;
+	int ret;
+
+	ret = memcmp(&req1->base, &req2->base, sizeof(req1->base));
+	if (ret)
+		return ret;
+
+	ret = memcmp(req1->elements, req2->elements,
+			req1->base.num_elements * sizeof(req1->elements[0]));
+	if (ret)
+		return ret;
+
+	ret = memcmp(req1->vb, req2->vb,
+			req1->base.num_vb * sizeof(req1->vb[0]));
+	if (ret)
+		return ret;
+
+	if (req1->base.info.indexed)
+		return memcmp(&req1->ib, &req2->ib, sizeof(req1->ib));
+
+	return 0;
 }
 
 static void
@@ -86,7 +146,7 @@ of_allocate_vertex_buffer(struct of_context *ctx, struct of_vertex_info *vertex)
 
 	vertex->batch_size = batch_size;
 
-	for (i = 0; i < draw->num_elements; ++i) {
+	for (i = 0; i < draw->base.num_elements; ++i) {
 		struct of_vertex_element *element = &vertex->elements[i];
 		struct of_vertex_transfer *transfer =
 				&vertex->transfers[element->transfer_index];
@@ -106,7 +166,7 @@ of_primconvert_run(struct of_context *ctx, struct of_vertex_info *vertex)
 	const struct of_draw_info *draw = &vertex->key;
 	struct pipe_index_buffer *new_ib = &vertex->ib;
 	const struct pipe_index_buffer *ib = &draw->ib;
-	const struct pipe_draw_info *info = &draw->info;
+	const struct pipe_draw_info *info = &draw->base.info;
 	const void *src;
 	void *dst;
 
@@ -162,7 +222,7 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 	const void *indices;
 	unsigned i;
 
-	if (!of_supported_prim(ctx, draw->info.mode)) {
+	if (!of_supported_prim(ctx, draw->base.info.mode)) {
 		of_primconvert_run(ctx, vertex);
 		primconvert = true;
 	}
@@ -261,7 +321,7 @@ of_primconvert_prepare(struct of_context *ctx, struct of_vertex_info *vertex)
 	const struct pipe_rasterizer_state *rast = ctx->rasterizer;
 	const struct of_draw_info *draw = &vertex->key;
 	struct pipe_index_buffer *new_ib = &vertex->ib;
-	const struct pipe_draw_info *info = &draw->info;
+	const struct pipe_draw_info *info = &draw->base.info;
 	unsigned api_pv;
 
 	memset(new_ib, 0, sizeof(*new_ib));
@@ -392,10 +452,10 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 	vertex->num_transfers = 0;
 
 	/* emulate unsupported primitives: */
-	if (of_supported_prim(ctx, draw->info.mode)) {
-		vertex->indexed = draw->info.indexed;
-		vertex->mode = draw->info.mode;
-		vertex->count = draw->info.count;
+	if (of_supported_prim(ctx, draw->base.info.mode)) {
+		vertex->indexed = draw->base.info.indexed;
+		vertex->mode = draw->base.info.mode;
+		vertex->count = draw->base.info.count;
 		vertex->trans_func = NULL;
 		vertex->gen_func = NULL;
 		memcpy(&vertex->ib, &draw->ib, sizeof(vertex->ib));
@@ -406,7 +466,7 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 	vertex->draw_mode = ctx->primtypes[vertex->mode];
 
 	num_arrays = 0;
-	for (i = 0; i < draw->num_elements; ++i) {
+	for (i = 0; i < draw->base.num_elements; ++i) {
 		const struct pipe_vertex_element *draw_element =
 							&draw->elements[i];
 		struct of_vertex_element *vtx_element = &vertex->elements[i];
@@ -422,8 +482,9 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 	}
 
 	/* Mark last element with terminating flag */
-	if (draw->num_elements > 0 && draw->num_elements < OF_MAX_ATTRIBS)
-		vertex->elements[draw->num_elements - 1].attrib |=
+	if (draw->base.num_elements > 0
+	    && draw->base.num_elements < OF_MAX_ATTRIBS)
+		vertex->elements[draw->base.num_elements - 1].attrib |=
 							FGHI_ATTRIB_LAST_ATTR;
 
 	/* Try to detect interleaved arrays */
@@ -495,7 +556,7 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 
 	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
-	for (i = 0; i < draw->num_elements; ++i) {
+	for (i = 0; i < draw->base.num_elements; ++i) {
 		struct of_vertex_element *element = &info->elements[i];
 
 		OUT_RING(ring, REG_FGHI_ATTRIB(i));
@@ -548,14 +609,12 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	unsigned hash_key;
 	unsigned i;
 
-	if (draw->info.indexed != info->indexed
+	if (draw->base.info.indexed != info->indexed
 	    || ctx->dirty & OF_DIRTY_INDEXBUF) {
 		struct pipe_index_buffer *indexbuf = &ctx->indexbuf;
 
 		if (info->indexed)
 			memcpy(&draw->ib, indexbuf, sizeof(draw->ib));
-		else
-			memset(&draw->ib, 0, sizeof(draw->ib));
 	}
 
 	if (info->indexed) {
@@ -576,35 +635,30 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 
 		memcpy(draw->elements, vtx->pipe,
 			vtx->num_elements * sizeof(draw->elements[0]));
-		memset(&draw->elements[vtx->num_elements], 0,
-			sizeof(draw->elements)
-			- vtx->num_elements * sizeof(draw->elements[0]));
-		draw->num_elements = vtx->num_elements;
+		draw->base.num_elements = vtx->num_elements;
 
 		memset(buffer_map, 0xff, sizeof(buffer_map));
 
-		draw->num_vb = 0;
+		draw->base.num_vb = 0;
 		for (i = 0; i < vtx->num_elements; ++i) {
 			struct pipe_vertex_element *elem = &vtx->pipe[i];
 			struct pipe_vertex_buffer *vb =
 				&vertexbuf->vb[elem->vertex_buffer_index];
 
 			if (buffer_map[elem->vertex_buffer_index] == 0xff) {
-				memcpy(&draw->vb[draw->num_vb], vb,
+				memcpy(&draw->vb[draw->base.num_vb], vb,
 					sizeof(draw->vb[0]));
 				buffer_map[elem->vertex_buffer_index] =
-					draw->num_vb;
-				++draw->num_vb;
+					draw->base.num_vb;
+				++draw->base.num_vb;
 			}
 
 			draw->elements[i].vertex_buffer_index =
 					buffer_map[elem->vertex_buffer_index];
 		}
-		memset(&draw->vb[draw->num_vb], 0, sizeof(draw->vb)
-			- draw->num_vb * sizeof(draw->vb[0]));
 	}
 
-	for (i = 0; i < draw->num_vb; ++i) {
+	for (i = 0; i < draw->base.num_vb; ++i) {
 		struct pipe_vertex_buffer *vb = &draw->vb[i];
 
 		if (!vb->buffer)
@@ -613,11 +667,11 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 			dirty |= 1 << i;
 	}
 
-	memcpy(&draw->info, info, sizeof(draw->info));
+	memcpy(&draw->base.info, info, sizeof(draw->base.info));
 
 	hash_key = of_draw_hash(draw);
-	vertex = cso_hash_find_data_from_template(ctx->draw_hash, hash_key,
-							draw, sizeof(*draw));
+	vertex = cso_hash_find_data_from_template_c(ctx->draw_hash, hash_key,
+					draw, sizeof(*draw), draw_info_compare);
 
 	if (!vertex) {
 		vertex = of_create_vertex_info(ctx, draw, bypass_cache);
@@ -870,7 +924,7 @@ of_draw_init_solid(struct of_context *ctx)
 	if (!info)
 		return NULL;
 
-	draw->num_elements = 1;
+	draw->base.num_elements = 1;
 	info->num_transfers = 1;
 	info->draw_mode = PTYPE_TRIANGLES;
 	info->first_draw = false;

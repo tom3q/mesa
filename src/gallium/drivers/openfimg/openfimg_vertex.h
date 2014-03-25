@@ -47,13 +47,17 @@
 #define CONST_ADDR(attrib)	(4*MAX_WORDS_PER_ATTRIB*(attrib))
 #define DATA_OFFSET		(CONST_ADDR(MAX_ATTRIBS))
 
-struct of_draw_info {
+struct of_draw_info_base {
 	struct pipe_draw_info info;
-	struct pipe_index_buffer ib;
-	struct pipe_vertex_buffer vb[OF_MAX_ATTRIBS];
-	struct pipe_vertex_element elements[OF_MAX_ATTRIBS];
 	unsigned num_elements;
 	unsigned num_vb;
+};
+
+struct of_draw_info {
+	struct of_draw_info_base base;
+	struct pipe_vertex_element elements[OF_MAX_ATTRIBS];
+	struct pipe_vertex_buffer vb[OF_MAX_ATTRIBS];
+	struct pipe_index_buffer ib;
 };
 
 struct of_vertex_transfer {
