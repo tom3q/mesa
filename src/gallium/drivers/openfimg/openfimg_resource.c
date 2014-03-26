@@ -65,7 +65,7 @@ static void of_resource_transfer_flush_region(struct pipe_context *pctx,
 		of_context_render(pctx);
 
 	if (rsc->timestamp) {
-		fd_pipe_wait(ctx->pipe, rsc->timestamp);
+		//fd_pipe_wait(ctx->pipe, rsc->timestamp);
 		rsc->timestamp = 0;
 	}
 }
@@ -128,9 +128,9 @@ of_resource_transfer_map(struct pipe_context *pctx,
 	if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
 #if 1
 		if (rsc->timestamp) {
-			ret = fd_pipe_wait(ctx->pipe, rsc->timestamp);
-			if (ret)
-				goto fail;
+			//ret = fd_pipe_wait(ctx->pipe, rsc->timestamp);
+			//if (ret)
+			//	goto fail;
 			rsc->timestamp = 0;
 		}
 #else
