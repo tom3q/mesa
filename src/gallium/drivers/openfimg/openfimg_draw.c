@@ -543,7 +543,8 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 }
 
 static void
-of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
+of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
+	     uint32_t dirty)
 {
 	const struct of_draw_info *draw = &info->key;
 	struct of_rasterizer_stateobj *rasterizer;
@@ -554,25 +555,31 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info)
 
 	rasterizer = of_rasterizer_stateobj(ctx->rasterizer);
 
-	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
+	if (dirty & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF |
+							OF_DIRTY_RASTERIZER)
+	    || ctx->last_draw_mode != info->draw_mode) {
+		pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
-	for (i = 0; i < draw->base.num_elements; ++i) {
-		struct of_vertex_element *element = &info->elements[i];
+		for (i = 0; i < draw->base.num_elements; ++i) {
+			struct of_vertex_element *element = &info->elements[i];
 
-		OUT_RING(ring, REG_FGHI_ATTRIB(i));
-		OUT_RING(ring, element->attrib);
-		OUT_RING(ring, REG_FGHI_ATTRIB_VBCTRL(i));
-		OUT_RING(ring, element->vbctrl);
-		OUT_RING(ring, REG_FGHI_ATTRIB_VBBASE(i));
-		OUT_RING(ring, element->vbbase);
+			OUT_RING(ring, REG_FGHI_ATTRIB(i));
+			OUT_RING(ring, element->attrib);
+			OUT_RING(ring, REG_FGHI_ATTRIB_VBCTRL(i));
+			OUT_RING(ring, element->vbctrl);
+			OUT_RING(ring, REG_FGHI_ATTRIB_VBBASE(i));
+			OUT_RING(ring, element->vbbase);
+		}
+
+		OUT_RING(ring, REG_FGPE_VERTEX_CONTEXT);
+		OUT_RING(ring, rasterizer->fgpe_vertex_context |
+				FGPE_VERTEX_CONTEXT_TYPE(info->draw_mode) |
+				FGPE_VERTEX_CONTEXT_VSOUT(8));
+
+		END_PKT(ring, pkt);
+
+		ctx->last_draw_mode = info->draw_mode;
 	}
-
-	OUT_RING(ring, REG_FGPE_VERTEX_CONTEXT);
-	OUT_RING(ring, rasterizer->fgpe_vertex_context |
-			FGPE_VERTEX_CONTEXT_TYPE(info->draw_mode) |
-			FGPE_VERTEX_CONTEXT_VSOUT(8));
-
-	END_PKT(ring, pkt);
 
 	LIST_FOR_EACH_ENTRY_SAFE(buf, tmp, &info->buffers, list) {
 		pkt = OUT_PKT(ring, G3D_REQUEST_DRAW);
@@ -608,9 +615,10 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	unsigned dirty = 0;
 	unsigned hash_key;
 	unsigned i;
+	unsigned dirty_state = ctx->dirty;
 
 	if (draw->base.info.indexed != info->indexed
-	    || ctx->dirty & OF_DIRTY_INDEXBUF) {
+	    || dirty_state & OF_DIRTY_INDEXBUF) {
 		struct pipe_index_buffer *indexbuf = &ctx->indexbuf;
 
 		if (info->indexed)
@@ -624,7 +632,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 			index_dirty = true;
 	}
 
-	if (ctx->dirty & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF)) {
+	if (dirty_state & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF)) {
 		struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
 		struct of_vertex_stateobj *vtx = ctx->vtx;
 		uint8_t buffer_map[OF_MAX_ATTRIBS];
@@ -698,8 +706,8 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		of_build_vertex_data(ctx, vertex);
 	}
 
-	of_emit_state(ctx, ctx->dirty);
-	of_emit_draw(ctx, vertex);
+	of_emit_state(ctx, dirty_state);
+	of_emit_draw(ctx, vertex, dirty_state);
 }
 
 static void
@@ -869,7 +877,8 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	END_PKT(ring, pkt);
 
 	/* emit draw */
-	of_emit_draw(ctx, ctx->clear_vertex_info);
+	of_emit_draw(ctx, ctx->clear_vertex_info, OF_DIRTY_VTXSTATE |
+			OF_DIRTY_VTXBUF | OF_DIRTY_RASTERIZER);
 
 	ctx->dirty |= OF_DIRTY_ZSA |
 			OF_DIRTY_VIEWPORT |
@@ -877,7 +886,9 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 			OF_DIRTY_SAMPLE_MASK |
 			OF_DIRTY_PROG |
 			OF_DIRTY_CONSTBUF |
-			OF_DIRTY_BLEND;
+			OF_DIRTY_BLEND |
+			OF_DIRTY_VTXSTATE |
+			OF_DIRTY_VTXBUF;
 
 	if (of_mesa_debug & OF_DBG_DCLEAR)
 		ctx->dirty = 0xffffffff;
