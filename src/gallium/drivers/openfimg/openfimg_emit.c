@@ -153,7 +153,7 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 	OUT_RING(ring, view->base.u.tex.last_level);
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(view->tex_resource->bo));
-	OUT_RING(ring, (samp_id << 24) | view->tex_resource->dirty ? 1 : 0);
+	OUT_RING(ring, (samp_id << 24));
 	END_PKT(ring, pkt);
 
 	return (1 << const_idx);
@@ -179,7 +179,7 @@ emit_vtx_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 	OUT_RING(ring, sampler->vtx_tsta | view->vtx_tsta);
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(view->tex_resource->bo));
-	OUT_RING(ring, (samp_id << 24) | view->tex_resource->dirty ? 1 : 0);
+	OUT_RING(ring, (samp_id << 24));
 	END_PKT(ring, pkt);
 
 	return (1 << const_idx);
@@ -232,7 +232,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		OUT_RING(ring, 0);
 		OUT_RING(ring, fb->base.width);
 		OUT_RING(ring, rsc ? fd_bo_handle(rsc->bo) : 0);
-		OUT_RING(ring, rsc ? G3D_CBUFFER_DIRTY : G3D_CBUFFER_DETACH);
+		OUT_RING(ring, rsc ? 0 : G3D_CBUFFER_DETACH);
 		END_PKT(ring, pkt);
 
 		if (fb->base.zsbuf)
@@ -243,11 +243,11 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		pkt = OUT_PKT(ring, G3D_REQUEST_DEPTHBUFFER);
 		OUT_RING(ring, 0);
 		OUT_RING(ring, rsc ? fd_bo_handle(rsc->bo) : 0);
-		OUT_RING(ring, rsc ? G3D_DBUFFER_DIRTY : G3D_DBUFFER_DETACH);
+		OUT_RING(ring, rsc ? 0 : G3D_DBUFFER_DETACH);
 		END_PKT(ring, pkt);
 	}
 
-	if (dirty & (OF_DIRTY_PROG | OF_DIRTY_VTXSTATE | OF_DIRTY_TEXSTATE)) {
+	if (dirty & OF_DIRTY_PROG) {
 		of_program_validate(ctx);
 		of_program_emit(ctx, &ctx->prog);
 	}

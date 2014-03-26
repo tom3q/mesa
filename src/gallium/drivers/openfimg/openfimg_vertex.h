@@ -81,8 +81,14 @@ struct of_vertex_element {
 struct of_vertex_info {
 	struct of_draw_info key;
 
-	unsigned batch_size;
+	struct list_head buffers;
 	unsigned draw_mode;
+	bool first_draw:1;
+	bool bypass_cache:1;
+	bool indexed:1;
+	struct of_vertex_element elements[OF_MAX_ATTRIBS];
+
+	unsigned batch_size;
 	unsigned num_transfers;
 	unsigned num_draws;
 
@@ -97,12 +103,6 @@ struct of_vertex_info {
 	unsigned const_size;
 
 	struct of_vertex_transfer transfers[OF_MAX_ATTRIBS];
-	struct of_vertex_element elements[OF_MAX_ATTRIBS];
-	struct list_head buffers;
-
-	bool first_draw:1;
-	bool bypass_cache:1;
-	bool indexed:1;
 };
 
 struct of_vertex_buffer {
