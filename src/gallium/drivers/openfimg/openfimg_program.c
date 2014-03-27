@@ -82,7 +82,7 @@ fail:
 }
 
 static struct of_shader_stateobj *
-compile(struct of_program_stateobj *prog, struct of_shader_stateobj *so)
+compile(struct of_shader_stateobj *so)
 {
 	int ret;
 
@@ -91,7 +91,7 @@ compile(struct of_program_stateobj *prog, struct of_shader_stateobj *so)
 		tgsi_dump(so->tokens, 0);
 	}
 
-	ret = of_compile_shader(prog, so);
+	ret = of_compile_shader(so);
 	if (ret)
 		goto fail;
 
@@ -157,9 +157,11 @@ static void
 of_fp_state_bind(struct pipe_context *pctx, void *hwcso)
 {
 	struct of_context *ctx = of_context(pctx);
-	ctx->prog.fp = hwcso;
-	ctx->prog.dirty |= OF_SHADER_DIRTY_FP;
-	ctx->dirty |= OF_DIRTY_PROG;
+	ctx->cso.fp = hwcso;
+	if (ctx->cso_active.fp != hwcso)
+		ctx->dirty |= OF_DIRTY_PROG_FP;
+	else
+		ctx->dirty &= ~OF_DIRTY_PROG_FP;
 }
 
 static void *
@@ -184,9 +186,11 @@ static void
 of_vp_state_bind(struct pipe_context *pctx, void *hwcso)
 {
 	struct of_context *ctx = of_context(pctx);
-	ctx->prog.vp = hwcso;
-	ctx->prog.dirty |= OF_SHADER_DIRTY_VP;
-	ctx->dirty |= OF_DIRTY_PROG;
+	ctx->cso.vp = hwcso;
+	if (ctx->cso_active.vp != hwcso)
+		ctx->dirty |= OF_DIRTY_PROG_VP;
+	else
+		ctx->dirty &= ~OF_DIRTY_PROG_VP;
 }
 
 static const char *solid_fp =
@@ -240,48 +244,25 @@ static void * assemble_tgsi(struct pipe_context *pctx,
 }
 
 void
-of_program_validate(struct of_context *ctx)
+of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 {
-	struct of_program_stateobj *prog = &ctx->prog;
-
-	/* if vertex or frag shader is dirty, we may need to recompile. Compile
-	 * frag shader first, as that assigns the register slots for exports
-	 * from the vertex shader.  And therefore if frag shader has changed we
-	 * need to recompile both vert and frag shader.
-	 */
-	if (prog->dirty & OF_SHADER_DIRTY_FP)
-		compile(prog, prog->fp);
-
-	if (prog->dirty & (OF_SHADER_DIRTY_FP | OF_SHADER_DIRTY_VP))
-		compile(prog, prog->vp);
-
-	if (prog->dirty)
-		ctx->dirty |= OF_DIRTY_PROG;
-}
-
-void
-of_program_emit(struct of_context *ctx, struct of_program_stateobj *prog)
-{
-	emit(ctx, prog->vp);
-	emit(ctx, prog->fp);
-
-	prog->dirty = 0;
+	if (!so->ir)
+		compile(so);
+	emit(ctx, so);
 }
 
 void
 of_prog_init_solid(struct of_context *ctx)
 {
-	ctx->solid_prog.fp = assemble_tgsi(&ctx->base, solid_fp, true);
-	compile(&ctx->solid_prog, ctx->solid_prog.fp);
-	ctx->solid_prog.vp = assemble_tgsi(&ctx->base, solid_vp, false);
-	compile(&ctx->solid_prog, ctx->solid_prog.vp);
+	ctx->solid_fp = assemble_tgsi(&ctx->base, solid_fp, true);
+	ctx->solid_vp = assemble_tgsi(&ctx->base, solid_vp, false);
 }
 
 void
 of_prog_init_blit(struct of_context *ctx)
 {
-	ctx->blit_prog.fp = assemble_tgsi(&ctx->base, blit_fp, true);
-	ctx->blit_prog.vp = assemble_tgsi(&ctx->base, blit_vp, false);
+	ctx->blit_fp = assemble_tgsi(&ctx->base, blit_fp, true);
+	ctx->blit_vp = assemble_tgsi(&ctx->base, blit_vp, false);
 }
 
 void
@@ -301,13 +282,13 @@ of_prog_fini(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
 
-	if (ctx->solid_prog.vp)
-		pctx->delete_vs_state(pctx, ctx->solid_prog.vp);
-	if (ctx->solid_prog.fp)
-		pctx->delete_fs_state(pctx, ctx->solid_prog.fp);
+	if (ctx->solid_vp)
+		pctx->delete_vs_state(pctx, ctx->solid_vp);
+	if (ctx->solid_fp)
+		pctx->delete_fs_state(pctx, ctx->solid_fp);
 
-	if (ctx->blit_prog.vp)
-		pctx->delete_vs_state(pctx, ctx->blit_prog.vp);
-	if (ctx->blit_prog.fp)
-		pctx->delete_fs_state(pctx, ctx->blit_prog.fp);
+	if (ctx->blit_vp)
+		pctx->delete_vs_state(pctx, ctx->blit_vp);
+	if (ctx->blit_fp)
+		pctx->delete_fs_state(pctx, ctx->blit_fp);
 }
