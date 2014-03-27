@@ -58,7 +58,7 @@ static void of_resource_transfer_flush_region(struct pipe_context *pctx,
 		struct pipe_transfer *ptrans,
 		const struct pipe_box *box)
 {
-	struct of_context *ctx = of_context(pctx);
+	//struct of_context *ctx = of_context(pctx);
 	struct of_resource *rsc = of_resource(ptrans->resource);
 
 	if (rsc->dirty)
@@ -96,7 +96,7 @@ of_resource_transfer_map(struct pipe_context *pctx,
 	enum pipe_format format = prsc->format;
 	uint32_t op = 0;
 	char *buf;
-	int ret = 0;
+	//int ret = 0;
 
 	ptrans = util_slab_alloc(&ctx->transfer_pool);
 	if (!ptrans)
@@ -155,9 +155,9 @@ of_resource_transfer_map(struct pipe_context *pctx,
 		box->x / util_format_get_blockwidth(format) * rsc->cpp +
 		box->z * slice->size0;
 
-fail:
-	of_resource_transfer_unmap(pctx, ptrans);
-	return NULL;
+//fail:
+//	of_resource_transfer_unmap(pctx, ptrans);
+//	return NULL;
 }
 
 static void
@@ -381,6 +381,7 @@ of_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 static bool
 render_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 {
+#if 1
 	struct of_context *ctx = of_context(pctx);
 
 	if (!util_blitter_is_blit_supported(ctx->blitter, info)) {
@@ -391,14 +392,14 @@ render_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 	}
 
 	util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vertexbuf.vb);
-	util_blitter_save_vertex_elements(ctx->blitter, ctx->vtx);
-	util_blitter_save_vertex_shader(ctx->blitter, ctx->prog.vp);
-	util_blitter_save_rasterizer(ctx->blitter, ctx->rasterizer);
+	util_blitter_save_vertex_elements(ctx->blitter, ctx->cso.vtx);
+	util_blitter_save_vertex_shader(ctx->blitter, ctx->cso.vp);
+	util_blitter_save_rasterizer(ctx->blitter, ctx->cso.rasterizer);
 	util_blitter_save_viewport(ctx->blitter, &ctx->viewport);
 	util_blitter_save_scissor(ctx->blitter, &ctx->scissor);
-	util_blitter_save_fragment_shader(ctx->blitter, ctx->prog.fp);
-	util_blitter_save_blend(ctx->blitter, ctx->blend);
-	util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->zsa);
+	util_blitter_save_fragment_shader(ctx->blitter, ctx->cso.fp);
+	util_blitter_save_blend(ctx->blitter, ctx->cso.blend);
+	util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->cso.zsa);
 	util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);
 	util_blitter_save_sample_mask(ctx->blitter, ctx->sample_mask);
 	util_blitter_save_framebuffer(ctx->blitter, &ctx->framebuffer.base);
@@ -409,7 +410,7 @@ render_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
 			ctx->fragtex.num_textures, ctx->fragtex.textures);
 
 	util_blitter_blit(ctx->blitter, info);
-
+#endif
 	return true;
 }
 

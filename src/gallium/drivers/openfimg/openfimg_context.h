@@ -43,6 +43,7 @@
 struct of_vertex_stateobj;
 struct of_vertex_info;
 struct of_draw_info;
+struct of_shader_stateobj;
 
 struct of_texture_stateobj {
 	struct pipe_sampler_view *textures[PIPE_MAX_SAMPLERS];
@@ -50,20 +51,6 @@ struct of_texture_stateobj {
 	struct pipe_sampler_state *samplers[PIPE_MAX_SAMPLERS];
 	unsigned num_samplers;
 	unsigned dirty_samplers;
-};
-
-struct of_program_stateobj {
-	void *vp, *fp;
-	enum {
-		OF_SHADER_DIRTY_VP = (1 << 0),
-		OF_SHADER_DIRTY_FP = (1 << 1),
-	} dirty;
-	/* Indexed by semantic name or TGSI_SEMANTIC_COUNT + semantic index
-	 * for TGSI_SEMANTIC_GENERIC.  Special vs exports (position and point-
-	 * size) are not included in this
-	 */
-	uint8_t export_linkage[63];
-	uint8_t num_exports;
 };
 
 struct of_constbuf_stateobj {
@@ -89,6 +76,14 @@ struct of_framebuffer_stateobj {
 	uint32_t fgpf_fbctl;
 };
 
+struct of_cso_state {
+	struct pipe_blend_state *blend;
+	struct pipe_rasterizer_state *rasterizer;
+	struct pipe_depth_stencil_alpha_state *zsa;
+	struct of_vertex_stateobj *vtx;
+	struct of_shader_stateobj *vp, *fp;
+};
+
 struct of_context {
 	struct pipe_context base;
 
@@ -107,11 +102,11 @@ struct of_context {
 	uint32_t primtype_mask;
 
 	/* optional state used for hardware clear */
-	struct of_program_stateobj solid_prog; // TODO move to screen?
+	struct of_shader_stateobj *solid_vp, *solid_fp; // TODO move to screen?
 	struct of_vertex_info *clear_vertex_info;
 
 	/* optional state used for hardware blitting */
-	struct of_program_stateobj blit_prog; // TODO move to screen?
+	struct of_shader_stateobj *blit_vp, *blit_fp; // TODO move to screen?
 
 	/* do we need to mem2gmem before rendering.  We don't, if for example,
 	 * there was a glClear() that invalidated the entire previous buffer
@@ -159,7 +154,6 @@ struct of_context {
 		OF_DIRTY_FRAGTEX     = (1 <<  3),
 		OF_DIRTY_VERTTEX     = (1 <<  4),
 		OF_DIRTY_TEXSTATE    = (1 <<  5),
-		OF_DIRTY_PROG        = (1 <<  6),
 		OF_DIRTY_BLEND_COLOR = (1 <<  7),
 		OF_DIRTY_STENCIL_REF = (1 <<  8),
 		OF_DIRTY_SAMPLE_MASK = (1 <<  9),
@@ -171,17 +165,15 @@ struct of_context {
 		OF_DIRTY_VTXBUF      = (1 << 15),
 		OF_DIRTY_INDEXBUF    = (1 << 16),
 		OF_DIRTY_SCISSOR     = (1 << 17),
+		OF_DIRTY_PROG_VP     = (1 << 18),
+		OF_DIRTY_PROG_FP     = (1 << 19),
 	} dirty;
 
-	struct pipe_blend_state *blend;
-	struct pipe_rasterizer_state *rasterizer;
-	struct pipe_depth_stencil_alpha_state *zsa;
+	struct of_cso_state cso;
+	struct of_cso_state cso_active;
 
 	struct of_texture_stateobj verttex, fragtex;
 
-	struct of_program_stateobj prog;
-
-	struct of_vertex_stateobj *vtx;
 	struct of_draw_info *draw;
 
 	uint32_t blend_color;
@@ -205,7 +197,7 @@ of_context(struct pipe_context *pctx)
 static INLINE struct pipe_scissor_state *
 of_context_get_scissor(struct of_context *ctx)
 {
-	if (ctx->rasterizer && ctx->rasterizer->scissor)
+	if (ctx->cso.rasterizer && ctx->cso.rasterizer->scissor)
 		return &ctx->scissor;
 	return &ctx->disabled_scissor;
 }

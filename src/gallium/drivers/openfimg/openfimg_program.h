@@ -66,8 +66,7 @@ struct of_shader_stateobj {
 	} immediates[64];
 };
 
-void of_program_emit(struct of_context *ctx, struct of_program_stateobj *prog);
-void of_program_validate(struct of_context *ctx);
+void of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so);
 
 void of_prog_init_solid(struct of_context *ctx);
 void of_prog_init_blit(struct of_context *ctx);
