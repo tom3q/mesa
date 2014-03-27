@@ -31,7 +31,6 @@
 #include "openfimg_program.h"
 #include "openfimg_util.h"
 
-int of_compile_shader(struct of_program_stateobj *prog,
-		struct of_shader_stateobj *so);
+int of_compile_shader(struct of_shader_stateobj *so);
 
 #endif /* OF_COMPILER_H_ */

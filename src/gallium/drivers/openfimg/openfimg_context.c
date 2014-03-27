@@ -26,6 +26,7 @@
  */
 
 #include "util/u_format.h"
+#include "util/u_blit.h"
 
 #include "openfimg_context.h"
 #include "openfimg_draw.h"

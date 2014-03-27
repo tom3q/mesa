@@ -113,28 +113,11 @@ semantic_idx(struct tgsi_declaration_semantic *semantic)
 	return idx;
 }
 
-/* assign/get the input/export register # for given semantic idx as
- * returned by semantic_idx():
- */
-static int
-export_linkage(struct of_compile_context *ctx, int idx)
-{
-	struct of_program_stateobj *prog = ctx->prog;
-
-	/* if first time we've seen this export, assign the next available slot: */
-	if (prog->export_linkage[idx] == 0xff)
-		prog->export_linkage[idx] = prog->num_exports++;
-
-	return prog->export_linkage[idx];
-}
-
 static unsigned
-compile_init(struct of_compile_context *ctx, struct of_program_stateobj *prog,
-		struct of_shader_stateobj *so)
+compile_init(struct of_compile_context *ctx, struct of_shader_stateobj *so)
 {
 	unsigned ret;
 
-	ctx->prog = prog;
 	ctx->so = so;
 	ctx->pred_depth = 0;
 	ctx->shader = so->ir;
@@ -296,12 +279,12 @@ static struct ir2_register *add_dst_reg(struct of_compile_context *ctx,
 	case TGSI_FILE_OUTPUT:
 		type = REG_DST_O;
 		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
-			if (dst->Index == ctx->position) {
+			if (dst->Index < ctx->position)
+				num = 1 + dst->Index;
+			else if (dst->Index > ctx->position)
+				num = dst->Index;
+			else
 				num = 0;
-			} else {
-				num = 1 + export_linkage(ctx,
-					ctx->output_export_idx[dst->Index]);
-			}
 		} else {
 			num = dst->Index;
 		}
@@ -342,12 +325,7 @@ static struct ir2_register *add_src_reg(struct of_compile_context *ctx,
 		type = REG_SRC_C;
 		break;
 	case TGSI_FILE_INPUT:
-		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
-			num = src->Index;
-		} else {
-			num = export_linkage(ctx,
-					ctx->input_export_idx[src->Index]);
-		}
+		num = src->Index;
 		type = REG_SRC_V;
 		break;
 	case TGSI_FILE_TEMPORARY:
@@ -880,8 +858,7 @@ compile_instructions(struct of_compile_context *ctx)
 }
 
 int
-of_compile_shader(struct of_program_stateobj *prog,
-		struct of_shader_stateobj *so)
+of_compile_shader(struct of_shader_stateobj *so)
 {
 	struct of_compile_context ctx;
 
@@ -889,14 +866,8 @@ of_compile_shader(struct of_program_stateobj *prog,
 	so->ir = ir2_shader_create();
 	so->num_immediates = 0;
 
-	if (compile_init(&ctx, prog, so) != TGSI_PARSE_OK)
+	if (compile_init(&ctx, so) != TGSI_PARSE_OK)
 		return -1;
-
-	if (ctx.type == TGSI_PROCESSOR_FRAGMENT) {
-		prog->num_exports = 0;
-		memset(prog->export_linkage, 0xff,
-				sizeof(prog->export_linkage));
-	}
 
 	compile_instructions(&ctx);
 

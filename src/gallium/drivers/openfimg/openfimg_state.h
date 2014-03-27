@@ -58,22 +58,22 @@ struct of_zsa_stateobj {
 
 static inline bool of_depth_enabled(struct of_context *ctx)
 {
-	return ctx->zsa && ctx->zsa->depth.enabled;
+	return ctx->cso.zsa && ctx->cso.zsa->depth.enabled;
 }
 
 static inline bool of_stencil_enabled(struct of_context *ctx)
 {
-	return ctx->zsa && ctx->zsa->stencil[0].enabled;
+	return ctx->cso.zsa && ctx->cso.zsa->stencil[0].enabled;
 }
 
 static inline bool of_logicop_enabled(struct of_context *ctx)
 {
-	return ctx->blend && ctx->blend->logicop_enable;
+	return ctx->cso.blend && ctx->cso.blend->logicop_enable;
 }
 
 static inline bool of_blend_enabled(struct of_context *ctx, unsigned n)
 {
-	return ctx->blend && ctx->blend->rt[n].blend_enable;
+	return ctx->cso.blend && ctx->cso.blend->rt[n].blend_enable;
 }
 
 static INLINE struct of_blend_stateobj *

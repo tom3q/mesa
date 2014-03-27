@@ -318,7 +318,7 @@ array_compare(const void *a, const void *b, void *data)
 static void
 of_primconvert_prepare(struct of_context *ctx, struct of_vertex_info *vertex)
 {
-	const struct pipe_rasterizer_state *rast = ctx->rasterizer;
+	const struct pipe_rasterizer_state *rast = ctx->cso.rasterizer;
 	const struct of_draw_info *draw = &vertex->key;
 	struct pipe_index_buffer *new_ib = &vertex->ib;
 	const struct pipe_draw_info *info = &draw->base.info;
@@ -553,7 +553,7 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
 	uint32_t *pkt;
 	unsigned i;
 
-	rasterizer = of_rasterizer_stateobj(ctx->rasterizer);
+	rasterizer = of_rasterizer_stateobj(ctx->cso.rasterizer);
 
 	if (dirty & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF |
 							OF_DIRTY_RASTERIZER)
@@ -579,6 +579,7 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
 		END_PKT(ring, pkt);
 
 		ctx->last_draw_mode = info->draw_mode;
+		ctx->cso_active.vtx = ctx->cso.vtx;
 	}
 
 	LIST_FOR_EACH_ENTRY_SAFE(buf, tmp, &info->buffers, list) {
@@ -634,7 +635,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 
 	if (dirty_state & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF)) {
 		struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
-		struct of_vertex_stateobj *vtx = ctx->vtx;
+		struct of_vertex_stateobj *vtx = ctx->cso.vtx;
 		uint8_t buffer_map[OF_MAX_ATTRIBS];
 
 		if (vtx->num_elements < 1
@@ -760,9 +761,6 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	of_draw(ctx, info);
 }
 
-/*
- * TODO: implement all the three clears properly
- */
 static void
 of_clear(struct pipe_context *pctx, unsigned buffers,
 		const union pipe_color_union *color, double depth, unsigned stencil)
@@ -772,7 +770,7 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	struct fd_ringbuffer *ring = ctx->ring;
 	uint32_t *pkt;
 
-	if (!ctx->solid_prog.fp)
+	if (!ctx->clear_vertex_info)
 		of_context_init_solid(ctx);
 
 	ctx->cleared |= buffers;
@@ -796,7 +794,8 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 		util_format_short_name(pipe_surface_format(pfb->zsbuf)));
 
 	/* emit clear program */
-	of_program_emit(ctx, &ctx->solid_prog);
+	of_program_emit(ctx, ctx->solid_vp);
+	of_program_emit(ctx, ctx->solid_fp);
 
 	/* emit clear color */
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
@@ -884,11 +883,18 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 			OF_DIRTY_VIEWPORT |
 			OF_DIRTY_RASTERIZER |
 			OF_DIRTY_SAMPLE_MASK |
-			OF_DIRTY_PROG |
+			OF_DIRTY_PROG_VP |
+			OF_DIRTY_PROG_FP |
 			OF_DIRTY_CONSTBUF |
 			OF_DIRTY_BLEND |
 			OF_DIRTY_VTXSTATE |
 			OF_DIRTY_VTXBUF;
+	ctx->cso_active.rasterizer = NULL;
+	ctx->cso_active.blend = NULL;
+	ctx->cso_active.zsa = NULL;
+	ctx->cso_active.vtx = NULL;
+	ctx->cso_active.vp = NULL;
+	ctx->cso_active.fp = NULL;
 
 	if (of_mesa_debug & OF_DBG_DCLEAR)
 		ctx->dirty = 0xffffffff;
