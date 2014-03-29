@@ -52,6 +52,12 @@
 #define BUF_ADDR_8(buf, offs)	\
 			((uint8_t *)(buf) + (offs))
 
+struct of_transfer_data {
+	uint8_t *buf;
+	const void *pointer;
+	unsigned stride;
+};
+
 /**
  * Structure describing requirements of primitive mode regarding
  * geometry format.
@@ -173,10 +179,9 @@ static void small_memcpy(uint8_t *dst, const uint8_t *src, uint32_t len)
  * @param count Vertex count.
  * @param indices Array of vertex indices.
  */
-void of_prepare_draw_idx8(struct of_context *ctx, struct of_vertex_info *vtx,
-			  const uint8_t *indices)
+void of_prepare_draw_idx8(struct of_vertex_data *vtx, const uint8_t *indices)
 {
-	PREPARE_DRAW(ctx, vtx, vtx->count, indices);
+	PREPARE_DRAW(vtx, indices);
 }
 
 #undef INDEX_TYPE
@@ -202,10 +207,9 @@ void of_prepare_draw_idx8(struct of_context *ctx, struct of_vertex_info *vtx,
  * @param count Vertex count.
  * @param indices Array of vertex indices.
  */
-void of_prepare_draw_idx16(struct of_context *ctx, struct of_vertex_info *vtx,
-			   const uint16_t *indices)
+void of_prepare_draw_idx16(struct of_vertex_data *vtx, const uint16_t *indices)
 {
-	PREPARE_DRAW(ctx, vtx, vtx->count, indices);
+	PREPARE_DRAW(vtx, indices);
 }
 
 #undef INDEX_TYPE
@@ -231,10 +235,9 @@ void of_prepare_draw_idx16(struct of_context *ctx, struct of_vertex_info *vtx,
  * @param count Vertex count.
  * @param indices Array of vertex indices.
  */
-void of_prepare_draw_idx32(struct of_context *ctx, struct of_vertex_info *vtx,
-			   const uint32_t *indices)
+void of_prepare_draw_idx32(struct of_vertex_data *vtx, const uint32_t *indices)
 {
-	PREPARE_DRAW(ctx, vtx, vtx->count, indices);
+	PREPARE_DRAW(vtx, indices);
 }
 
 #undef INDEX_TYPE
@@ -258,9 +261,9 @@ void of_prepare_draw_idx32(struct of_context *ctx, struct of_vertex_info *vtx,
  * @param arrays Array of attribute array descriptors.
  * @param count Vertex count.
  */
-void of_prepare_draw_seq(struct of_context *ctx, struct of_vertex_info *vtx)
+void of_prepare_draw_seq(struct of_vertex_data *vtx)
 {
-	PREPARE_DRAW(ctx, vtx, vtx->count, vtx->key.base.info.start);
+	PREPARE_DRAW(vtx, vtx->info->key.base.info.start);
 }
 
 #undef INDEX_TYPE

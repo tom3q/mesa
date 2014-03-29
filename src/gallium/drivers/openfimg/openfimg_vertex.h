@@ -47,25 +47,10 @@
 #define CONST_ADDR(attrib)	(4*MAX_WORDS_PER_ATTRIB*(attrib))
 #define DATA_OFFSET		(CONST_ADDR(MAX_ATTRIBS))
 
-struct of_draw_info_base {
-	struct pipe_draw_info info;
-	unsigned num_elements;
-	unsigned num_vb;
-};
-
-struct of_draw_info {
-	struct of_draw_info_base base;
-	struct pipe_vertex_element elements[OF_MAX_ATTRIBS];
-	struct pipe_vertex_buffer vb[OF_MAX_ATTRIBS];
-	struct pipe_index_buffer ib;
-};
-
 struct of_vertex_transfer {
-	const void *pointer;
 	unsigned vertex_buffer_index;
 	uint32_t src_offset;
 	uint16_t offset;
-	uint8_t stride;
 	uint8_t width;
 };
 
@@ -73,9 +58,28 @@ struct of_vertex_element {
 	uint32_t attrib;
 	uint32_t vbctrl;
 	uint32_t vbbase;
-	uint16_t offset;
-	uint8_t transfer_index;
-	uint8_t width;
+};
+
+struct of_vertex_stateobj {
+	struct pipe_vertex_element pipe[OF_MAX_ATTRIBS];
+	struct of_vertex_element elements[OF_MAX_ATTRIBS];
+	struct of_vertex_transfer transfers[OF_MAX_ATTRIBS];
+	unsigned num_elements;
+	unsigned num_transfers;
+	unsigned batch_size;
+	bool ugly:1;
+};
+
+struct of_draw_info_base {
+	struct pipe_draw_info info;
+	const struct of_vertex_stateobj *vtx;
+	unsigned num_vb;
+};
+
+struct of_draw_info {
+	struct of_draw_info_base base;
+	struct pipe_vertex_buffer vb[PIPE_MAX_ATTRIBS];
+	struct pipe_index_buffer ib;
 };
 
 struct of_vertex_info {
@@ -86,10 +90,7 @@ struct of_vertex_info {
 	bool first_draw:1;
 	bool bypass_cache:1;
 	bool indexed:1;
-	struct of_vertex_element elements[OF_MAX_ATTRIBS];
 
-	unsigned batch_size;
-	unsigned num_transfers;
 	unsigned num_draws;
 
 	unsigned mode;
@@ -98,11 +99,16 @@ struct of_vertex_info {
 	u_translate_func trans_func;
 	u_generate_func gen_func;
 	struct pipe_index_buffer ib;
+};
+
+struct of_vertex_data {
+	struct of_context *ctx;
+	struct of_vertex_info *info;
 
 	const void *const_data;
 	unsigned const_size;
 
-	struct of_vertex_transfer transfers[OF_MAX_ATTRIBS];
+	const void *transfers[OF_MAX_ATTRIBS];
 };
 
 struct of_vertex_buffer {
@@ -116,12 +122,12 @@ struct of_vertex_buffer {
 struct of_vertex_buffer *of_get_batch_buffer(struct of_context *ctx);
 void of_put_batch_buffer(struct of_context *ctx, struct of_vertex_buffer *buf);
 
-void of_prepare_draw_idx8(struct of_context *ctx, struct of_vertex_info *vtx,
+void of_prepare_draw_idx8(struct of_vertex_data *vdata,
 			  const uint8_t *indices);
-void of_prepare_draw_idx16(struct of_context *ctx, struct of_vertex_info *vtx,
+void of_prepare_draw_idx16(struct of_vertex_data *vdata,
 			   const uint16_t *indices);
-void of_prepare_draw_idx32(struct of_context *ctx, struct of_vertex_info *vtx,
+void of_prepare_draw_idx32(struct of_vertex_data *vdata,
 			   const uint32_t *indices);
-void of_prepare_draw_seq(struct of_context *ctx, struct of_vertex_info *vtx);
+void of_prepare_draw_seq(struct of_vertex_data *vdata);
 
 #endif
