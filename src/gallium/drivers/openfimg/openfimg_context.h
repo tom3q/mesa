@@ -66,11 +66,6 @@ struct of_vertexbuf_stateobj {
 	uint32_t dirty_mask;
 };
 
-struct of_vertex_stateobj {
-	struct pipe_vertex_element pipe[OF_MAX_ATTRIBS];
-	unsigned num_elements;
-};
-
 struct of_framebuffer_stateobj {
 	struct pipe_framebuffer_state base;
 	uint32_t fgpf_fbctl;

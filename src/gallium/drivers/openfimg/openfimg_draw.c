@@ -78,8 +78,6 @@ of_draw_hash(struct of_draw_info *req)
 	uint32_t hash;
 
 	hash = add_to_hash(0, &req->base, sizeof(req->base));
-	hash = add_to_hash(hash, req->elements,
-			req->base.num_elements * sizeof(req->elements[0]));
 	hash = add_to_hash(hash, req->vb,
 			req->base.num_vb * sizeof(req->vb[0]));
 	if (req->base.info.indexed)
@@ -99,11 +97,6 @@ draw_info_compare(const void *a, const void *b, size_t size)
 	if (ret)
 		return ret;
 
-	ret = memcmp(req1->elements, req2->elements,
-			req1->base.num_elements * sizeof(req1->elements[0]));
-	if (ret)
-		return ret;
-
 	ret = memcmp(req1->vb, req2->vb,
 			req1->base.num_vb * sizeof(req1->vb[0]));
 	if (ret)
@@ -113,50 +106,6 @@ draw_info_compare(const void *a, const void *b, size_t size)
 		return memcmp(&req1->ib, &req2->ib, sizeof(req1->ib));
 
 	return 0;
-}
-
-static void
-of_allocate_vertex_buffer(struct of_context *ctx, struct of_vertex_info *vertex)
-{
-	const struct of_draw_info *draw = &vertex->key;
-	struct of_vertex_transfer *transfer;
-	unsigned batch_size;
-	unsigned size;
-	unsigned sum;
-	unsigned i;
-
-	transfer = vertex->transfers;
-	sum = 0;
-
-	for (i = 0; i < vertex->num_transfers; ++i, ++transfer)
-		sum += ROUND_UP(transfer->width, 4);
-
-	batch_size = VERTEX_BUFFER_SIZE / sum;
-
-	for (; batch_size > 0; --batch_size) {
-		size = 0;
-		for (i = 0; i < vertex->num_transfers; ++i, ++transfer) {
-			transfer->offset = size;
-			size += ROUND_UP(batch_size
-					* ROUND_UP(transfer->width, 4), 32);
-		}
-		if (size <= VERTEX_BUFFER_SIZE)
-			break;
-	}
-
-	vertex->batch_size = batch_size;
-
-	for (i = 0; i < draw->base.num_elements; ++i) {
-		struct of_vertex_element *element = &vertex->elements[i];
-		struct of_vertex_transfer *transfer =
-				&vertex->transfers[element->transfer_index];
-		unsigned offset = transfer->offset + element->offset;
-		unsigned stride = ROUND_UP(transfer->width, 4);
-
-		element->vbctrl = FGHI_ATTRIB_VBCTRL_STRIDE(stride)
-					| FGHI_ATTRIB_VBCTRL_RANGE(0xffff);
-		element->vbbase = FGHI_ATTRIB_VBBASE_ADDR(offset);
-	}
 }
 
 static void
@@ -216,8 +165,9 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 	const struct pipe_index_buffer *ib = &vertex->ib;
 	const struct of_draw_info *draw = &vertex->key;
 	struct pipe_transfer *ib_transfer = NULL;
-	struct of_vertex_transfer *transfer;
+	const struct of_vertex_transfer *transfer;
 	const void *vb_ptr[OF_MAX_ATTRIBS];
+	struct of_vertex_data vdata;
 	bool primconvert = false;
 	const void *indices;
 	unsigned i;
@@ -230,8 +180,8 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 	memset(vb_ptr, 0, sizeof(vb_ptr));
 	memset(vb_transfer, 0, sizeof(vb_transfer));
 
-	transfer = vertex->transfers;
-	for (i = 0; i < vertex->num_transfers; ++i, ++transfer) {
+	transfer = draw->base.vtx->transfers;
+	for (i = 0; i < draw->base.vtx->num_transfers; ++i, ++transfer) {
 		unsigned buf_idx = transfer->vertex_buffer_index;
 		const struct pipe_vertex_buffer *vb = &draw->vb[buf_idx];
 
@@ -245,11 +195,19 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 							&vb_transfer[buf_idx]);
 		}
 
-		transfer->pointer = vb_ptr[buf_idx] + transfer->src_offset;
+		vdata.transfers[i] = vb_ptr[buf_idx] + transfer->src_offset;
 	}
 
+	VDBG("TODO");
+	// TODO: Prepare constant elements
+	vdata.const_data = &dummy_const;
+	vdata.const_size = 0;
+
+	vdata.ctx = ctx;
+	vdata.info = vertex;
+
 	if (!vertex->indexed) {
-		of_prepare_draw_seq(ctx, vertex);
+		of_prepare_draw_seq(&vdata);
 	} else {
 		if (ib->buffer)
 			indices = pipe_buffer_map(&ctx->base, ib->buffer,
@@ -260,13 +218,13 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 
 		switch (ib->index_size) {
 		case 4:
-			of_prepare_draw_idx32(ctx, vertex, indices);
+			of_prepare_draw_idx32(&vdata, indices);
 			break;
 		case 2:
-			of_prepare_draw_idx16(ctx, vertex, indices);
+			of_prepare_draw_idx16(&vdata, indices);
 			break;
 		case 1:
-			of_prepare_draw_idx8(ctx, vertex, indices);
+			of_prepare_draw_idx8(&vdata, indices);
 			break;
 		default:
 			assert(0);
@@ -276,16 +234,11 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 			pipe_buffer_unmap(&ctx->base, ib_transfer);
 	}
 
-	VDBG("TODO");
-	// TODO: Prepare constant elements
-	vertex->const_data = &dummy_const;
-	vertex->const_size = 0;
-
 	if (primconvert)
 		of_primconvert_release(ctx, vertex);
 
-	transfer = vertex->transfers;
-	for (i = 0; i < vertex->num_transfers; ++i, ++transfer) {
+	transfer = draw->base.vtx->transfers;
+	for (i = 0; i < draw->base.vtx->num_transfers; ++i, ++transfer) {
 		unsigned buf_idx = transfer->vertex_buffer_index;
 
 		if (!vb_ptr[buf_idx])
@@ -296,23 +249,6 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 
 		vb_ptr[buf_idx] = NULL;
 	}
-}
-
-static int
-array_compare(const void *a, const void *b, void *data)
-{
-	struct of_vertex_info *vertex = data;
-	struct of_draw_info *draw = &vertex->key;
-	unsigned elem1 = *(const unsigned *)a;
-	unsigned elem2 = *(const unsigned *)b;
-
-	if (draw->elements[elem1].vertex_buffer_index
-	    != draw->elements[elem2].vertex_buffer_index)
-		return draw->elements[elem1].vertex_buffer_index
-				- draw->elements[elem2].vertex_buffer_index;
-
-	return draw->elements[elem1].src_offset
-					- draw->elements[elem2].src_offset;
 }
 
 static void
@@ -344,103 +280,10 @@ of_primconvert_prepare(struct of_context *ctx, struct of_vertex_info *vertex)
 					&vertex->gen_func);
 }
 
-static void
-of_vtx_format(struct of_vertex_element *elem, enum pipe_format fmt)
-{
-	const struct util_format_description *desc;
-	int first_comp;
-	enum fghi_attrib_dt type;
-
-	desc = util_format_description(fmt);
-	if (desc->layout != UTIL_FORMAT_LAYOUT_PLAIN)
-		goto out_unknown;
-
-	first_comp = util_format_get_first_non_void_channel(fmt);
-	if (first_comp < 0)
-		goto out_unknown;
-
-	if (desc->is_mixed)
-		goto out_unknown;
-
-	switch (desc->channel[first_comp].type) {
-	case UTIL_FORMAT_TYPE_FLOAT:
-		switch (desc->channel[first_comp].size) {
-		case 16:
-			type = DT_HFLOAT;
-			break;
-		case 32:
-			type = DT_FLOAT;
-			break;
-		default:
-			goto out_unknown;
-		}
-		break;
-	case UTIL_FORMAT_TYPE_FIXED:
-		if (desc->channel[first_comp].size != 32)
-			goto out_unknown;
-		if (desc->channel[first_comp].normalized)
-			type = DT_NFIXED;
-		else
-			type = DT_FIXED;
-		break;
-	case UTIL_FORMAT_TYPE_SIGNED:
-		switch (desc->channel[first_comp].size) {
-		case 8:
-			type = DT_BYTE;
-			break;
-		case 16:
-			type = DT_SHORT;
-			break;
-		case 32:
-			type = DT_INT;
-			break;
-		default:
-			goto out_unknown;
-		}
-		if (desc->channel[first_comp].normalized)
-			type += DT_NBYTE;
-		break;
-	case UTIL_FORMAT_TYPE_UNSIGNED:
-		switch (desc->channel[first_comp].size) {
-		case 8:
-			type = DT_UBYTE;
-			break;
-		case 16:
-			type = DT_USHORT;
-			break;
-		case 32:
-			type = DT_UINT;
-			break;
-		default:
-			goto out_unknown;
-		}
-		if (desc->channel[first_comp].normalized)
-			type += DT_NBYTE;
-		break;
-	default:
-		goto out_unknown;
-	}
-
-	elem->attrib = FGHI_ATTRIB_DT(type) |
-			FGHI_ATTRIB_NUM_COMP(desc->nr_channels - 1) |
-			FGHI_ATTRIB_SRCX(0) | FGHI_ATTRIB_SRCY(1) |
-			FGHI_ATTRIB_SRCZ(2) | FGHI_ATTRIB_SRCW(3);
-	elem->width = desc->block.bits / 8;
-
-	return;
-
-out_unknown:
-	DBG("unsupported vertex format %s\n", util_format_name(fmt));
-}
-
 static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 			const struct of_draw_info *draw, bool bypass_cache)
 {
 	struct of_vertex_info *vertex = CALLOC_STRUCT(of_vertex_info);
-	struct of_vertex_transfer *transfer;
-	unsigned arrays[OF_MAX_ATTRIBS];
-	unsigned num_arrays;
-	unsigned i;
 
 	if (vertex == NULL)
 		return NULL;
@@ -449,7 +292,6 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 
 	vertex->bypass_cache = bypass_cache;
 	vertex->first_draw = true;
-	vertex->num_transfers = 0;
 
 	/* emulate unsupported primitives: */
 	if (of_supported_prim(ctx, draw->base.info.mode)) {
@@ -465,78 +307,6 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 
 	vertex->draw_mode = ctx->primtypes[vertex->mode];
 
-	num_arrays = 0;
-	for (i = 0; i < draw->base.num_elements; ++i) {
-		const struct pipe_vertex_element *draw_element =
-							&draw->elements[i];
-		struct of_vertex_element *vtx_element = &vertex->elements[i];
-		const struct pipe_vertex_buffer *vb =
-				&draw->vb[draw_element->vertex_buffer_index];
-
-		of_vtx_format(vtx_element, draw_element->src_format);
-
-		if (!vb->stride)
-			continue;
-
-		arrays[num_arrays++] = i;
-	}
-
-	/* Mark last element with terminating flag */
-	if (draw->base.num_elements > 0
-	    && draw->base.num_elements < OF_MAX_ATTRIBS)
-		vertex->elements[draw->base.num_elements - 1].attrib |=
-							FGHI_ATTRIB_LAST_ATTR;
-
-	/* Try to detect interleaved arrays */
-	qsort_r(arrays, num_arrays, sizeof(*arrays), array_compare, vertex);
-
-	transfer = vertex->transfers;
-	for (i = 0; i < num_arrays;) {
-		unsigned attrib = arrays[i];
-		const struct pipe_vertex_element *pipe =
-						&draw->elements[attrib];
-		struct of_vertex_element *element = &vertex->elements[attrib];
-		const struct pipe_vertex_buffer *buffer =
-					&draw->vb[pipe->vertex_buffer_index];
-
-		transfer->vertex_buffer_index = pipe->vertex_buffer_index;
-		transfer->src_offset = pipe->src_offset;
-		transfer->stride = buffer->stride;
-		transfer->width = element->width;
-		element->offset = 0;
-		element->transfer_index = vertex->num_transfers;
-
-		for (++i; i < num_arrays; ++i) {
-			unsigned attrib2 = arrays[i];
-			const struct pipe_vertex_element *pipe2 =
-						&draw->elements[attrib2];
-			struct of_vertex_element *element2
-						= &vertex->elements[attrib2];
-			unsigned offset = pipe2->src_offset - pipe->src_offset;
-
-			/* Interleaved arrays reside in one vertex buffer. */
-			if (pipe->vertex_buffer_index
-			    != pipe2->vertex_buffer_index)
-				break;
-
-			/*
-			 * Interleaved arrays must be contiguous
-			 * and attributes must be word-aligned.
-			 */
-			if (offset != ROUND_UP(transfer->width, 4))
-				break;
-
-			transfer->width = offset + element2->width;
-			element2->offset = offset;
-			element2->transfer_index = vertex->num_transfers;
-		}
-
-		assert(transfer->width <= transfer->stride);
-		++transfer;
-		++vertex->num_transfers;
-	}
-
-	of_allocate_vertex_buffer(ctx, vertex);
 	of_build_vertex_data(ctx, vertex);
 
 	return vertex;
@@ -560,8 +330,9 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
 	    || ctx->last_draw_mode != info->draw_mode) {
 		pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
-		for (i = 0; i < draw->base.num_elements; ++i) {
-			struct of_vertex_element *element = &info->elements[i];
+		for (i = 0; i < draw->base.vtx->num_elements; ++i) {
+			const struct of_vertex_element *element =
+						&draw->base.vtx->elements[i];
 
 			OUT_RING(ring, REG_FGHI_ATTRIB(i));
 			OUT_RING(ring, element->attrib);
@@ -636,35 +407,16 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	if (dirty_state & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF)) {
 		struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
 		struct of_vertex_stateobj *vtx = ctx->cso.vtx;
-		uint8_t buffer_map[OF_MAX_ATTRIBS];
 
 		if (vtx->num_elements < 1
 		    || vtx->num_elements >= OF_MAX_ATTRIBS)
 			return;
 
-		memcpy(draw->elements, vtx->pipe,
-			vtx->num_elements * sizeof(draw->elements[0]));
-		draw->base.num_elements = vtx->num_elements;
+		draw->base.vtx = ctx->cso.vtx;
 
-		memset(buffer_map, 0xff, sizeof(buffer_map));
-
-		draw->base.num_vb = 0;
-		for (i = 0; i < vtx->num_elements; ++i) {
-			struct pipe_vertex_element *elem = &vtx->pipe[i];
-			struct pipe_vertex_buffer *vb =
-				&vertexbuf->vb[elem->vertex_buffer_index];
-
-			if (buffer_map[elem->vertex_buffer_index] == 0xff) {
-				memcpy(&draw->vb[draw->base.num_vb], vb,
-					sizeof(draw->vb[0]));
-				buffer_map[elem->vertex_buffer_index] =
-					draw->base.num_vb;
-				++draw->base.num_vb;
-			}
-
-			draw->elements[i].vertex_buffer_index =
-					buffer_map[elem->vertex_buffer_index];
-		}
+		draw->base.num_vb = vertexbuf->count;
+		memcpy(draw->vb, vertexbuf->vb,
+			vertexbuf->count * sizeof(vertexbuf->vb[0]));
 	}
 
 	for (i = 0; i < draw->base.num_vb; ++i) {
@@ -927,13 +679,22 @@ static const float clear_vertices[] = {
 	+1.0f, -1.0f, +1.0f, // LB
 };
 
+static struct of_vertex_stateobj solid_vertex_stateobj = {
+	.num_elements = 1,
+	.elements = {
+		[0] = {
+			.attrib = 0x800072e4,
+			.vbctrl = 0x0c00ffff,
+			.vbbase = 0x00000000,
+		},
+	},
+};
+
 struct of_vertex_info *
 of_draw_init_solid(struct of_context *ctx)
 {
 	struct of_vertex_info *info = CALLOC_STRUCT(of_vertex_info);
 	struct of_draw_info *draw = &info->key;
-	struct of_vertex_transfer *transfer = &info->transfers[0];
-	struct of_vertex_element *element = &info->elements[0];
 	struct pipe_transfer *dst_transfer = NULL;
 	struct of_vertex_buffer *buffer;
 	float *dst;
@@ -941,25 +702,11 @@ of_draw_init_solid(struct of_context *ctx)
 	if (!info)
 		return NULL;
 
-	draw->base.num_elements = 1;
-	info->num_transfers = 1;
+	draw->base.vtx = &solid_vertex_stateobj;
 	info->draw_mode = PTYPE_TRIANGLES;
 	info->first_draw = false;
 	info->bypass_cache = false;
 	LIST_INITHEAD(&info->buffers);
-
-	transfer->width = 3 * sizeof(float);
-	transfer->offset = 0;
-
-	element->transfer_index = 0;
-	element->offset = 0;
-	element->attrib = FGHI_ATTRIB_LAST_ATTR | FGHI_ATTRIB_DT(DT_FLOAT) |
-				FGHI_ATTRIB_NUM_COMP(3 - 1) |
-				FGHI_ATTRIB_SRCX(0) | FGHI_ATTRIB_SRCY(1) |
-				FGHI_ATTRIB_SRCZ(2) | FGHI_ATTRIB_SRCW(3);
-	element->vbctrl = FGHI_ATTRIB_VBCTRL_STRIDE(transfer->width)
-				| FGHI_ATTRIB_VBCTRL_RANGE(0xffff);
-	element->vbbase = FGHI_ATTRIB_VBBASE_ADDR(0);
 
 	buffer = of_get_batch_buffer(ctx);
 	if (!buffer) {

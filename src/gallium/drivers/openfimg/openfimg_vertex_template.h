@@ -49,16 +49,18 @@
  * @return Size (in bytes) of packed data.
  */
 static unsigned
-PACK_ATTRIBUTE(uint8_t *buf, const struct of_vertex_transfer *xfer,
+PACK_ATTRIBUTE(const struct of_transfer_data *t,
+	       const struct of_vertex_transfer *xfer,
 	       INDEX_TYPE idx, unsigned cnt)
 {
+	uint8_t *buf = t->buf;
 	const uint8_t *data;
 	unsigned size;
 	unsigned width;
 
 	/* Vertices must be word aligned */
 #ifdef SEQUENTIAL
-	data = CBUF_ADDR_8(xfer->pointer, idx * xfer->stride);
+	data = CBUF_ADDR_8(t->pointer, idx * t->stride);
 #endif
 	width = ROUND_UP(xfer->width, 4);
 	size = width * cnt;
@@ -66,12 +68,12 @@ PACK_ATTRIBUTE(uint8_t *buf, const struct of_vertex_transfer *xfer,
 	while (cnt--) {
 		unsigned len = xfer->width;
 #ifndef SEQUENTIAL
-		data = CBUF_ADDR_8(xfer->pointer, *(idx++) * xfer->stride);
+		data = CBUF_ADDR_8(t->pointer, *(idx++) * t->stride);
 #endif
 		small_memcpy(buf, data, len);
 		buf += width;
 #ifdef SEQUENTIAL
-		data += xfer->stride;
+		data += t->stride;
 #endif
 	}
 
@@ -89,13 +91,16 @@ PACK_ATTRIBUTE(uint8_t *buf, const struct of_vertex_transfer *xfer,
  * @return Amount of vertices available to send to hardware.
  */
 static struct of_vertex_buffer *
-COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
-	      INDEX_TYPE indices, unsigned *pos, unsigned *count)
+COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
+	      unsigned *pos, unsigned *count)
 {
+	struct of_context *ctx = vdata->ctx;
+	const struct of_vertex_info *draw = vdata->info;
+	const struct of_vertex_stateobj *vtx = draw->key.base.vtx;
 	const struct of_primitive_data *prim_data;
 	struct pipe_transfer *dst_transfer = NULL;
 	struct of_vertex_buffer *buffer;
-	struct of_vertex_transfer *t;
+	const struct of_vertex_transfer *t;
 	unsigned batch_size;
 	unsigned bytes_used;
 	uint8_t *buf;
@@ -103,7 +108,7 @@ COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
 	void *dst;
 
 	prim_data = &primitive_data[draw->key.base.info.mode];
-	batch_size = draw->batch_size - prim_data->extra;
+	batch_size = vtx->batch_size - prim_data->extra;
 
 	if (batch_size > *count)
 		batch_size = *count;
@@ -123,35 +128,39 @@ COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
 	dst = pipe_buffer_map(&ctx->base, buffer->buffer, PIPE_TRANSFER_WRITE,
 				&dst_transfer);
 
-	for (i = 0, t = draw->transfers; i < draw->num_transfers; ++t, ++i) {
-		buf = BUF_ADDR_8(dst, t->offset);
+	for (i = 0, t = vtx->transfers; i < vtx->num_transfers; ++t, ++i) {
+		struct of_transfer_data xfer = {
+			.stride = draw->key.vb[t->vertex_buffer_index].stride,
+			.pointer = vdata->transfers[i],
+			.buf = BUF_ADDR_8(dst, t->offset),
+		};
 #ifdef SEQUENTIAL
-		if (ROUND_UP(t->width, 4) == t->stride) {
+		if (ROUND_UP(t->width, 4) == xfer.stride) {
 			if (prim_data->repeat_first) {
-				memcpy(buf, BUF_ADDR_8(t->pointer,
-					indices * t->stride), t->width);
-				buf += t->stride;
-				memcpy(buf, BUF_ADDR_8(t->pointer,
-					indices * t->stride), t->width);
-				buf += t->stride;
-				memcpy(buf, BUF_ADDR_8(t->pointer,
-					indices * t->stride), t->width);
-				buf += t->stride;
+				memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
+					indices * xfer.stride), t->width);
+				xfer.buf += xfer.stride;
+				memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
+					indices * xfer.stride), t->width);
+				xfer.buf += xfer.stride;
+				memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
+					indices * xfer.stride), t->width);
+				xfer.buf += xfer.stride;
 			}
 
-			memcpy(buf, BUF_ADDR_8(t->pointer,
-				(indices + *pos + prim_data->shift) * t->stride),
-				(batch_size - prim_data->shift) * t->stride);
-			buf += (batch_size - prim_data->shift) * t->stride;
+			memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
+				(indices + *pos + prim_data->shift) * xfer.stride),
+				(batch_size - prim_data->shift) * xfer.stride);
+			xfer.buf += (batch_size - prim_data->shift) * xfer.stride;
 
 			if (prim_data->repeat_last) {
-				memcpy(buf, BUF_ADDR_8(t->pointer,
-					(indices + *pos + batch_size - 1) * t->stride),
+				memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
+					(indices + *pos + batch_size - 1) * xfer.stride),
 					t->width);
-				buf += t->stride;
+				xfer.buf += xfer.stride;
 			}
 
-			bytes_used = ROUND_UP(buf - (uint8_t *)dst, 32);
+			bytes_used = ROUND_UP(xfer.buf - (uint8_t *)dst, 32);
 			if (bytes_used > buffer->bytes_used)
 				buffer->bytes_used = bytes_used;
 
@@ -159,19 +168,20 @@ COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
 		}
 #endif
 		if (prim_data->repeat_first) {
-			buf += PACK_ATTRIBUTE(buf, t, indices, 1);
-			buf += PACK_ATTRIBUTE(buf, t, indices, 1);
-			buf += PACK_ATTRIBUTE(buf, t, indices, 1);
+			xfer.buf += PACK_ATTRIBUTE(&xfer, t, indices, 1);
+			xfer.buf += PACK_ATTRIBUTE(&xfer, t, indices, 1);
+			xfer.buf += PACK_ATTRIBUTE(&xfer, t, indices, 1);
 		}
 
-		buf += PACK_ATTRIBUTE(buf, t, indices + *pos + prim_data->shift,
+		xfer.buf += PACK_ATTRIBUTE(&xfer, t,
+					indices + *pos + prim_data->shift,
 					batch_size - prim_data->shift);
 
 		if (prim_data->repeat_last)
-			buf += PACK_ATTRIBUTE(buf, t,
+			xfer.buf += PACK_ATTRIBUTE(&xfer, t,
 					indices + *pos + batch_size - 1, 1);
 
-		bytes_used = ROUND_UP(buf - (uint8_t *)dst, 32);
+		bytes_used = ROUND_UP(xfer.buf - (uint8_t *)dst, 32);
 		if (bytes_used > buffer->bytes_used)
 			buffer->bytes_used = bytes_used;
 	}
@@ -180,8 +190,8 @@ COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
 	*count -= batch_size - prim_data->overlap;
 	buffer->nr_vertices = batch_size + prim_data->extra;
 
-	buf = BUF_ADDR_8(dst, VERTEX_BUFFER_SIZE - draw->const_size);
-	memcpy(buf, draw->const_data, draw->const_size);
+	buf = BUF_ADDR_8(dst, VERTEX_BUFFER_SIZE - vdata->const_size);
+	memcpy(buf, vdata->const_data, vdata->const_size);
 
 	if (dst_transfer)
 		pipe_buffer_unmap(&ctx->base, dst_transfer);
@@ -198,16 +208,17 @@ COPY_VERTICES(struct of_context *ctx, struct of_vertex_info *draw,
  * @param indices First index.
  */
 static int
-PREPARE_DRAW(struct of_context *ctx, struct of_vertex_info *draw,
-	     unsigned count, INDEX_TYPE indices)
+PREPARE_DRAW(struct of_vertex_data *vdata, INDEX_TYPE indices)
 {
+	struct of_vertex_info *draw = vdata->info;
+	unsigned int count = draw->count;
 	struct of_vertex_buffer *buffer;
 	unsigned int pos = 0;
 
 	LIST_INITHEAD(&draw->buffers);
 
 	do {
-		buffer = COPY_VERTICES(ctx, draw, indices, &pos, &count);
+		buffer = COPY_VERTICES(vdata, indices, &pos, &count);
 		if (!buffer)
 			break;
 		LIST_ADDTAIL(&buffer->list, &draw->buffers);
