@@ -36,6 +36,7 @@
 #include "openfimg_resource.h"
 #include "openfimg_texture.h"
 #include "openfimg_util.h"
+#include "openfimg_vertex.h"
 
 /* All the generic state handling.. In case of CSO's that are specific
  * to the GPU version, when the bind and the delete are common they can
@@ -415,11 +416,172 @@ of_zsa_state_delete(struct pipe_context *pctx, void *hwcso)
 	FREE(hwcso);
 }
 
+struct of_element_data {
+	uint16_t offset;
+	uint8_t transfer_index;
+	uint8_t width;
+};
+
+static void
+of_allocate_vertex_buffer(struct of_context *ctx, struct of_vertex_stateobj *so,
+			  struct of_element_data *elems)
+{
+	struct of_vertex_transfer *transfer;
+	unsigned batch_size;
+	unsigned size;
+	unsigned sum;
+	unsigned i;
+
+	transfer = so->transfers;
+	sum = 0;
+
+	for (i = 0; i < so->num_transfers; ++i, ++transfer)
+		sum += ROUND_UP(transfer->width, 4);
+
+	batch_size = VERTEX_BUFFER_SIZE / sum;
+
+	for (; batch_size > 0; --batch_size) {
+		size = 0;
+		for (i = 0; i < so->num_transfers; ++i, ++transfer) {
+			transfer->offset = size;
+			size += ROUND_UP(batch_size
+					* ROUND_UP(transfer->width, 4), 32);
+		}
+		if (size <= VERTEX_BUFFER_SIZE)
+			break;
+	}
+
+	so->batch_size = batch_size;
+
+	for (i = 0; i < so->num_elements; ++i) {
+		struct of_element_data *elem = &elems[i];
+		struct of_vertex_element *element = &so->elements[i];
+		struct of_vertex_transfer *transfer =
+					&so->transfers[elem->transfer_index];
+		unsigned offset = transfer->offset + elem->offset;
+		unsigned stride = ROUND_UP(transfer->width, 4);
+
+		element->vbctrl = FGHI_ATTRIB_VBCTRL_STRIDE(stride)
+					| FGHI_ATTRIB_VBCTRL_RANGE(0xffff);
+		element->vbbase = FGHI_ATTRIB_VBBASE_ADDR(offset);
+	}
+}
+
+static void
+of_vtx_format(struct of_vertex_element *element, enum pipe_format fmt,
+	      struct of_element_data *elem)
+{
+	const struct util_format_description *desc;
+	int first_comp;
+	enum fghi_attrib_dt type;
+
+	desc = util_format_description(fmt);
+	if (desc->layout != UTIL_FORMAT_LAYOUT_PLAIN)
+		goto out_unknown;
+
+	first_comp = util_format_get_first_non_void_channel(fmt);
+	if (first_comp < 0)
+		goto out_unknown;
+
+	if (desc->is_mixed)
+		goto out_unknown;
+
+	switch (desc->channel[first_comp].type) {
+	case UTIL_FORMAT_TYPE_FLOAT:
+		switch (desc->channel[first_comp].size) {
+		case 16:
+			type = DT_HFLOAT;
+			break;
+		case 32:
+			type = DT_FLOAT;
+			break;
+		default:
+			goto out_unknown;
+		}
+		break;
+	case UTIL_FORMAT_TYPE_FIXED:
+		if (desc->channel[first_comp].size != 32)
+			goto out_unknown;
+		if (desc->channel[first_comp].normalized)
+			type = DT_NFIXED;
+		else
+			type = DT_FIXED;
+		break;
+	case UTIL_FORMAT_TYPE_SIGNED:
+		switch (desc->channel[first_comp].size) {
+		case 8:
+			type = DT_BYTE;
+			break;
+		case 16:
+			type = DT_SHORT;
+			break;
+		case 32:
+			type = DT_INT;
+			break;
+		default:
+			goto out_unknown;
+		}
+		if (desc->channel[first_comp].normalized)
+			type += DT_NBYTE;
+		break;
+	case UTIL_FORMAT_TYPE_UNSIGNED:
+		switch (desc->channel[first_comp].size) {
+		case 8:
+			type = DT_UBYTE;
+			break;
+		case 16:
+			type = DT_USHORT;
+			break;
+		case 32:
+			type = DT_UINT;
+			break;
+		default:
+			goto out_unknown;
+		}
+		if (desc->channel[first_comp].normalized)
+			type += DT_NBYTE;
+		break;
+	default:
+		goto out_unknown;
+	}
+
+	element->attrib = FGHI_ATTRIB_DT(type) |
+			FGHI_ATTRIB_NUM_COMP(desc->nr_channels - 1) |
+			FGHI_ATTRIB_SRCX(0) | FGHI_ATTRIB_SRCY(1) |
+			FGHI_ATTRIB_SRCZ(2) | FGHI_ATTRIB_SRCW(3);
+	elem->width = desc->block.bits / 8;
+
+	return;
+
+out_unknown:
+	DBG("unsupported vertex format %s\n", util_format_name(fmt));
+}
+
+static int
+array_compare(const void *a, const void *b, void *data)
+{
+	struct of_vertex_stateobj *so = data;
+	uint8_t elem1 = *(const uint8_t *)a;
+	uint8_t elem2 = *(const uint8_t *)b;
+
+	if (so->pipe[elem1].vertex_buffer_index
+	    != so->pipe[elem2].vertex_buffer_index)
+		return so->pipe[elem1].vertex_buffer_index
+				- so->pipe[elem2].vertex_buffer_index;
+
+	return so->pipe[elem1].src_offset - so->pipe[elem2].src_offset;
+}
+
 static void *
 of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
-		const struct pipe_vertex_element *elements)
+		       const struct pipe_vertex_element *elements)
 {
+	struct of_context *ctx = of_context(pctx);
+	struct of_vertex_transfer *transfer;
 	struct of_vertex_stateobj *so;
+	struct of_element_data elems[OF_MAX_ATTRIBS];
+	uint8_t arrays[OF_MAX_ATTRIBS];
+	int i;
 
 	if (num_elements >= OF_MAX_ATTRIBS)
 		return NULL;
@@ -431,12 +593,73 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 	memcpy(so->pipe, elements, sizeof(*elements) * num_elements);
 	so->num_elements = num_elements;
 
+	for (i = 0; i < num_elements; ++i) {
+		const struct pipe_vertex_element *draw_element = &elements[i];
+		struct of_vertex_element *vtx_element = &so->elements[i];
+
+		of_vtx_format(vtx_element, draw_element->src_format,
+				&elems[i]);
+
+		arrays[i] = i;
+	}
+
+	/* Mark last element with terminating flag */
+	so->elements[num_elements - 1].attrib |= FGHI_ATTRIB_LAST_ATTR;
+
+	/* Try to detect interleaved arrays */
+	qsort_r(arrays, num_elements, sizeof(*arrays), array_compare, so);
+
+	transfer = so->transfers;
+	for (i = 0; i < num_elements;) {
+		unsigned attrib = arrays[i];
+		const struct pipe_vertex_element *pipe = &elements[attrib];
+		struct of_element_data *elem = &elems[attrib];
+
+		transfer->vertex_buffer_index = pipe->vertex_buffer_index;
+		transfer->src_offset = pipe->src_offset;
+		transfer->width = elem->width;
+		elem->offset = 0;
+		elem->transfer_index = so->num_transfers;
+
+		for (++i; i < num_elements; ++i) {
+			unsigned attrib2 = arrays[i];
+			const struct pipe_vertex_element *pipe2 =
+							&so->pipe[attrib2];
+			struct of_element_data *elem2 = &elems[attrib2];
+			unsigned offset = pipe2->src_offset - pipe->src_offset;
+
+			/* Interleaved arrays reside in one vertex buffer. */
+			if (pipe->vertex_buffer_index
+			    != pipe2->vertex_buffer_index)
+				break;
+
+			/*
+			 * Interleaved arrays must be contiguous
+			 * and attributes must be word-aligned.
+			 */
+			if (offset != ROUND_UP(transfer->width, 4)) {
+				so->ugly = true; /* Needs repacking */
+				break;
+			}
+
+			transfer->width = offset + elem2->width;
+			elem2->offset = offset;
+			elem2->transfer_index = so->num_transfers;
+		}
+
+		++transfer;
+		++so->num_transfers;
+	}
+
+	of_allocate_vertex_buffer(ctx, so, elems);
+
 	return so;
 }
 
 static void
 of_vertex_state_delete(struct pipe_context *pctx, void *hwcso)
 {
+	// FIXME: Invalidate draw caches
 	FREE(hwcso);
 }
 
