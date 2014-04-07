@@ -78,7 +78,11 @@ of_draw_hash(struct of_draw_info *req)
 	uint32_t hash;
 
 	hash = add_to_hash(0, &req->base, sizeof(req->base));
-	hash = add_to_hash(hash, req->vb,
+	if (req->direct)
+		hash = add_to_hash(hash, req->vb_strides,
+			req->base.num_vb * sizeof(req->vb_strides[0]));
+	else
+		hash = add_to_hash(hash, req->vb,
 			req->base.num_vb * sizeof(req->vb[0]));
 	if (req->base.info.indexed)
 		hash = add_to_hash(hash, &req->ib, sizeof(req->ib));
@@ -93,11 +97,18 @@ draw_info_compare(const void *a, const void *b, size_t size)
 	const struct of_draw_info *req2 = b;
 	int ret;
 
+	if (req1->direct != req2->direct)
+		return req1->direct - req2->direct;
+
 	ret = memcmp(&req1->base, &req2->base, sizeof(req1->base));
 	if (ret)
 		return ret;
 
-	ret = memcmp(req1->vb, req2->vb,
+	if (req1->direct)
+		ret = memcmp(req1->vb_strides, req2->vb_strides,
+			req1->base.num_vb * sizeof(req1->vb_strides[0]));
+	else
+		ret = memcmp(req1->vb, req2->vb,
 			req1->base.num_vb * sizeof(req1->vb[0]));
 	if (ret)
 		return ret;
@@ -158,31 +169,46 @@ of_primconvert_release(struct of_context *ctx, struct of_vertex_info *vertex)
 
 static unsigned int dummy_const;
 
-static void
-of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
+static bool
+of_primitive_needs_workaround(unsigned mode)
 {
-	struct pipe_transfer *vb_transfer[OF_MAX_ATTRIBS];
+	switch (mode) {
+	case PIPE_PRIM_TRIANGLE_STRIP:
+	case PIPE_PRIM_TRIANGLE_FAN:
+		return true;
+	default:
+		return false;
+	}
+}
+
+/*
+ * Slow path for any other cases:
+ * - unaligned vertex data (must be repacked),
+ * OR
+ * - indices with weak locality (vertex data be reordered).
+ *
+ * Neither VBOs nor IBO are used directly.
+ */
+static void
+of_build_vertex_data_repack(struct of_context *ctx,
+			    struct of_vertex_data *vdata, const void *indices)
+{
+	struct pipe_transfer *vb_transfer[PIPE_MAX_ATTRIBS];
+	struct of_vertex_info *vertex = vdata->info;
 	const struct pipe_index_buffer *ib = &vertex->ib;
 	const struct of_draw_info *draw = &vertex->key;
-	struct pipe_transfer *ib_transfer = NULL;
 	const struct of_vertex_transfer *transfer;
+	const struct of_vertex_stateobj *vtx = draw->base.vtx;
 	const void *vb_ptr[OF_MAX_ATTRIBS];
-	struct of_vertex_data vdata;
-	bool primconvert = false;
-	const void *indices;
 	unsigned i;
-
-	if (!of_supported_prim(ctx, draw->base.info.mode)) {
-		of_primconvert_run(ctx, vertex);
-		primconvert = true;
-	}
 
 	memset(vb_ptr, 0, sizeof(vb_ptr));
 	memset(vb_transfer, 0, sizeof(vb_transfer));
 
 	transfer = draw->base.vtx->transfers;
 	for (i = 0; i < draw->base.vtx->num_transfers; ++i, ++transfer) {
-		unsigned buf_idx = transfer->vertex_buffer_index;
+		unsigned pipe_idx = transfer->vertex_buffer_index;
+		unsigned buf_idx = vtx->vb_map[pipe_idx];
 		const struct pipe_vertex_buffer *vb = &draw->vb[buf_idx];
 
 		if (!vb_ptr[buf_idx]) {
@@ -195,7 +221,53 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 							&vb_transfer[buf_idx]);
 		}
 
-		vdata.transfers[i] = vb_ptr[buf_idx] + transfer->src_offset;
+		vdata->transfers[i] = vb_ptr[buf_idx] + transfer->src_offset;
+	}
+
+	if (!vertex->indexed) {
+		of_prepare_draw_seq(vdata);
+	} else {
+		switch (ib->index_size) {
+		case 4:
+			of_prepare_draw_idx32(vdata, indices);
+			break;
+		case 2:
+			of_prepare_draw_idx16(vdata, indices);
+			break;
+		case 1:
+			of_prepare_draw_idx8(vdata, indices);
+			break;
+		default:
+			assert(0);
+		}
+	}
+
+	for (i = 0; i < draw->base.vtx->num_vb; ++i) {
+		if (!vb_ptr[i])
+			continue;
+
+		if (vb_transfer[i])
+			pipe_buffer_unmap(&ctx->base, vb_transfer[i]);
+	}
+}
+
+static void
+of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
+{
+	const struct pipe_index_buffer *ib = &vertex->ib;
+	struct of_draw_info *draw = &vertex->key;
+	const struct of_vertex_stateobj *vtx = draw->base.vtx;
+	const struct of_vertex_transfer *transfer;
+	struct pipe_transfer *ib_transfer = NULL;
+	bool ugly = draw->base.vtx->ugly;
+	struct of_vertex_data vdata;
+	const void *indices = NULL;
+	bool primconvert = false;
+	unsigned i;
+
+	if (!of_supported_prim(ctx, draw->base.info.mode)) {
+		of_primconvert_run(ctx, vertex);
+		primconvert = true;
 	}
 
 	VDBG("TODO");
@@ -206,49 +278,49 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 	vdata.ctx = ctx;
 	vdata.info = vertex;
 
-	if (!vertex->indexed) {
-		of_prepare_draw_seq(&vdata);
-	} else {
+	if (vertex->indexed) {
+		/* Get pointer to index buffer. */
 		if (ib->buffer)
 			indices = pipe_buffer_map(&ctx->base, ib->buffer,
 							PIPE_TRANSFER_READ,
 							&ib_transfer);
 		else
 			indices = ib->user_buffer;
+	}
 
-		switch (ib->index_size) {
-		case 4:
-			of_prepare_draw_idx32(&vdata, indices);
-			break;
-		case 2:
-			of_prepare_draw_idx16(&vdata, indices);
-			break;
-		case 1:
-			of_prepare_draw_idx8(&vdata, indices);
-			break;
-		default:
-			assert(0);
-		}
+	transfer = draw->base.vtx->transfers;
+	for (i = 0; i < draw->base.vtx->num_transfers; ++i, ++transfer) {
+		unsigned pipe_idx = transfer->vertex_buffer_index;
+		unsigned buf_idx = vtx->vb_map[pipe_idx];
+		const struct pipe_vertex_buffer *vb = &draw->vb[buf_idx];
 
-		if (ib_transfer)
-			pipe_buffer_unmap(&ctx->base, ib_transfer);
+		ugly |= vb->user_buffer != NULL;
+		ugly |= (vb->stride != ROUND_UP(transfer->width, 4));
+	}
+
+	/* Check for fast path conditions. */
+	if (!ugly && vertex->indexed
+	    && of_prepare_draw_direct_indices(&vdata, indices)) {
+		/* Use fast path for indexed draws. */
+		draw->direct = true;
+	} else if (!ugly && !vertex->indexed) {
+		/* Use fast path for sequential draws. */
+		if (!of_primitive_needs_workaround(draw->base.info.mode))
+			of_prepare_draw_direct(&vdata);
+		else
+			of_prepare_draw_direct_wa(&vdata);
+		draw->direct = true;
+	} else {
+		/* Slow path fallback - full vertex data reordering. */
+		of_build_vertex_data_repack(ctx, &vdata, indices);
+		draw->direct = false;
 	}
 
 	if (primconvert)
 		of_primconvert_release(ctx, vertex);
 
-	transfer = draw->base.vtx->transfers;
-	for (i = 0; i < draw->base.vtx->num_transfers; ++i, ++transfer) {
-		unsigned buf_idx = transfer->vertex_buffer_index;
-
-		if (!vb_ptr[buf_idx])
-			continue;
-
-		if (vb_transfer[buf_idx])
-			pipe_buffer_unmap(&ctx->base, vb_transfer[buf_idx]);
-
-		vb_ptr[buf_idx] = NULL;
-	}
+	if (ib_transfer)
+		pipe_buffer_unmap(&ctx->base, ib_transfer);
 }
 
 static void
@@ -313,22 +385,17 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 }
 
 static void
-of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
-	     uint32_t dirty)
+of_emit_draw_setup(struct of_context *ctx, const struct of_vertex_info *info,
+		   uint32_t dirty)
 {
-	const struct of_draw_info *draw = &info->key;
-	struct of_rasterizer_stateobj *rasterizer;
 	struct fd_ringbuffer *ring = ctx->ring;
-	struct of_vertex_buffer *buf, *tmp;
 	uint32_t *pkt;
-	unsigned i;
 
-	rasterizer = of_rasterizer_stateobj(ctx->cso.rasterizer);
+	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
-	if (dirty & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF |
-							OF_DIRTY_RASTERIZER)
-	    || ctx->last_draw_mode != info->draw_mode) {
-		pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
+	if (dirty & OF_DIRTY_VTXSTATE) {
+		const struct of_draw_info *draw = &info->key;
+		unsigned i;
 
 		for (i = 0; i < draw->base.vtx->num_elements; ++i) {
 			const struct of_vertex_element *element =
@@ -341,24 +408,58 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
 			OUT_RING(ring, REG_FGHI_ATTRIB_VBBASE(i));
 			OUT_RING(ring, element->vbbase);
 		}
+	}
+
+	if (dirty & OF_DIRTY_RASTERIZER
+	    || ctx->last_draw_mode != info->draw_mode) {
+		struct of_rasterizer_stateobj *rasterizer;
+
+		rasterizer = of_rasterizer_stateobj(ctx->cso.rasterizer);
 
 		OUT_RING(ring, REG_FGPE_VERTEX_CONTEXT);
 		OUT_RING(ring, rasterizer->fgpe_vertex_context |
 				FGPE_VERTEX_CONTEXT_TYPE(info->draw_mode) |
 				FGPE_VERTEX_CONTEXT_VSOUT(8));
-
-		END_PKT(ring, pkt);
-
-		ctx->last_draw_mode = info->draw_mode;
-		ctx->cso_active.vtx = ctx->cso.vtx;
 	}
 
+	END_PKT(ring, pkt);
+
+	ctx->last_draw_mode = info->draw_mode;
+	ctx->cso_active.vtx = ctx->cso.vtx;
+}
+
+static void
+of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
+	     uint32_t dirty)
+{
+	struct fd_ringbuffer *ring = ctx->ring;
+	struct of_vertex_buffer *buf, *tmp;
+	uint32_t *pkt;
+
+	if (dirty & (OF_DIRTY_VTXSTATE | OF_DIRTY_RASTERIZER)
+	    || ctx->last_draw_mode != info->draw_mode)
+		of_emit_draw_setup(ctx, info, dirty);
+
 	LIST_FOR_EACH_ENTRY_SAFE(buf, tmp, &info->buffers, list) {
-		pkt = OUT_PKT(ring, G3D_REQUEST_DRAW);
-		OUT_RING(ring, buf->nr_vertices);
-		OUT_RING(ring, buf->handle);
-		OUT_RING(ring, 0);
-		OUT_RING(ring, buf->bytes_used);
+		uint32_t offset = buf->offset;
+		uint32_t handle = buf->handle;
+
+		/* Direct batches need patching */
+		if (buf->direct) {
+			const struct pipe_vertex_buffer *vb =
+						&ctx->vertexbuf.vb[buf->vb_idx];
+
+			offset += vb->buffer_offset;
+			handle = fd_bo_handle(of_resource(vb->buffer)->bo);
+
+			// FIXME: reference the buffer
+		}
+
+		pkt = OUT_PKT(ring, buf->cmd);
+		OUT_RING(ring, buf->length);
+		OUT_RING(ring, handle);
+		OUT_RING(ring, offset);
+		OUT_RING(ring, buf->ctrl_dst_offset);
 		END_PKT(ring, pkt);
 
 		if (info->first_draw || info->bypass_cache) {
@@ -387,10 +488,10 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	unsigned dirty = 0;
 	unsigned hash_key;
 	unsigned i;
-	unsigned dirty_state = ctx->dirty;
+	unsigned state_dirty = ctx->dirty;
 
 	if (draw->base.info.indexed != info->indexed
-	    || dirty_state & OF_DIRTY_INDEXBUF) {
+	    || state_dirty & OF_DIRTY_INDEXBUF) {
 		struct pipe_index_buffer *indexbuf = &ctx->indexbuf;
 
 		if (info->indexed)
@@ -398,47 +499,73 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	}
 
 	if (info->indexed) {
-		if (!draw->ib.buffer)
+		if (draw->ib.user_buffer) {
 			bypass_cache = true;
-		else if (of_resource(draw->ib.buffer)->dirty)
+			draw->ib.buffer = NULL;
+		} else if (of_resource(draw->ib.buffer)->dirty) {
 			index_dirty = true;
+		}
 	}
 
-	if (dirty_state & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF)) {
+	if (state_dirty & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF)) {
 		struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
 		struct of_vertex_stateobj *vtx = ctx->cso.vtx;
+		unsigned vb_mask;
 
 		if (vtx->num_elements < 1
 		    || vtx->num_elements >= OF_MAX_ATTRIBS)
 			return;
 
 		draw->base.vtx = ctx->cso.vtx;
+		draw->base.num_vb = vtx->num_vb;
+		draw->base.vb_mask = vtx->vb_mask;
 
-		draw->base.num_vb = vertexbuf->count;
-		memcpy(draw->vb, vertexbuf->vb,
-			vertexbuf->count * sizeof(vertexbuf->vb[0]));
+		vb_mask = vtx->vb_mask;
+		while (vb_mask) {
+			unsigned pipe_idx = ffs(vb_mask) - 1;
+			unsigned buf_idx = vtx->vb_map[pipe_idx];
+
+			memcpy(&draw->vb[buf_idx], &vertexbuf->vb[pipe_idx],
+				sizeof(vertexbuf->vb[pipe_idx]));
+			draw->vb_strides[buf_idx] =
+				vertexbuf->vb[pipe_idx].stride;
+
+			vb_mask &= ~(1 << pipe_idx);
+		}
 	}
 
 	for (i = 0; i < draw->base.num_vb; ++i) {
 		struct pipe_vertex_buffer *vb = &draw->vb[i];
 
-		if (!vb->buffer)
+		if (vb->user_buffer) {
 			bypass_cache = true;
-		else if (of_resource(vb->buffer)->dirty)
+			vb->buffer = NULL;
+		} else if (of_resource(vb->buffer)->dirty) {
 			dirty |= 1 << i;
+		}
 	}
 
 	memcpy(&draw->base.info, info, sizeof(draw->base.info));
 
+	draw->direct = true;
 	hash_key = of_draw_hash(draw);
 	vertex = cso_hash_find_data_from_template_c(ctx->draw_hash, hash_key,
 					draw, sizeof(*draw), draw_info_compare);
+	if (!vertex) {
+		draw->direct = false;
+		hash_key = of_draw_hash(draw);
+		vertex = cso_hash_find_data_from_template_c(ctx->draw_hash,
+						hash_key, draw, sizeof(*draw),
+						draw_info_compare);
+	}
 
 	if (!vertex) {
 		vertex = of_create_vertex_info(ctx, draw, bypass_cache);
+		hash_key = of_draw_hash(&vertex->key);
 		cso_hash_insert(ctx->draw_hash, hash_key, vertex);
-	} else if (dirty || index_dirty || LIST_IS_EMPTY(&vertex->buffers)) {
-		while (dirty) {
+	} else if ((!vertex->key.direct && dirty)
+		   || index_dirty || LIST_IS_EMPTY(&vertex->buffers)) {
+		while (!vertex->key.direct && dirty) {
 			unsigned buffer = ffs(dirty) - 1;
 			struct pipe_vertex_buffer *vb = &draw->vb[buffer];
 
@@ -459,8 +586,8 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		of_build_vertex_data(ctx, vertex);
 	}
 
-	of_emit_state(ctx, dirty_state);
-	of_emit_draw(ctx, vertex, dirty_state);
+	of_emit_state(ctx, state_dirty);
+	of_emit_draw(ctx, vertex, state_dirty);
 }
 
 static void
@@ -696,7 +823,8 @@ of_draw_init_solid(struct of_context *ctx)
 	struct of_vertex_info *info = CALLOC_STRUCT(of_vertex_info);
 	struct of_draw_info *draw = &info->key;
 	struct pipe_transfer *dst_transfer = NULL;
-	struct of_vertex_buffer *buffer;
+	struct pipe_resource *buffer;
+	struct of_vertex_buffer *buf;
 	float *dst;
 
 	if (!info)
@@ -708,13 +836,11 @@ of_draw_init_solid(struct of_context *ctx)
 	info->bypass_cache = false;
 	LIST_INITHEAD(&info->buffers);
 
-	buffer = of_get_batch_buffer(ctx);
-	if (!buffer) {
-		FREE(info);
-		return NULL;
-	}
+	buffer = pipe_buffer_create(ctx->base.screen, PIPE_BIND_CUSTOM,
+					PIPE_USAGE_IMMUTABLE,
+					VERTEX_BUFFER_SIZE);
 
-	dst = pipe_buffer_map(&ctx->base, buffer->buffer, PIPE_TRANSFER_WRITE,
+	dst = pipe_buffer_map(&ctx->base, buffer, PIPE_TRANSFER_WRITE,
 				&dst_transfer);
 
 	memcpy(dst, clear_vertices, sizeof(clear_vertices));
@@ -722,9 +848,19 @@ of_draw_init_solid(struct of_context *ctx)
 	if (dst_transfer)
 		pipe_buffer_unmap(&ctx->base, dst_transfer);
 
-	buffer->bytes_used = ROUND_UP(sizeof(clear_vertices), 32);
-	buffer->nr_vertices = sizeof(clear_vertices) / (3 * sizeof(float));
-	LIST_ADDTAIL(&buffer->list, &info->buffers);
+	buf = CALLOC_STRUCT(of_vertex_buffer);
+	assert(buf);
+	buf->cmd = G3D_REQUEST_VERTEX_BUFFER;
+	buf->length = ROUND_UP(sizeof(clear_vertices), 32);
+	buf->buffer = buffer;
+	buf->handle = fd_bo_handle(of_resource(buffer)->bo);
+	LIST_ADDTAIL(&buf->list, &info->buffers);
+
+	buf = CALLOC_STRUCT(of_vertex_buffer);
+	assert(buf);
+	buf->cmd = G3D_REQUEST_DRAW;
+	buf->length = sizeof(clear_vertices) / (3 * sizeof(float));
+	LIST_ADDTAIL(&buf->list, &info->buffers);
 
 	return info;
 }
