@@ -583,7 +583,7 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 	uint8_t arrays[OF_MAX_ATTRIBS];
 	int i;
 
-	if (num_elements >= OF_MAX_ATTRIBS)
+	if (num_elements < 1 || num_elements >= OF_MAX_ATTRIBS)
 		return NULL;
 
 	so = CALLOC_STRUCT(of_vertex_stateobj);
@@ -615,6 +615,10 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 		const struct pipe_vertex_element *pipe = &elements[attrib];
 		struct of_element_data *elem = &elems[attrib];
 
+		if (!(so->vb_mask & (1 << pipe->vertex_buffer_index))) {
+			so->vb_map[pipe->vertex_buffer_index] = so->num_vb++;
+			so->vb_mask |= (1 << pipe->vertex_buffer_index);
+		}
 		transfer->vertex_buffer_index = pipe->vertex_buffer_index;
 		transfer->src_offset = pipe->src_offset;
 		transfer->width = elem->width;

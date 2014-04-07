@@ -48,10 +48,10 @@
 #define DATA_OFFSET		(CONST_ADDR(MAX_ATTRIBS))
 
 struct of_vertex_transfer {
-	unsigned vertex_buffer_index;
 	uint32_t src_offset;
 	uint16_t offset;
 	uint8_t width;
+	uint8_t vertex_buffer_index;
 };
 
 struct of_vertex_element {
@@ -64,22 +64,30 @@ struct of_vertex_stateobj {
 	struct pipe_vertex_element pipe[OF_MAX_ATTRIBS];
 	struct of_vertex_element elements[OF_MAX_ATTRIBS];
 	struct of_vertex_transfer transfers[OF_MAX_ATTRIBS];
-	unsigned num_elements;
-	unsigned num_transfers;
-	unsigned batch_size;
+	unsigned vb_mask;
+	uint16_t batch_size;
+	uint8_t vb_map[PIPE_MAX_ATTRIBS];
+	uint8_t num_vb;
+	uint8_t num_elements;
+	uint8_t num_transfers;
 	bool ugly:1;
 };
 
 struct of_draw_info_base {
 	struct pipe_draw_info info;
 	const struct of_vertex_stateobj *vtx;
-	unsigned num_vb;
+	unsigned vb_mask;
+	uint8_t num_vb;
 };
 
 struct of_draw_info {
 	struct of_draw_info_base base;
-	struct pipe_vertex_buffer vb[PIPE_MAX_ATTRIBS];
+	struct pipe_vertex_buffer vb[OF_MAX_ATTRIBS];
+	uint8_t vb_strides[OF_MAX_ATTRIBS];
 	struct pipe_index_buffer ib;
+
+	/* Unhashed */
+	bool direct:1;
 };
 
 struct of_vertex_info {
@@ -113,14 +121,23 @@ struct of_vertex_data {
 
 struct of_vertex_buffer {
 	struct pipe_resource *buffer;
-	uint32_t handle;
-	unsigned nr_vertices;
-	unsigned bytes_used;
+	unsigned cmd;
+	unsigned length;
+	unsigned handle;
+	unsigned offset;
+	unsigned ctrl_dst_offset;
 	struct list_head list;
+	uint8_t vb_idx;
+	bool direct:1;
 };
 
-struct of_vertex_buffer *of_get_batch_buffer(struct of_context *ctx);
+//struct of_vertex_buffer *of_get_batch_buffer(struct of_context *ctx);
 void of_put_batch_buffer(struct of_context *ctx, struct of_vertex_buffer *buf);
+
+void of_prepare_draw_direct(struct of_vertex_data *vdata);
+void of_prepare_draw_direct_wa(struct of_vertex_data *vdata);
+bool of_prepare_draw_direct_indices(struct of_vertex_data *vdata,
+				    const void *indices);
 
 void of_prepare_draw_idx8(struct of_vertex_data *vdata,
 			  const uint8_t *indices);

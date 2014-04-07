@@ -90,20 +90,20 @@ PACK_ATTRIBUTE(const struct of_transfer_data *t,
  * @param prim_data Primitive type information.
  * @return Amount of vertices available to send to hardware.
  */
-static struct of_vertex_buffer *
+static bool
 COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 	      unsigned *pos, unsigned *count)
 {
 	struct of_context *ctx = vdata->ctx;
-	const struct of_vertex_info *draw = vdata->info;
+	struct of_vertex_info *draw = vdata->info;
 	const struct of_vertex_stateobj *vtx = draw->key.base.vtx;
 	const struct of_primitive_data *prim_data;
 	struct pipe_transfer *dst_transfer = NULL;
 	struct of_vertex_buffer *buffer;
+	struct pipe_resource *resource;
 	const struct of_vertex_transfer *t;
 	unsigned batch_size;
-	unsigned bytes_used;
-	uint8_t *buf;
+	uint32_t handle;
 	unsigned i;
 	void *dst;
 
@@ -114,7 +114,7 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 		batch_size = *count;
 
 	if (batch_size < prim_data->min)
-		return 0;
+		return false;
 
 	if (batch_size > prim_data->min) {
 		if (prim_data->multiple_of_two && (batch_size % 2))
@@ -123,9 +123,12 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 			batch_size -= batch_size % 3;
 	}
 
-	buffer = of_get_batch_buffer(ctx);
+	resource = pipe_buffer_create(ctx->base.screen, PIPE_BIND_CUSTOM,
+					PIPE_USAGE_IMMUTABLE,
+					VERTEX_BUFFER_SIZE);
+	handle = fd_bo_handle(of_resource(resource)->bo);
 
-	dst = pipe_buffer_map(&ctx->base, buffer->buffer, PIPE_TRANSFER_WRITE,
+	dst = pipe_buffer_map(&ctx->base, resource, PIPE_TRANSFER_WRITE,
 				&dst_transfer);
 
 	for (i = 0, t = vtx->transfers; i < vtx->num_transfers; ++t, ++i) {
@@ -134,6 +137,17 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 			.pointer = vdata->transfers[i],
 			.buf = BUF_ADDR_8(dst, t->offset),
 		};
+
+		buffer = CALLOC_STRUCT(of_vertex_buffer);
+		assert(buffer);
+
+		pipe_resource_reference(&buffer->buffer, resource);
+		buffer->handle = handle;
+		buffer->offset = t->offset;
+		buffer->ctrl_dst_offset = t->offset;
+		buffer->cmd = G3D_REQUEST_VERTEX_BUFFER;
+		LIST_ADDTAIL(&buffer->list, &draw->buffers);
+
 #ifdef SEQUENTIAL
 		if (ROUND_UP(t->width, 4) == xfer.stride) {
 			if (prim_data->repeat_first) {
@@ -160,10 +174,8 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 				xfer.buf += xfer.stride;
 			}
 
-			bytes_used = ROUND_UP(xfer.buf - (uint8_t *)dst, 32);
-			if (bytes_used > buffer->bytes_used)
-				buffer->bytes_used = bytes_used;
-
+			buffer->length = ROUND_UP(xfer.buf -
+						BUF_ADDR_8(dst, t->offset), 32);
 			continue;
 		}
 #endif
@@ -181,22 +193,26 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 			xfer.buf += PACK_ATTRIBUTE(&xfer, t,
 					indices + *pos + batch_size - 1, 1);
 
-		bytes_used = ROUND_UP(xfer.buf - (uint8_t *)dst, 32);
-		if (bytes_used > buffer->bytes_used)
-			buffer->bytes_used = bytes_used;
+		buffer->length = ROUND_UP(xfer.buf -
+						BUF_ADDR_8(dst, t->offset), 32);
 	}
 
 	*pos += batch_size - prim_data->overlap;
 	*count -= batch_size - prim_data->overlap;
-	buffer->nr_vertices = batch_size + prim_data->extra;
 
-	buf = BUF_ADDR_8(dst, VERTEX_BUFFER_SIZE - vdata->const_size);
-	memcpy(buf, vdata->const_data, vdata->const_size);
+	buffer = CALLOC_STRUCT(of_vertex_buffer);
+	assert(buffer);
+
+	buffer->length = batch_size + prim_data->extra;
+	buffer->cmd = G3D_REQUEST_DRAW;
+	LIST_ADDTAIL(&buffer->list, &draw->buffers);
 
 	if (dst_transfer)
 		pipe_buffer_unmap(&ctx->base, dst_transfer);
 
-	return buffer;
+	pipe_resource_reference(&resource, NULL);
+
+	return true;
 }
 
 /**
@@ -212,17 +228,14 @@ PREPARE_DRAW(struct of_vertex_data *vdata, INDEX_TYPE indices)
 {
 	struct of_vertex_info *draw = vdata->info;
 	unsigned int count = draw->count;
-	struct of_vertex_buffer *buffer;
 	unsigned int pos = 0;
+	bool more;
 
 	LIST_INITHEAD(&draw->buffers);
 
 	do {
-		buffer = COPY_VERTICES(vdata, indices, &pos, &count);
-		if (!buffer)
-			break;
-		LIST_ADDTAIL(&buffer->list, &draw->buffers);
-	} while (1);
+		more = COPY_VERTICES(vdata, indices, &pos, &count);
+	} while (more);
 
 	return 0;
 }

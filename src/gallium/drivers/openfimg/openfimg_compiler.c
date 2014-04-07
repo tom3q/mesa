@@ -272,7 +272,7 @@ static struct ir2_register *add_dst_reg(struct of_compile_context *ctx,
 					struct ir2_instruction *alu,
 					const struct tgsi_dst_register *dst)
 {
-	unsigned flags = 0, num, type;
+	unsigned flags = 0, num = dst->Index, type = REG_DST_R;
 	char swiz[5];
 
 	switch (dst->File) {
@@ -317,7 +317,7 @@ static struct ir2_register *add_src_reg(struct of_compile_context *ctx,
 			'x', 'y', 'z', 'w',
 	};
 	char swiz[5];
-	unsigned flags = 0, num, type;
+	unsigned flags = 0, num = src->Index, type = REG_SRC_R;
 
 	switch (src->File) {
 	case TGSI_FILE_CONSTANT:
