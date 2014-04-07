@@ -220,12 +220,6 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 		goto fail;
 	}
 
-	LIST_INITHEAD(&ctx->pending_batches);
-
-	of_draw_init(pctx);
-	of_texture_init(pctx);
-	of_prog_init(pctx);
-
 	ctx->screen = screen;
 
 	ctx->primtypes = fimg_3dse_primtypes;
@@ -256,9 +250,12 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 	util_slab_create(&ctx->transfer_pool, sizeof(struct pipe_transfer),
 			16, UTIL_SLAB_SINGLETHREADED);
 
+	LIST_INITHEAD(&ctx->pending_batches);
+
 	of_draw_init(pctx);
 	of_resource_context_init(pctx);
 	of_texture_init(pctx);
+	of_prog_init(pctx);
 	of_state_init(pctx);
 
 	ctx->blitter = util_blitter_create(pctx);

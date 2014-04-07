@@ -45,6 +45,14 @@
 #define OF_DBG_VMSGS  0x10
 extern int of_mesa_debug;
 
+#define FORCE_DEBUG
+
+#ifdef FORCE_DEBUG
+#include <stdio.h>
+#undef debug_printf
+#define debug_printf printf
+#endif
+
 #define DBG(fmt, ...) \
 		do { if (of_mesa_debug & OF_DBG_MSGS) \
 			debug_printf("%s:%d: "fmt "\n", \
@@ -57,6 +65,9 @@ extern int of_mesa_debug;
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #define ROUND_UP(val, to)	(((val) + (to) - 1) & ~((to) - 1))
+
+#define min(a, b)	((a) < (b) ? (a) : (b))
+#define max(a, b)	((a) > (b) ? (a) : (b))
 
 /* for conditionally setting boolean flag(s): */
 #define COND(bool, val) ((bool) ? (val) : 0)
@@ -79,7 +90,10 @@ enum of_request_type {
 #define G3D_DBUFFER_DIRTY	(1 << 0)
 #define G3D_DBUFFER_DETACH	(1 << 1)
 	G3D_REQUEST_DRAW = 6,
-	G3D_REQUEST_VTX_TEXTURE = 7,
+#define	G3D_DRAW_INDEXED	(1 << 31)
+	G3D_REQUEST_VERTEX_BUFFER = 7,
+
+	G3D_REQUEST_VTX_TEXTURE = -1,
 };
 
 
@@ -117,8 +131,11 @@ static inline uint32_t *
 OUT_PKT(struct fd_ringbuffer *ring, uint8_t opcode)
 {
 	uint32_t *pkt = ring->cur;
-
-	OUT_RING(ring, (opcode) << 24);
+	uint32_t val = opcode << 24;
+#ifdef DEBUG
+	val |= 0xfa11ed;
+#endif
+	OUT_RING(ring, val);
 
 	return pkt;
 }
@@ -127,8 +144,11 @@ static inline void
 END_PKT(struct fd_ringbuffer *ring, uint32_t *pkt)
 {
 	assert(pkt >= ring->last_start && pkt < ring->cur);
-
-	*pkt |= sizeof(uint32_t) * ((ring->cur - pkt) - 1);
+#ifdef DEBUG
+	assert((*pkt & 0xffffff) == 0xfa11ed);
+	*pkt &= ~0xffffff;
+#endif
+	*pkt |= ((ring->cur - pkt) - 1);
 }
 
 static inline enum pipe_format
