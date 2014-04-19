@@ -37,18 +37,18 @@ AM_CPPFLAGS = \
 	-DGALLIUM_NOOP
 
 dridir = $(DRI_DRIVER_INSTALL_DIR)
-dri_LTLIBRARIES = exynos_dri.la
+dri_LTLIBRARIES = of_dri.la
 
-nodist_EXTRA_exynos_dri_la_SOURCES = dummy.cpp
-exynos_dri_la_SOURCES = \
+nodist_EXTRA_of_dri_la_SOURCES = dummy.cpp
+of_dri_la_SOURCES = \
 	target.c \
 	$(top_srcdir)/src/mesa/drivers/dri/common/utils.c \
 	$(top_srcdir)/src/mesa/drivers/dri/common/dri_util.c \
 	$(top_srcdir)/src/mesa/drivers/dri/common/xmlconfig.c
 
-exynos_dri_la_LDFLAGS = -module -avoid-version -shared -no-undefined
+of_dri_la_LDFLAGS = -module -avoid-version -shared -no-undefined
 
-exynos_dri_la_LIBADD = \
+of_dri_la_LIBADD = \
 	$(top_builddir)/src/gallium/state_trackers/dri/drm/libdridrm.la \
 	$(top_builddir)/src/gallium/winsys/openfimg/drm/libopenfimgdrm.la \
 	$(top_builddir)/src/gallium/drivers/openfimg/libopenfimg.la \
@@ -60,12 +60,12 @@ exynos_dri_la_LIBADD = \
 	$(OPENFIMG_LIBS)
 
 if HAVE_MESA_LLVM
-exynos_dri_la_LDFLAGS += $(LLVM_LDFLAGS)
-exynos_dri_la_LIBADD += $(LLVM_LIBS)
+of_dri_la_LDFLAGS += $(LLVM_LDFLAGS)
+of_dri_la_LIBADD += $(LLVM_LIBS)
 endif
 
 # Provide compatibility with scripts for the old Mesa build system for
 # a while by putting a link to the driver into /lib of the build tree.
-all-local: exynos_dri.la
+all-local: of_dri.la
 	$(MKDIR_P) $(top_builddir)/$(LIB_DIR)/gallium
-	ln -f .libs/exynos_dri.so $(top_builddir)/$(LIB_DIR)/gallium/exynos_dri.so
+	ln -f .libs/of_dri.so $(top_builddir)/$(LIB_DIR)/gallium/of_dri.so

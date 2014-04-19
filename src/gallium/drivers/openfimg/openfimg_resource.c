@@ -58,14 +58,14 @@ static void of_resource_transfer_flush_region(struct pipe_context *pctx,
 		struct pipe_transfer *ptrans,
 		const struct pipe_box *box)
 {
-	//struct of_context *ctx = of_context(pctx);
+	struct of_context *ctx = of_context(pctx);
 	struct of_resource *rsc = of_resource(ptrans->resource);
 
 	if (rsc->dirty)
 		of_context_render(pctx);
 
 	if (rsc->timestamp) {
-		//fd_pipe_wait(ctx->pipe, rsc->timestamp);
+		fd_pipe_wait(ctx->pipe, rsc->timestamp);
 		rsc->timestamp = 0;
 	}
 }
@@ -96,7 +96,6 @@ of_resource_transfer_map(struct pipe_context *pctx,
 	enum pipe_format format = prsc->format;
 	uint32_t op = 0;
 	char *buf;
-	//int ret = 0;
 
 	ptrans = util_slab_alloc(&ctx->transfer_pool);
 	if (!ptrans)
@@ -128,9 +127,13 @@ of_resource_transfer_map(struct pipe_context *pctx,
 	if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
 #if 1
 		if (rsc->timestamp) {
-			//ret = fd_pipe_wait(ctx->pipe, rsc->timestamp);
-			//if (ret)
-			//	goto fail;
+			int ret = 0;
+
+			ret = fd_pipe_wait(ctx->pipe, rsc->timestamp);
+			if (ret) {
+				of_resource_transfer_unmap(pctx, ptrans);
+				return NULL;
+			}
 			rsc->timestamp = 0;
 		}
 #else
@@ -154,10 +157,6 @@ of_resource_transfer_map(struct pipe_context *pctx,
 		box->y / util_format_get_blockheight(format) * ptrans->stride +
 		box->x / util_format_get_blockwidth(format) * rsc->cpp +
 		box->z * slice->size0;
-
-//fail:
-//	of_resource_transfer_unmap(pctx, ptrans);
-//	return NULL;
 }
 
 static void

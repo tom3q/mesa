@@ -72,8 +72,8 @@ struct of_primitive_data {
 	unsigned overlap;
 	/** Vertices in batch reserved for extra data. */
 	unsigned extra;
-	/** How many vertices to skip. */
-	unsigned shift;
+	/** Set to 1 if batch size must not be a multiple of two. */
+	unsigned not_multiple_of_two:1;
 	/** Set to 1 if batch size must be a multiple of two. */
 	unsigned multiple_of_two:1;
 	/** Set to 1 if batch size must be a multiple of three. */
@@ -104,14 +104,13 @@ const struct of_primitive_data primitive_data[PIPE_PRIM_MAX] = {
 		.min = 3,
 		.overlap = 2,
 		.extra = 1,
-		.multiple_of_two = 1,
 		.repeat_last = 1,
+		.not_multiple_of_two = 1,
 	},
 	[PIPE_PRIM_TRIANGLE_FAN] = {
 		.min = 3,
-		.overlap = 2,
-		.extra = 2,
-		.shift = 1,
+		.overlap = 1,
+		.extra = 3,
 		.repeat_first = 1,
 	},
 	[PIPE_PRIM_TRIANGLES] = {
@@ -201,9 +200,9 @@ of_prepare_draw_direct(struct of_vertex_data *vdata)
 	while (remaining) {
 		unsigned count = min(vtx->batch_size, remaining);
 
-		if (prim->multiple_of_two && (count % 2))
-			--count;
-		if (prim->multiple_of_three && (count % 3))
+		if (prim->multiple_of_two)
+			count -= count % 2;
+		if (prim->multiple_of_three)
 			count -= count % 3;
 
 		if (count < prim->min)
@@ -277,30 +276,24 @@ of_prepare_draw_direct_wa(struct of_vertex_data *vdata)
 	}
 
 	batch_size = min(vtx->batch_size - dst_offset, 124);
-	offset += prim->shift;
-	remaining -= prim->shift;
 
 	while (1) {
 		unsigned count = min(batch_size, remaining);
-		unsigned idx_count;
+		unsigned idx_count = count + prim->extra;
 		uint8_t *idx;
 		int i;
 
-		if (count < prim->min)
+		if (prim->multiple_of_two)
+			idx_count -= idx_count % 2;
+		if (prim->multiple_of_three)
+			idx_count -= idx_count % 3;
+		if (count < remaining && prim->not_multiple_of_two)
+			idx_count -= 1 - idx_count % 2;
+
+		if (idx_count < prim->min)
 			break;
 
-		if (count < remaining) {
-			if (prim->multiple_of_two)
-				count -= count % 2;
-			if (prim->multiple_of_three)
-				count -= count % 3;
-		}
-
-		idx_count = count;
-		if (prim->repeat_first)
-			idx_count += 3;
-		if (prim->repeat_last)
-			idx_count += 1;
+		count = idx_count - prim->extra;
 
 		if (IB_SIZE - ib_offset < ROUND_UP(idx_count, 4)) {
 			if (ib_transfer)
@@ -344,8 +337,8 @@ of_prepare_draw_direct_wa(struct of_vertex_data *vdata)
 			break;
 
 		ib_offset += ROUND_UP(idx_count, 4);
-		remaining -= count - prim->overlap + prim->shift;
-		offset += count - prim->overlap + prim->shift;
+		remaining -= count - prim->overlap;
+		offset += count - prim->overlap;
 	}
 
 	if (ib_transfer)

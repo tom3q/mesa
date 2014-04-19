@@ -748,8 +748,15 @@ translate_direct(struct of_compile_context *ctx,
 	assert(inst->Instruction.NumSrcRegs == info->src_count);
 	assert(inst->Instruction.NumDstRegs == 1);
 
-	if (info->src_count == 3 && !ctx->shader->instrs_count)
-		ir2_instr_create_alu(ctx->shader, OP_NOP);
+	if (info->src_count == 3 && !ctx->shader->instrs_count) {
+		struct tgsi_dst_register tmp_dst;
+		struct tgsi_src_register tmp_src;
+
+		ins = ir2_instr_create_alu(ctx->shader, OP_NOP);
+		get_internal_temp(ctx, &tmp_dst, &tmp_src);
+		add_dst_reg(ctx, ins, &tmp_dst);
+		add_src_reg(ctx, ins, &tmp_src);
+	}
 
 	ins = ir2_instr_create_alu(ctx->shader, info->opcode);
 	add_dst_reg(ctx, ins, &inst->Dst[0].Register);
