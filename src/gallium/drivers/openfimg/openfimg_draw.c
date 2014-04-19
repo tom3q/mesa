@@ -122,7 +122,7 @@ draw_info_compare(const void *a, const void *b, size_t size)
 static void
 of_primconvert_run(struct of_context *ctx, struct of_vertex_info *vertex)
 {
-	struct pipe_transfer *src_transfer = NULL, *dst_transfer = NULL;
+	struct pipe_transfer *src_transfer = NULL;
 	const struct of_draw_info *draw = &vertex->key;
 	struct pipe_index_buffer *new_ib = &vertex->ib;
 	const struct pipe_index_buffer *ib = &draw->ib;
@@ -130,33 +130,24 @@ of_primconvert_run(struct of_context *ctx, struct of_vertex_info *vertex)
 	const void *src;
 	void *dst;
 
-	new_ib->buffer = pipe_buffer_create(ctx->base.screen,
-						PIPE_BIND_INDEX_BUFFER,
-						PIPE_USAGE_IMMUTABLE,
-						new_ib->index_size
-						* vertex->count);
+	dst = CALLOC(vertex->count, new_ib->index_size);
+	assert(dst);
+	new_ib->user_buffer = dst;
 
-	dst = pipe_buffer_map(&ctx->base, new_ib->buffer, PIPE_TRANSFER_WRITE,
-				&dst_transfer);
-
-	if (info->indexed) {
-		src = ib->user_buffer;
-		if (!src) {
-			src = pipe_buffer_map(&ctx->base, ib->buffer,
-						PIPE_TRANSFER_READ,
-						&src_transfer);
-		}
-		vertex->trans_func(src, info->start, vertex->count, dst);
-	}
-	else {
+	if (!info->indexed) {
 		vertex->gen_func(info->start, vertex->count, dst);
+		return;
 	}
+
+	src = ib->user_buffer;
+	if (!src)
+		src = pipe_buffer_map(&ctx->base, ib->buffer,
+					PIPE_TRANSFER_READ, &src_transfer);
+
+	vertex->trans_func(src, info->start, vertex->count, dst);
 
 	if (src_transfer)
 		pipe_buffer_unmap(&ctx->base, src_transfer);
-
-	if (dst_transfer)
-		pipe_buffer_unmap(&ctx->base, dst_transfer);
 }
 
 static void
@@ -164,7 +155,8 @@ of_primconvert_release(struct of_context *ctx, struct of_vertex_info *vertex)
 {
 	struct pipe_index_buffer *new_ib = &vertex->ib;
 
-	pipe_resource_reference(&new_ib->buffer, NULL);
+	FREE((void *)new_ib->user_buffer);
+	new_ib->user_buffer = NULL;
 }
 
 static unsigned int dummy_const;
@@ -280,12 +272,12 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 
 	if (vertex->indexed) {
 		/* Get pointer to index buffer. */
-		if (ib->buffer)
+		if (ib->user_buffer)
+			indices = ib->user_buffer;
+		else
 			indices = pipe_buffer_map(&ctx->base, ib->buffer,
 							PIPE_TRANSFER_READ,
 							&ib_transfer);
-		else
-			indices = ib->user_buffer;
 	}
 
 	transfer = draw->base.vtx->transfers;
@@ -341,13 +333,13 @@ of_primconvert_prepare(struct of_context *ctx, struct of_vertex_info *vertex)
 	if (info->indexed)
 		u_index_translator(ctx->primtype_mask,
 					info->mode, draw->ib.index_size,
-					info->count, api_pv, api_pv,
+					info->count, api_pv, PV_LAST,
 					&vertex->mode, &new_ib->index_size,
 					&vertex->count, &vertex->trans_func);
 	else
 		u_index_generator(ctx->primtype_mask,
 					info->mode, info->start, info->count,
-					api_pv, api_pv, &vertex->mode,
+					api_pv, PV_LAST, &vertex->mode,
 					&new_ib->index_size, &vertex->count,
 					&vertex->gen_func);
 }

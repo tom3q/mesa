@@ -90,50 +90,40 @@ PACK_ATTRIBUTE(const struct of_transfer_data *t,
  * @param prim_data Primitive type information.
  * @return Amount of vertices available to send to hardware.
  */
-static bool
+static void
 COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
-	      unsigned *pos, unsigned *count)
+	      unsigned pos, unsigned count)
 {
 	struct of_context *ctx = vdata->ctx;
-	struct of_vertex_info *draw = vdata->info;
-	const struct of_vertex_stateobj *vtx = draw->key.base.vtx;
+	struct of_vertex_info *vertex = vdata->info;
+	const struct of_draw_info *draw = &vertex->key;
+	const struct of_vertex_stateobj *vtx = draw->base.vtx;
 	const struct of_primitive_data *prim_data;
 	struct pipe_transfer *dst_transfer = NULL;
 	struct of_vertex_buffer *buffer;
 	struct pipe_resource *resource;
 	const struct of_vertex_transfer *t;
-	unsigned batch_size;
 	uint32_t handle;
 	unsigned i;
 	void *dst;
 
-	prim_data = &primitive_data[draw->key.base.info.mode];
-	batch_size = vtx->batch_size - prim_data->extra;
-
-	if (batch_size > *count)
-		batch_size = *count;
-
-	if (batch_size < prim_data->min)
-		return false;
-
-	if (batch_size > prim_data->min) {
-		if (prim_data->multiple_of_two && (batch_size % 2))
-			--batch_size;
-		if (prim_data->multiple_of_three && (batch_size % 3))
-			batch_size -= batch_size % 3;
-	}
+	prim_data = &primitive_data[vertex->mode];
 
 	resource = pipe_buffer_create(ctx->base.screen, PIPE_BIND_CUSTOM,
 					PIPE_USAGE_IMMUTABLE,
 					VERTEX_BUFFER_SIZE);
+	assert(resource);
 	handle = fd_bo_handle(of_resource(resource)->bo);
 
 	dst = pipe_buffer_map(&ctx->base, resource, PIPE_TRANSFER_WRITE,
 				&dst_transfer);
+	assert(dst);
 
 	for (i = 0, t = vtx->transfers; i < vtx->num_transfers; ++t, ++i) {
+		unsigned pipe_idx = t->vertex_buffer_index;
+		unsigned buf_idx = vtx->vb_map[pipe_idx];
 		struct of_transfer_data xfer = {
-			.stride = draw->key.vb[t->vertex_buffer_index].stride,
+			.stride = draw->vb_strides[buf_idx],
 			.pointer = vdata->transfers[i],
 			.buf = BUF_ADDR_8(dst, t->offset),
 		};
@@ -146,7 +136,7 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 		buffer->offset = t->offset;
 		buffer->ctrl_dst_offset = t->offset;
 		buffer->cmd = G3D_REQUEST_VERTEX_BUFFER;
-		LIST_ADDTAIL(&buffer->list, &draw->buffers);
+		LIST_ADDTAIL(&buffer->list, &vertex->buffers);
 
 #ifdef SEQUENTIAL
 		if (ROUND_UP(t->width, 4) == xfer.stride) {
@@ -163,13 +153,13 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 			}
 
 			memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
-				(indices + *pos + prim_data->shift) * xfer.stride),
-				(batch_size - prim_data->shift) * xfer.stride);
-			xfer.buf += (batch_size - prim_data->shift) * xfer.stride;
+				(indices + pos) * xfer.stride),
+				count * xfer.stride);
+			xfer.buf += count * xfer.stride;
 
 			if (prim_data->repeat_last) {
 				memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
-					(indices + *pos + batch_size - 1) * xfer.stride),
+					(indices + pos + count - 1) * xfer.stride),
 					t->width);
 				xfer.buf += xfer.stride;
 			}
@@ -185,57 +175,74 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 			xfer.buf += PACK_ATTRIBUTE(&xfer, t, indices, 1);
 		}
 
-		xfer.buf += PACK_ATTRIBUTE(&xfer, t,
-					indices + *pos + prim_data->shift,
-					batch_size - prim_data->shift);
+		xfer.buf += PACK_ATTRIBUTE(&xfer, t, indices + pos, count);
 
 		if (prim_data->repeat_last)
 			xfer.buf += PACK_ATTRIBUTE(&xfer, t,
-					indices + *pos + batch_size - 1, 1);
+					indices + pos + count - 1, 1);
 
 		buffer->length = ROUND_UP(xfer.buf -
 						BUF_ADDR_8(dst, t->offset), 32);
 	}
 
-	*pos += batch_size - prim_data->overlap;
-	*count -= batch_size - prim_data->overlap;
-
 	buffer = CALLOC_STRUCT(of_vertex_buffer);
 	assert(buffer);
 
-	buffer->length = batch_size + prim_data->extra;
+	buffer->length = count + prim_data->extra;
 	buffer->cmd = G3D_REQUEST_DRAW;
-	LIST_ADDTAIL(&buffer->list, &draw->buffers);
+	LIST_ADDTAIL(&buffer->list, &vertex->buffers);
 
 	if (dst_transfer)
 		pipe_buffer_unmap(&ctx->base, dst_transfer);
 
 	pipe_resource_reference(&resource, NULL);
-
-	return true;
 }
 
 /**
  * Draws a sequence of vertices described by array descriptors.
- * @param ctx Hardware context.
- * @param mode Primitive type.
- * @param arrays Array of attribute array descriptors.
- * @param count Vertex count.
- * @param indices First index.
+ * @param vdata Vertex data processing request descriptor.
+ * @param indices Pointer to first index OR offset of first vertex.
  */
 static int
 PREPARE_DRAW(struct of_vertex_data *vdata, INDEX_TYPE indices)
 {
-	struct of_vertex_info *draw = vdata->info;
-	unsigned int count = draw->count;
-	unsigned int pos = 0;
-	bool more;
+	struct of_vertex_info *vertex = vdata->info;
+	const struct of_draw_info *draw = &vertex->key;
+	const struct of_vertex_stateobj *vtx = draw->base.vtx;
+	const struct of_primitive_data *prim;
+	unsigned remaining;
+	unsigned offset;
 
-	LIST_INITHEAD(&draw->buffers);
+	prim = &primitive_data[vertex->mode];
+	LIST_INITHEAD(&vertex->buffers);
+	remaining = vertex->count;
+	offset = 0;
 
-	do {
-		more = COPY_VERTICES(vdata, indices, &pos, &count);
-	} while (more);
+	while (1) {
+		unsigned effective = remaining + prim->extra;
+		unsigned count = min(vtx->batch_size, effective);
+		unsigned vtx_count;
+
+		if (prim->multiple_of_two)
+			count -= count % 2;
+		if (prim->multiple_of_three)
+			count -= count % 3;
+		if (count < effective && prim->not_multiple_of_two)
+			count -= 1 - count % 2;
+
+		if (count < prim->min)
+			break;
+
+		vtx_count = count - prim->extra;
+
+		COPY_VERTICES(vdata, indices, offset, vtx_count);
+
+		if (vtx_count == remaining)
+			break;
+
+		remaining -= vtx_count - prim->overlap;
+		offset += vtx_count - prim->overlap;
+	}
 
 	return 0;
 }
