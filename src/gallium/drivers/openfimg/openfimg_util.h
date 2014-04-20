@@ -38,11 +38,12 @@
 
 #include "fimg_3dse.xml.h"
 
-#define OF_DBG_MSGS   0x1
-#define OF_DBG_DISASM 0x2
-#define OF_DBG_DCLEAR 0x4
-#define OF_DBG_DGMEM  0x8
-#define OF_DBG_VMSGS  0x10
+#define OF_DBG_MSGS		0x1
+#define OF_DBG_DISASM		0x2
+#define OF_DBG_DCLEAR		0x4
+#define OF_DBG_DGMEM		0x8
+#define OF_DBG_VMSGS		0x10
+#define OF_DBG_SHADER_OVERRIDE	0x20
 extern int of_mesa_debug;
 
 #define FORCE_DEBUG
@@ -50,7 +51,7 @@ extern int of_mesa_debug;
 #ifdef FORCE_DEBUG
 #include <stdio.h>
 #undef debug_printf
-#define debug_printf printf
+#define debug_printf _debug_printf
 #endif
 
 #define DBG(fmt, ...) \

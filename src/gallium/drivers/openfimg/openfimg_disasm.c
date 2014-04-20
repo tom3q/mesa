@@ -85,25 +85,25 @@ static void print_srcreg(uint32_t num, uint32_t type,
 		uint32_t swiz, uint32_t negate, uint32_t abs)
 {
 	if (negate)
-		printf("-");
+		_debug_printf("-");
 	if (abs)
-		printf("|");
+		_debug_printf("|");
 
 	if (type >= ARRAY_SIZE(src_type_str))
-		printf("?%u", num);
+		_debug_printf("?%u", num);
 	else
-		printf("%s%u", src_type_str[type], num);
+		_debug_printf("%s%u", src_type_str[type], num);
 
 	if (swiz != 0xe4) {
 		int i;
-		printf(".");
+		_debug_printf(".");
 		for (i = 0; i < 4; i++) {
-			printf("%c", chan_names[swiz & 0x3]);
+			_debug_printf("%c", chan_names[swiz & 0x3]);
 			swiz >>= 2;
 		}
 	}
 	if (abs)
-		printf("|");
+		_debug_printf("|");
 }
 
 static const char *dst_type_str[] = {
@@ -117,15 +117,15 @@ static const char *dst_type_str[] = {
 static void print_dstreg(uint32_t num, uint32_t mask, uint32_t type)
 {
 	if (type >= ARRAY_SIZE(dst_type_str))
-		printf("?%u", num);
+		_debug_printf("?%u", num);
 	else
-		printf("%s%u", dst_type_str[type], num);
+		_debug_printf("%s%u", dst_type_str[type], num);
 
 	if (mask != 0xf) {
 		int i;
-		printf(".");
+		_debug_printf(".");
 		for (i = 0; i < 4; i++) {
-			printf("%c", (mask & 0x1) ? chan_names[i] : '_');
+			_debug_printf("%c", (mask & 0x1) ? chan_names[i] : '_');
 			mask >>= 1;
 		}
 	}
@@ -147,7 +147,7 @@ static void print_dstreg(uint32_t num, uint32_t mask, uint32_t type)
 // 		}
 // 		break;
 // 	default:
-// 		fprintf(stderr, "unsupported shader type: %u\n", type);
+// 		f_debug_printf(stderr, "unsupported shader type: %u\n", type);
 // 		assert(0);
 // 		break;
 // 	}
@@ -155,7 +155,7 @@ static void print_dstreg(uint32_t num, uint32_t mask, uint32_t type)
 // 	 * up the name of the varying..
 // 	 */
 // 	if (name) {
-// 		printf("\t; %s", name);
+// 		_debug_printf("\t; %s", name);
 // 	}
 // }
 
@@ -234,37 +234,37 @@ static int disasm_alu(uint32_t *dwords, uint32_t alu_off,
 {
 	instr_t *alu = (instr_t *)dwords;
 
-	printf("%s", levels[level]);
+	_debug_printf("%s", levels[level]);
 	if (debug & PRINT_RAW) {
-		printf("%02x: %08x %08x %08x %08x\t", alu_off,
+		_debug_printf("%02x: %08x %08x %08x %08x\t", alu_off,
 				dwords[0], dwords[1], dwords[2], dwords[3]);
 	}
 
-	printf("%s", opcode_info[alu->opcode].name);
+	_debug_printf("%s", opcode_info[alu->opcode].name);
 
-	printf("\t");
+	_debug_printf("\t");
 
 	print_dstreg(alu->dest_regnum, alu->dest_mask, alu->dest_regtype);
-	printf(" = ");
+	_debug_printf(" = ");
 	print_srcreg(alu->src0_regnum, alu->src0_regtype, alu->src0_swizzle,
 			alu->src0_negate, alu->src0_abs);
 	if (opcode_info[alu->opcode].src_count >= 2) {
-		printf(", ");
+		_debug_printf(", ");
 		print_srcreg(alu->src1_regnum, alu->src1_regtype,
 				alu->src1_swizzle, alu->src1_negate,
 				alu->src1_abs);
 	}
 	if (opcode_info[alu->opcode].src_count >= 3) {
-		printf(", ");
+		_debug_printf(", ");
 		print_srcreg(alu->src2_regnum, alu->src2_regtype,
 				alu->src2_swizzle, alu->src2_negate,
 				alu->src2_abs);
 	}
 
 	if (alu->dest_clamp)
-		printf(" CLAMP");
+		_debug_printf(" CLAMP");
 
-	printf("\n");
+	_debug_printf("\n");
 
 	return 0;
 }

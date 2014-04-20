@@ -227,7 +227,7 @@ of_resource_create(struct pipe_screen *pscreen,
 	struct pipe_resource *prsc = &rsc->base.b;
 	uint32_t size;
 
-	DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
+	VDBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
 			"nr_samples=%u, usage=%u, bind=%x, flags=%x",
 			tmpl->target, util_format_name(tmpl->format),
 			tmpl->width0, tmpl->height0, tmpl->depth0,
@@ -273,7 +273,7 @@ of_resource_from_handle(struct pipe_screen *pscreen,
 	struct of_resource_slice *slice = &rsc->slices[0];
 	struct pipe_resource *prsc = &rsc->base.b;
 
-	DBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
+	VDBG("target=%d, format=%s, %ux%ux%u, array_size=%u, last_level=%u, "
 			"nr_samples=%u, usage=%u, bind=%x, flags=%x",
 			tmpl->target, util_format_name(tmpl->format),
 			tmpl->width0, tmpl->height0, tmpl->depth0,
