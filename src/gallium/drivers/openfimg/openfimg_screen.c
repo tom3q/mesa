@@ -57,6 +57,7 @@ static const struct debug_named_value debug_options[] = {
 		{"dclear",    OF_DBG_DCLEAR, "Mark all state dirty after clear"},
 		{"dgmem",     OF_DBG_DGMEM,  "Mark all state dirty after GMEM tile pass"},
 		{"vmsgs",     OF_DBG_VMSGS,  "Print verbose debug messages (flood warning!)"},
+		{"shadovr",   OF_DBG_SHADER_OVERRIDE, "Override shaders with custom binaries"},
 		DEBUG_NAMED_VALUE_END
 };
 
@@ -76,7 +77,7 @@ of_screen_is_format_supported(struct pipe_screen *pscreen,
 	if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
 			(sample_count > 1) ||
 			!util_format_is_supported(format, usage)) {
-		DBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
+		VDBG("not supported: format=%s, target=%d, sample_count=%d, usage=%x",
 				util_format_name(format), target, sample_count, usage);
 		return FALSE;
 	}
@@ -110,7 +111,7 @@ of_screen_is_format_supported(struct pipe_screen *pscreen,
 		retval |= PIPE_BIND_TRANSFER_WRITE;
 
 	if (retval != usage) {
-		DBG("not supported: format=%s, target=%d, sample_count=%d, "
+		VDBG("not supported: format=%s, target=%d, sample_count=%d, "
 				"usage=%x, retval=%x", util_format_name(format),
 				target, sample_count, usage, retval);
 	}
