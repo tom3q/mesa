@@ -47,8 +47,8 @@ struct of_shader_stateobj {
 	 * and if one changes, we potentially need to recompile in order to
 	 * get varying linkages correct:
 	 */
-	struct ir2_shader_info info;
-	struct ir2_shader *ir;
+	struct of_ir_shader_info info;
+	struct of_ir_shader *ir;
 
 	/* for all shaders, any tex fetch instructions which need to be
 	 * patched before assembly:
@@ -56,7 +56,7 @@ struct of_shader_stateobj {
 	unsigned num_tfetch_instrs;
 	struct {
 		unsigned samp_id;
-		struct ir2_instruction *instr;
+		struct of_ir_instruction *instr;
 	} tfetch_instrs[64];
 
 	unsigned first_immediate;     /* const reg # of first immediate */
