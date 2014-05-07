@@ -50,7 +50,7 @@ struct of_compile_context {
 
 	/* predicate stack: */
 	int pred_depth;
-	enum ir2_pred pred_stack[8];
+	enum of_ir_pred pred_stack[8];
 
 	/* Internal-Temporary and Predicate register assignment:
 	 *
@@ -93,7 +93,7 @@ struct of_compile_context {
 	uint64_t need_sync;
 
 	/* current shader */
-	struct ir2_shader *shader;
+	struct of_ir_shader *shader;
 };
 
 typedef void (*of_tgsi_opcode_handler_t)(struct of_compile_context *,
@@ -268,8 +268,8 @@ compile_free(struct of_compile_context *ctx)
 // 	return num;
 // }
 
-static struct ir2_register *add_dst_reg(struct of_compile_context *ctx,
-					struct ir2_instruction *alu,
+static struct of_ir_register *add_dst_reg(struct of_compile_context *ctx,
+					struct of_ir_instruction *alu,
 					const struct tgsi_dst_register *dst)
 {
 	unsigned flags = 0, num = dst->Index, type = REG_DST_R;
@@ -306,11 +306,11 @@ static struct ir2_register *add_dst_reg(struct of_compile_context *ctx,
 	swiz[3] = (dst->WriteMask & TGSI_WRITEMASK_W) ? 'w' : '_';
 	swiz[4] = '\0';
 
-	return ir2_reg_create(alu, num, swiz, flags, type);
+	return of_ir_reg_create(alu, num, swiz, flags, type);
 }
 
-static struct ir2_register *add_src_reg(struct of_compile_context *ctx,
-					struct ir2_instruction *alu,
+static struct of_ir_register *add_src_reg(struct of_compile_context *ctx,
+					struct of_ir_instruction *alu,
 					const struct tgsi_src_register *src)
 {
 	static const char swiz_vals[] = {
@@ -366,11 +366,11 @@ static struct ir2_register *add_src_reg(struct of_compile_context *ctx,
 		ctx->need_sync &= ~(uint64_t)(1 << num);
 	}
 
-	return ir2_reg_create(alu, num, swiz, flags, type);
+	return of_ir_reg_create(alu, num, swiz, flags, type);
 }
 
 static void
-add_vector_clamp(struct tgsi_full_instruction *inst, struct ir2_instruction *alu)
+add_vector_clamp(struct tgsi_full_instruction *inst, struct of_ir_instruction *alu)
 {
 	switch (inst->Instruction.Saturate) {
 	case TGSI_SAT_NONE:
@@ -386,14 +386,14 @@ add_vector_clamp(struct tgsi_full_instruction *inst, struct ir2_instruction *alu
 }
 
 // static void
-// add_regs_dummy_vector(struct ir2_instruction *alu)
+// add_regs_dummy_vector(struct of_ir_instruction *alu)
 // {
 // 	/* create dummy, non-written vector dst/src regs
 // 	 * for unused vector instr slot:
 // 	 */
-// 	ir2_reg_create(alu, 0, "____", 0, REG_DST_R); /* vector dst */
-// 	ir2_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src1 */
-// 	ir2_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src2 */
+// 	of_ir_reg_create(alu, 0, "____", 0, REG_DST_R); /* vector dst */
+// 	of_ir_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src1 */
+// 	of_ir_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src2 */
 // }
 
 /*
@@ -533,7 +533,7 @@ translate_tex(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, const void *data)
 {
 	unsigned opc = inst->Instruction.Opcode;
-	struct ir2_instruction *instr;
+	struct of_ir_instruction *instr;
 	struct tgsi_dst_register tmp_dst;
 	struct tgsi_src_register tmp_src;
 	const struct tgsi_src_register *coord = &inst->Src[0].Register;
@@ -560,14 +560,14 @@ translate_tex(struct of_compile_context *ctx,
 		get_internal_temp(ctx, &tmp_dst, &tmp_src);
 
 		/* tmp_dst.x___ = 1.0 / src.wwww */
-		instr = ir2_instr_create_alu(ctx->shader, OP_RCP);
+		instr = of_ir_instr_create_alu(ctx->shader, OP_RCP);
 
 		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "x___";
 		add_src_reg(ctx, instr, &inst->Src[0].Register)->swizzle =
 					swiz[inst->Src[0].Register.SwizzleW];
 
 		/* tmp_dst.xyz_ = src0.xyzw * src.xxxx */
-		instr = ir2_instr_create_alu(ctx->shader, OP_MUL);
+		instr = of_ir_instr_create_alu(ctx->shader, OP_MUL);
 		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "xyz_";
 		add_src_reg(ctx, instr, &tmp_src)->swizzle = "xxxx";
 		add_src_reg(ctx, instr, &inst->Src[0].Register);
@@ -577,7 +577,7 @@ translate_tex(struct of_compile_context *ctx,
 
 	assert(inst->Texture.NumOffsets <= 1); // TODO what to do in other cases?
 
-	instr = ir2_instr_create_alu(ctx->shader, OP_TEXLD);
+	instr = of_ir_instr_create_alu(ctx->shader, OP_TEXLD);
 
 	add_dst_reg(ctx, instr, &inst->Dst[0].Register);
 	add_src_reg(ctx, instr, coord);
@@ -741,7 +741,7 @@ static void
 translate_direct(struct of_compile_context *ctx,
 		 struct tgsi_full_instruction *inst, const void *data)
 {
-	struct ir2_instruction *ins;
+	struct of_ir_instruction *ins;
 	const opcode_info_t *info = data;
 	int src;
 
@@ -752,13 +752,13 @@ translate_direct(struct of_compile_context *ctx,
 		struct tgsi_dst_register tmp_dst;
 		struct tgsi_src_register tmp_src;
 
-		ins = ir2_instr_create_alu(ctx->shader, OP_NOP);
+		ins = of_ir_instr_create_alu(ctx->shader, OP_NOP);
 		get_internal_temp(ctx, &tmp_dst, &tmp_src);
 		add_dst_reg(ctx, ins, &tmp_dst);
 		add_src_reg(ctx, ins, &tmp_src);
 	}
 
-	ins = ir2_instr_create_alu(ctx->shader, info->opcode);
+	ins = of_ir_instr_create_alu(ctx->shader, info->opcode);
 	add_dst_reg(ctx, ins, &inst->Dst[0].Register);
 
 	for (src = 0; src < info->src_count; ++src)
@@ -869,8 +869,8 @@ of_compile_shader(struct of_shader_stateobj *so)
 {
 	struct of_compile_context ctx;
 
-	ir2_shader_destroy(so->ir);
-	so->ir = ir2_shader_create();
+	of_ir_shader_destroy(so->ir);
+	so->ir = of_ir_shader_create();
 	so->num_immediates = 0;
 
 	if (compile_init(&ctx, so) != TGSI_PARSE_OK)

@@ -44,43 +44,43 @@
 /* simple allocator to carve allocations out of an up-front allocated heap,
  * so that we can free everything easily in one shot.
  */
-static void * ir2_alloc(struct ir2_shader *shader, int sz)
+static void * of_ir_alloc(struct of_ir_shader *shader, int sz)
 {
 	void *ptr = &shader->heap[shader->heap_idx];
 	shader->heap_idx += align(sz, 4);
 	return ptr;
 }
 
-static char * ir2_strdup(struct ir2_shader *shader, const char *str)
+static char * of_ir_strdup(struct of_ir_shader *shader, const char *str)
 {
 	char *ptr = NULL;
 	if (str) {
 		int len = strlen(str);
-		ptr = ir2_alloc(shader, len+1);
+		ptr = of_ir_alloc(shader, len+1);
 		memcpy(ptr, str, len);
 		ptr[len] = '\0';
 	}
 	return ptr;
 }
 
-struct ir2_shader * ir2_shader_create(void)
+struct of_ir_shader * of_ir_shader_create(void)
 {
 	DEBUG_MSG("");
-	return calloc(1, sizeof(struct ir2_shader));
+	return calloc(1, sizeof(struct of_ir_shader));
 }
 
-void ir2_shader_destroy(struct ir2_shader *shader)
+void of_ir_shader_destroy(struct of_ir_shader *shader)
 {
 	DEBUG_MSG("");
 	free(shader);
 }
 
-static struct ir2_instruction * ir2_instr_create(struct ir2_shader *shader,
+static struct of_ir_instruction * of_ir_instr_create(struct of_ir_shader *shader,
 						 instr_opc_t opc,
-						 enum ir2_instr_type type)
+						 enum of_ir_instr_type type)
 {
-	struct ir2_instruction *instr =
-			ir2_alloc(shader, sizeof(struct ir2_instruction));
+	struct of_ir_instruction *instr =
+			of_ir_alloc(shader, sizeof(struct of_ir_instruction));
 	DEBUG_MSG("%d", opc);
 	instr->shader = shader;
 	instr->pred = shader->pred;
@@ -92,20 +92,20 @@ static struct ir2_instruction * ir2_instr_create(struct ir2_shader *shader,
 	return instr;
 }
 
-struct ir2_instruction * ir2_instr_create_alu(struct ir2_shader *shader,
+struct of_ir_instruction * of_ir_instr_create_alu(struct of_ir_shader *shader,
 					      instr_opc_t opc)
 {
-	return ir2_instr_create(shader, opc, IR2_ALU);
+	return of_ir_instr_create(shader, opc, IR2_ALU);
 }
 
-struct ir2_instruction * ir2_instr_create_cf(struct ir2_shader *shader,
+struct of_ir_instruction * of_ir_instr_create_cf(struct of_ir_shader *shader,
 					     instr_opc_t opc)
 {
-	return ir2_instr_create(shader, opc, IR2_CF);
+	return of_ir_instr_create(shader, opc, IR2_CF);
 }
 
-static void reg_update_stats(struct ir2_register *reg,
-		struct ir2_shader_info *info, bool dest)
+static void reg_update_stats(struct of_ir_register *reg,
+		struct of_ir_shader_info *info, bool dest)
 {
 	if (dest) {
 		switch (reg->type) {
@@ -132,7 +132,7 @@ static void reg_update_stats(struct ir2_register *reg,
 }
 
 /* actually, a write-mask */
-static uint32_t reg_alu_dst_swiz(struct ir2_register *reg)
+static uint32_t reg_alu_dst_swiz(struct of_ir_register *reg)
 {
 	uint32_t swiz = 0x0;
 	int i;
@@ -155,7 +155,7 @@ static uint32_t reg_alu_dst_swiz(struct ir2_register *reg)
 	return swiz;
 }
 
-static uint32_t reg_alu_src_swiz(struct ir2_register *reg)
+static uint32_t reg_alu_src_swiz(struct of_ir_register *reg)
 {
 	uint32_t swiz = 0x00;
 	int i;
@@ -185,8 +185,8 @@ static uint32_t reg_alu_src_swiz(struct ir2_register *reg)
  * Control flow instructions:
  */
 
-static int instr_emit_cf(struct ir2_instruction *instr, uint32_t *dwords,
-			 struct ir2_shader_info *info)
+static int instr_emit_cf(struct of_ir_instruction *instr, uint32_t *dwords,
+			 struct of_ir_shader_info *info)
 {
 	DBG("TODO");
 	return 0;
@@ -196,15 +196,15 @@ static int instr_emit_cf(struct ir2_instruction *instr, uint32_t *dwords,
  * ALU instructions:
  */
 
-static int instr_emit_alu(struct ir2_instruction *instr, uint32_t *dwords,
-			  struct ir2_shader_info *info)
+static int instr_emit_alu(struct of_ir_instruction *instr, uint32_t *dwords,
+			  struct of_ir_shader_info *info)
 {
 	int reg = 0;
 	instr_t *alu = (instr_t *)dwords;
-	struct ir2_register *dst_reg  = instr->regs[reg++];
-	struct ir2_register *src0_reg;
-	struct ir2_register *src1_reg;
-	struct ir2_register *src2_reg;
+	struct of_ir_register *dst_reg  = instr->regs[reg++];
+	struct of_ir_register *src0_reg;
+	struct of_ir_register *src1_reg;
+	struct of_ir_register *src2_reg;
 
 	memset(alu, 0, sizeof(*alu));
 
@@ -267,8 +267,8 @@ static int instr_emit_alu(struct ir2_instruction *instr, uint32_t *dwords,
 	return 0;
 }
 
-static int instr_emit(struct ir2_instruction *instr, uint32_t *dwords,
-		uint32_t idx, struct ir2_shader_info *info)
+static int instr_emit(struct of_ir_instruction *instr, uint32_t *dwords,
+		uint32_t idx, struct of_ir_shader_info *info)
 {
 	switch (instr->instr_type) {
 	case IR2_CF:
@@ -280,8 +280,8 @@ static int instr_emit(struct ir2_instruction *instr, uint32_t *dwords,
 }
 
 struct pipe_resource *
-ir2_shader_assemble(struct of_context *ctx, struct ir2_shader *shader,
-		    struct ir2_shader_info *info)
+of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
+		    struct of_ir_shader_info *info)
 {
 	uint32_t i;
 	uint32_t *ptr, *dwords = NULL;
@@ -336,23 +336,23 @@ fail:
 	return NULL;
 }
 
-struct ir2_register * ir2_reg_create(struct ir2_instruction *instr,
+struct of_ir_register * of_ir_reg_create(struct of_ir_instruction *instr,
 				     int num, const char *swizzle, int flags,
 				     int type)
 {
-	struct ir2_register *reg =
-			ir2_alloc(instr->shader, sizeof(struct ir2_register));
+	struct of_ir_register *reg =
+			of_ir_alloc(instr->shader, sizeof(struct of_ir_register));
 	DEBUG_MSG("%x, %d, %s", flags, num, swizzle);
 	assert(num <= REG_MASK);
 	reg->flags = flags;
 	reg->num = num;
-	reg->swizzle = ir2_strdup(instr->shader, swizzle);
+	reg->swizzle = of_ir_strdup(instr->shader, swizzle);
 	reg->type = type;
 	assert(instr->regs_count < ARRAY_SIZE(instr->regs));
 	instr->regs[instr->regs_count++] = reg;
 
 	if (instr->regs_count == 4) {
-		struct ir2_shader *shader = instr->shader;
+		struct of_ir_shader *shader = instr->shader;
 
 		assert(shader->instrs_count > 1);
 

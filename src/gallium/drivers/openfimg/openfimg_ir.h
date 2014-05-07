@@ -36,16 +36,16 @@
 
 /* low level intermediate representation of an adreno a2xx shader program */
 
-struct ir2_shader;
+struct of_ir_shader;
 
-struct ir2_shader_info {
+struct of_ir_shader_info {
 	uint64_t regs_written;
 	uint16_t sizedwords;
 	int8_t   max_reg;   /* highest GPR # used by shader */
 	uint8_t  max_input_reg;
 };
 
-struct ir2_register {
+struct of_ir_register {
 	enum {
 		IR2_REG_NEGATE = 0x4,
 		IR2_REG_ABS    = 0x8,
@@ -55,50 +55,50 @@ struct ir2_register {
 	uint8_t type;
 };
 
-enum ir2_pred {
+enum of_ir_pred {
 	IR2_PRED_NONE = 0,
 	IR2_PRED_EQ = 1,
 	IR2_PRED_NE = 2,
 };
 
-enum ir2_instr_type {
+enum of_ir_instr_type {
 	IR2_CF,
 	IR2_ALU,
 };
 
-struct ir2_instruction {
-	struct ir2_shader *shader;
-	enum ir2_instr_type instr_type;
-	enum ir2_pred pred;
+struct of_ir_instruction {
+	struct of_ir_shader *shader;
+	enum of_ir_instr_type instr_type;
+	enum of_ir_pred pred;
 	int sync;
 	unsigned regs_count;
-	struct ir2_register *regs[5];
+	struct of_ir_register *regs[5];
 
 	instr_opc_t opc;
 	bool clamp :1;
 	bool next_3arg :1;
 };
 
-struct ir2_shader {
+struct of_ir_shader {
 	unsigned instrs_count;
-	struct ir2_instruction *instrs[512];
+	struct of_ir_instruction *instrs[512];
 	uint32_t heap[100 * 4096];
 	unsigned heap_idx;
 
-	enum ir2_pred pred;  /* pred inherited by newly created instrs */
+	enum of_ir_pred pred;  /* pred inherited by newly created instrs */
 };
 
-struct ir2_shader * ir2_shader_create(void);
-void ir2_shader_destroy(struct ir2_shader *shader);
-struct pipe_resource *ir2_shader_assemble(struct of_context *ctx,
-					  struct ir2_shader *shader,
-					  struct ir2_shader_info *info);
+struct of_ir_shader * of_ir_shader_create(void);
+void of_ir_shader_destroy(struct of_ir_shader *shader);
+struct pipe_resource *of_ir_shader_assemble(struct of_context *ctx,
+					  struct of_ir_shader *shader,
+					  struct of_ir_shader_info *info);
 
-struct ir2_instruction * ir2_instr_create_alu(struct ir2_shader *shader,
+struct of_ir_instruction * of_ir_instr_create_alu(struct of_ir_shader *shader,
 					      instr_opc_t opc);
-struct ir2_instruction * ir2_instr_create_cf(struct ir2_shader *shader,
+struct of_ir_instruction * of_ir_instr_create_cf(struct of_ir_shader *shader,
 					     instr_opc_t opc);
-struct ir2_register * ir2_reg_create(struct ir2_instruction *instr,
+struct of_ir_register * of_ir_reg_create(struct of_ir_instruction *instr,
 				     int num, const char *swizzle, int flags,
 				     int type);
 

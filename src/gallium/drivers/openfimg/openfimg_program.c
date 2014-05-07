@@ -53,7 +53,7 @@ create_shader(enum shader_t type)
 static void
 delete_shader(struct of_shader_stateobj *so)
 {
-	ir2_shader_destroy(so->ir);
+	of_ir_shader_destroy(so->ir);
 	free(so->tokens);
 	pipe_resource_reference(&so->buffer, NULL);
 	free(so);
@@ -168,7 +168,7 @@ static struct of_shader_stateobj *
 assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 {
 	pipe_resource_reference(&so->buffer, NULL);
-	so->buffer = ir2_shader_assemble(ctx, so->ir, &so->info);
+	so->buffer = of_ir_shader_assemble(ctx, so->ir, &so->info);
 	if (!so->buffer)
 		goto fail;
 
