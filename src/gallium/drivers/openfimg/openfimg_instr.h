@@ -39,7 +39,9 @@ typedef enum {
 	REG_SRC_S,
 	REG_SRC_D,
 	REG_SRC_VFACE,
-	REG_SRC_VPOS
+	REG_SRC_VPOS,
+
+	REG_SRC_NUM
 } instr_src_type_t;
 
 typedef enum {
@@ -47,7 +49,9 @@ typedef enum {
 	REG_DST_R,
 	REG_DST_P,
 	REG_DST_A0,
-	REG_DST_AL
+	REG_DST_AL,
+
+	REG_DST_NUM
 } instr_dst_type_t;
 
 typedef struct PACKED {

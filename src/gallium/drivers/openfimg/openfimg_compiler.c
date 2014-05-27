@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2013 Tomasz Figa <tomasz.figa@gmail.com>
+ * Copyright (C) 2013-2014 Tomasz Figa <tomasz.figa@gmail.com>
  *
  * Parts shamelessly copied from Freedreno driver:
  *
@@ -41,6 +41,17 @@
 #include "openfimg_instr.h"
 #include "openfimg_ir.h"
 
+#define TMP_REG_BAND_SIZE	16
+#define OF_SRC_REG_NUM		3
+
+enum of_register_band {
+	REG_BAND_EVEN,
+	REG_BAND_ODD,
+
+	REG_BAND_NUM,
+	REG_BAND_ANY = REG_BAND_NUM,
+};
+
 struct of_compile_context {
 	struct of_program_stateobj *prog;
 	struct of_shader_stateobj *so;
@@ -75,6 +86,8 @@ struct of_compile_context {
 	int num_internal_temps;
 
 	uint8_t num_regs[TGSI_FILE_COUNT];
+	uint32_t temp_bitmap[REG_BAND_NUM];
+	unsigned temp_count[REG_BAND_NUM];
 
 	/* maps input register idx to prog->export_linkage idx: */
 	uint8_t input_export_idx[64];
@@ -113,6 +126,120 @@ semantic_idx(struct tgsi_declaration_semantic *semantic)
 	return idx;
 }
 
+typedef void (*token_handler_t)(struct of_compile_context *ctx);
+
+static void
+process_tokens(struct of_compile_context *ctx, const token_handler_t *handlers,
+	       unsigned num_handlers)
+{
+	while (!tgsi_parse_end_of_tokens(&ctx->parser)) {
+		token_handler_t handler;
+		unsigned token_type;
+
+		tgsi_parse_token(&ctx->parser);
+
+		token_type = ctx->parser.FullToken.Token.Type;
+
+		if (token_type > num_handlers)
+			continue;
+
+		handler = handlers[token_type];
+		if (!handler)
+			continue;
+
+		handler(ctx);
+	}
+}
+
+static void
+init_handle_declaration(struct of_compile_context *ctx)
+{
+	struct tgsi_full_declaration *decl =
+					&ctx->parser.FullToken.FullDeclaration;
+
+	switch (decl->Declaration.File) {
+	case TGSI_FILE_OUTPUT: {
+		unsigned name = decl->Semantic.Name;
+
+		assert(decl->Declaration.Semantic);  // TODO is this ever not true?
+
+		ctx->output_export_idx[decl->Range.First] =
+				semantic_idx(&decl->Semantic);
+
+		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
+			switch (name) {
+			case TGSI_SEMANTIC_POSITION:
+				ctx->position = ctx->num_regs[TGSI_FILE_OUTPUT];
+				ctx->num_position++;
+				break;
+			case TGSI_SEMANTIC_PSIZE:
+				ctx->psize = ctx->num_regs[TGSI_FILE_OUTPUT];
+				ctx->num_position++;
+				break;
+			case TGSI_SEMANTIC_COLOR:
+			case TGSI_SEMANTIC_GENERIC:
+				ctx->num_param++;
+				break;
+			default:
+				DBG("unknown VS semantic name: %s",
+						tgsi_semantic_names[name]);
+				assert(0);
+			}
+		} else {
+			switch (name) {
+			case TGSI_SEMANTIC_COLOR:
+			case TGSI_SEMANTIC_GENERIC:
+				ctx->num_param++;
+				break;
+			default:
+				DBG("unknown PS semantic name: %s",
+						tgsi_semantic_names[name]);
+				assert(0);
+			}
+		}
+
+		break; }
+
+	case TGSI_FILE_INPUT:
+		ctx->input_export_idx[decl->Range.First] =
+				semantic_idx(&decl->Semantic);
+		break;
+
+	case TGSI_FILE_TEMPORARY: {
+		unsigned tmp;
+
+		for (tmp = decl->Range.First; tmp <= decl->Range.Last; ++tmp) {
+			unsigned band = tmp % 2;
+			unsigned reg = tmp / 2;
+
+			if (ctx->temp_bitmap[band] & (1 << reg)) {
+				ctx->temp_bitmap[band] &= ~(1 << reg);
+				++ctx->temp_count[band];
+			}
+		}
+
+		break; }
+	}
+
+	ctx->num_regs[decl->Declaration.File] =
+		MAX2(ctx->num_regs[decl->Declaration.File],
+		decl->Range.Last + 1);
+}
+
+static void
+init_handle_immediate(struct of_compile_context *ctx)
+{
+	struct tgsi_full_immediate *imm = &ctx->parser.FullToken.FullImmediate;
+	unsigned n = ctx->so->num_immediates++;
+
+	memcpy(ctx->so->immediates[n].val, imm->u, 16);
+}
+
+static const token_handler_t init_token_handlers[] = {
+	[TGSI_TOKEN_TYPE_DECLARATION] = init_handle_declaration,
+	[TGSI_TOKEN_TYPE_IMMEDIATE] = init_handle_immediate,
+};
+
 static unsigned
 compile_init(struct of_compile_context *ctx, struct of_shader_stateobj *so)
 {
@@ -139,73 +266,11 @@ compile_init(struct of_compile_context *ctx, struct of_shader_stateobj *so)
 	memset(ctx->num_regs, 0, sizeof(ctx->num_regs));
 	memset(ctx->input_export_idx, 0, sizeof(ctx->input_export_idx));
 	memset(ctx->output_export_idx, 0, sizeof(ctx->output_export_idx));
+	memset(ctx->temp_bitmap, 0xff, sizeof(ctx->temp_bitmap));
 
 	/* do first pass to extract declarations: */
-	while (!tgsi_parse_end_of_tokens(&ctx->parser)) {
-		tgsi_parse_token(&ctx->parser);
-
-		switch (ctx->parser.FullToken.Token.Type) {
-		case TGSI_TOKEN_TYPE_DECLARATION: {
-			struct tgsi_full_declaration *decl =
-					&ctx->parser.FullToken.FullDeclaration;
-			if (decl->Declaration.File == TGSI_FILE_OUTPUT) {
-				unsigned name = decl->Semantic.Name;
-
-				assert(decl->Declaration.Semantic);  // TODO is this ever not true?
-
-				ctx->output_export_idx[decl->Range.First] =
-						semantic_idx(&decl->Semantic);
-
-				if (ctx->type == TGSI_PROCESSOR_VERTEX) {
-					switch (name) {
-					case TGSI_SEMANTIC_POSITION:
-						ctx->position = ctx->num_regs[TGSI_FILE_OUTPUT];
-						ctx->num_position++;
-						break;
-					case TGSI_SEMANTIC_PSIZE:
-						ctx->psize = ctx->num_regs[TGSI_FILE_OUTPUT];
-						ctx->num_position++;
-						break;
-					case TGSI_SEMANTIC_COLOR:
-					case TGSI_SEMANTIC_GENERIC:
-						ctx->num_param++;
-						break;
-					default:
-						DBG("unknown VS semantic name: %s",
-								tgsi_semantic_names[name]);
-						assert(0);
-					}
-				} else {
-					switch (name) {
-					case TGSI_SEMANTIC_COLOR:
-					case TGSI_SEMANTIC_GENERIC:
-						ctx->num_param++;
-						break;
-					default:
-						DBG("unknown PS semantic name: %s",
-								tgsi_semantic_names[name]);
-						assert(0);
-					}
-				}
-			} else if (decl->Declaration.File == TGSI_FILE_INPUT) {
-				ctx->input_export_idx[decl->Range.First] =
-						semantic_idx(&decl->Semantic);
-			}
-			ctx->num_regs[decl->Declaration.File] =
-					MAX2(ctx->num_regs[decl->Declaration.File], decl->Range.Last + 1);
-			break;
-		}
-		case TGSI_TOKEN_TYPE_IMMEDIATE: {
-			struct tgsi_full_immediate *imm =
-					&ctx->parser.FullToken.FullImmediate;
-			unsigned n = ctx->so->num_immediates++;
-			memcpy(ctx->so->immediates[n].val, imm->u, 16);
-			break;
-		}
-		default:
-			break;
-		}
-	}
+	process_tokens(ctx, init_token_handlers,
+			ARRAY_SIZE(init_token_handlers));
 
 	/* TGSI generated immediates are always entire vec4's, ones we
 	 * generate internally are not:
@@ -258,15 +323,6 @@ compile_free(struct of_compile_context *ctx)
  * (uniforms).
  *
  */
-
-// static unsigned
-// get_temp_gpr(struct of_compile_context *ctx, int idx)
-// {
-// 	unsigned num = idx + ctx->num_regs[TGSI_FILE_INPUT];
-// 	if (ctx->type == TGSI_PROCESSOR_VERTEX)
-// 		num++;
-// 	return num;
-// }
 
 static struct of_ir_register *add_dst_reg(struct of_compile_context *ctx,
 					struct of_ir_instruction *alu,
@@ -385,17 +441,6 @@ add_vector_clamp(struct tgsi_full_instruction *inst, struct of_ir_instruction *a
 	}
 }
 
-// static void
-// add_regs_dummy_vector(struct of_ir_instruction *alu)
-// {
-// 	/* create dummy, non-written vector dst/src regs
-// 	 * for unused vector instr slot:
-// 	 */
-// 	of_ir_reg_create(alu, 0, "____", 0, REG_DST_R); /* vector dst */
-// 	of_ir_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src1 */
-// 	of_ir_reg_create(alu, 0, NULL, 0, REG_SRC_R);   /* vector src2 */
-// }
-
 /*
  * Helpers for TGSI instructions that don't map to a single shader instr:
  */
@@ -419,106 +464,47 @@ src_from_dst(struct tgsi_src_register *src, struct tgsi_dst_register *dst)
  * generated by a single TGSI op.
  */
 static void
-get_internal_temp(struct of_compile_context *ctx,
-		struct tgsi_dst_register *tmp_dst,
-		struct tgsi_src_register *tmp_src)
+get_internal_temp(struct of_compile_context *ctx, enum of_register_band band,
+		  struct tgsi_dst_register *tmp_dst,
+		  struct tgsi_src_register *tmp_src)
 {
 	int n;
+
+	if (band == REG_BAND_ANY) {
+		if (ctx->temp_count[REG_BAND_EVEN]
+		    < ctx->temp_count[REG_BAND_ODD])
+			band = REG_BAND_EVEN;
+		else
+			band = REG_BAND_ODD;
+	}
+
+	/* assign next temporary: */
+	n = ffs(ctx->temp_bitmap[band]) - 1;
+	assert(n >= 0);
+
+	++ctx->temp_count[band];
+	ctx->temp_bitmap[band] &= ~(1 << n);
 
 	tmp_dst->File      = TGSI_FILE_TEMPORARY;
 	tmp_dst->WriteMask = TGSI_WRITEMASK_XYZW;
 	tmp_dst->Indirect  = 0;
 	tmp_dst->Dimension = 0;
-
-	/* assign next temporary: */
-	n = ctx->num_internal_temps++;
-	if (ctx->pred_reg != -1)
-		n++;
-
-	tmp_dst->Index = ctx->num_regs[TGSI_FILE_TEMPORARY] + n;
+	tmp_dst->Index     = 2 * n + band;
 
 	src_from_dst(tmp_src, tmp_dst);
 }
 
-// static void
-// get_predicate(struct of_compile_context *ctx, struct tgsi_dst_register *dst,
-// 		struct tgsi_src_register *src)
-// {
-// 	assert(ctx->pred_reg != -1);
-//
-// 	dst->File      = TGSI_FILE_TEMPORARY;
-// 	dst->WriteMask = TGSI_WRITEMASK_W;
-// 	dst->Indirect  = 0;
-// 	dst->Dimension = 0;
-// 	dst->Index     = get_temp_gpr(ctx, ctx->pred_reg);
-//
-// 	if (src) {
-// 		src_from_dst(src, dst);
-// 		src->SwizzleX  = TGSI_SWIZZLE_W;
-// 		src->SwizzleY  = TGSI_SWIZZLE_W;
-// 		src->SwizzleZ  = TGSI_SWIZZLE_W;
-// 		src->SwizzleW  = TGSI_SWIZZLE_W;
-// 	}
-// }
+static void
+put_internal_temp(struct of_compile_context *ctx,
+		  struct tgsi_dst_register *tmp_dst,
+		  struct tgsi_src_register *tmp_src)
+{
+	unsigned band = tmp_dst->Index % 2;
+	unsigned num = tmp_dst->Index / 2;
 
-// static void
-// push_predicate(struct of_compile_context *ctx, struct tgsi_src_register *src)
-// {
-// 	DBG("TODO");
-// }
-
-// static void
-// pop_predicate(struct of_compile_context *ctx)
-// {
-// 	DBG("TODO");
-// }
-
-// static void
-// get_immediate(struct of_compile_context *ctx,
-// 		struct tgsi_src_register *reg, uint32_t val)
-// {
-// 	unsigned neg, swiz, idx, i;
-// 	/* actually maps 1:1 currently.. not sure if that is safe to rely on: */
-// 	static const unsigned swiz2tgsi[] = {
-// 			TGSI_SWIZZLE_X, TGSI_SWIZZLE_Y, TGSI_SWIZZLE_Z, TGSI_SWIZZLE_W,
-// 	};
-//
-// 	for (i = 0; i < ctx->immediate_idx; i++) {
-// 		swiz = i % 4;
-// 		idx  = i / 4;
-//
-// 		if (ctx->so->immediates[idx].val[swiz] == val) {
-// 			neg = 0;
-// 			break;
-// 		}
-//
-// 		if (ctx->so->immediates[idx].val[swiz] == -val) {
-// 			neg = 1;
-// 			break;
-// 		}
-// 	}
-//
-// 	if (i == ctx->immediate_idx) {
-// 		/* need to generate a new immediate: */
-// 		swiz = i % 4;
-// 		idx  = i / 4;
-// 		neg  = 0;
-// 		ctx->so->immediates[idx].val[swiz] = val;
-// 		ctx->so->num_immediates = idx + 1;
-// 		ctx->immediate_idx++;
-// 	}
-//
-// 	reg->File      = TGSI_FILE_IMMEDIATE;
-// 	reg->Indirect  = 0;
-// 	reg->Dimension = 0;
-// 	reg->Index     = idx;
-// 	reg->Absolute  = 0;
-// 	reg->Negate    = neg;
-// 	reg->SwizzleX  = swiz2tgsi[swiz];
-// 	reg->SwizzleY  = swiz2tgsi[swiz];
-// 	reg->SwizzleZ  = swiz2tgsi[swiz];
-// 	reg->SwizzleW  = swiz2tgsi[swiz];
-// }
+	ctx->temp_bitmap[band] |= 1 << num;
+	--ctx->temp_count[band];
+}
 
 /* POW(a,b) = EXP2(b * LOG2(a)) */
 static void
@@ -557,7 +543,7 @@ translate_tex(struct of_compile_context *ctx,
 		 *  dst = texture_sample(unit, coord, bias)
 		 */
 
-		get_internal_temp(ctx, &tmp_dst, &tmp_src);
+		get_internal_temp(ctx, REG_BAND_ANY, &tmp_dst, &tmp_src);
 
 		/* tmp_dst.x___ = 1.0 / src.wwww */
 		instr = of_ir_instr_create_alu(ctx->shader, OP_RCP);
@@ -582,6 +568,9 @@ translate_tex(struct of_compile_context *ctx,
 	add_dst_reg(ctx, instr, &inst->Dst[0].Register);
 	add_src_reg(ctx, instr, coord);
 	add_src_reg(ctx, instr, &inst->Src[1].Register);
+
+	if (opc == TGSI_OPCODE_TXP)
+		put_internal_temp(ctx, &tmp_dst, &tmp_src);
 }
 
 /* LRP(a,b,c) = (a * b) + ((1 - a) * c) */
@@ -753,9 +742,10 @@ translate_direct(struct of_compile_context *ctx,
 		struct tgsi_src_register tmp_src;
 
 		ins = of_ir_instr_create_alu(ctx->shader, OP_NOP);
-		get_internal_temp(ctx, &tmp_dst, &tmp_src);
+		get_internal_temp(ctx, REG_BAND_ANY, &tmp_dst, &tmp_src);
 		add_dst_reg(ctx, ins, &tmp_dst);
 		add_src_reg(ctx, ins, &tmp_src);
+		put_internal_temp(ctx, &tmp_dst, &tmp_src);
 	}
 
 	ins = of_ir_instr_create_alu(ctx->shader, info->opcode);
@@ -827,9 +817,10 @@ static const of_tgsi_map_entry_t translate_table[] = {
 };
 
 static void
-translate_instruction(struct of_compile_context *ctx,
-		struct tgsi_full_instruction *inst)
+translate_instruction(struct of_compile_context *ctx)
 {
+	struct tgsi_full_instruction *inst =
+					&ctx->parser.FullToken.FullInstruction;
 	unsigned opc = inst->Instruction.Opcode;
 
 	if (opc == TGSI_OPCODE_END)
@@ -847,22 +838,9 @@ translate_instruction(struct of_compile_context *ctx,
 					translate_table[opc].handler_data);
 }
 
-static void
-compile_instructions(struct of_compile_context *ctx)
-{
-	while (!tgsi_parse_end_of_tokens(&ctx->parser)) {
-		tgsi_parse_token(&ctx->parser);
-
-		switch (ctx->parser.FullToken.Token.Type) {
-		case TGSI_TOKEN_TYPE_INSTRUCTION:
-			translate_instruction(ctx,
-					&ctx->parser.FullToken.FullInstruction);
-			break;
-		default:
-			break;
-		}
-	}
-}
+static const token_handler_t compile_token_handlers[] = {
+	[TGSI_TOKEN_TYPE_INSTRUCTION] = translate_instruction,
+};
 
 int
 of_compile_shader(struct of_shader_stateobj *so)
@@ -876,9 +854,18 @@ of_compile_shader(struct of_shader_stateobj *so)
 	if (compile_init(&ctx, so) != TGSI_PARSE_OK)
 		return -1;
 
-	compile_instructions(&ctx);
+	process_tokens(&ctx, compile_token_handlers,
+			ARRAY_SIZE(compile_token_handlers));
 
 	compile_free(&ctx);
+
+	if (ctx.temp_count[REG_BAND_EVEN] > TMP_REG_BAND_SIZE
+	    || ctx.temp_count[REG_BAND_ODD] > TMP_REG_BAND_SIZE) {
+		DBG("too many temporaries used (%u even and %u odd)",
+			ctx.temp_count[REG_BAND_EVEN],
+			ctx.temp_count[REG_BAND_ODD]);
+		return -1;
+	}
 
 	return 0;
 }

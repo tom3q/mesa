@@ -47,47 +47,22 @@
 
 #include <stdlib.h>
 
-static uint32_t
-add_to_hash(uint32_t hash, const void *data, size_t size)
-{
-	const uint32_t *key = data;
-	uint32_t i;
-
-	for (i = 0; i < size / 4; ++i) {
-		hash += key[i];
-		hash += (hash << 10);
-		hash ^= (hash >> 6);
-	}
-
-	return hash;
-}
-
-static uint32_t
-finish_hash(uint32_t hash)
-{
-	hash += (hash << 3);
-	hash ^= (hash >> 11);
-	hash += (hash << 15);
-
-	return hash;
-}
-
 static INLINE unsigned
 of_draw_hash(struct of_draw_info *req)
 {
 	uint32_t hash;
 
-	hash = add_to_hash(0, &req->base, sizeof(req->base));
+	hash = of_hash_add(0, &req->base, sizeof(req->base));
 	if (req->direct)
-		hash = add_to_hash(hash, req->vb_strides,
+		hash = of_hash_add(hash, req->vb_strides,
 			req->base.num_vb * sizeof(req->vb_strides[0]));
 	else
-		hash = add_to_hash(hash, req->vb,
+		hash = of_hash_add(hash, req->vb,
 			req->base.num_vb * sizeof(req->vb[0]));
 	if (req->base.info.indexed)
-		hash = add_to_hash(hash, &req->ib, sizeof(req->ib));
+		hash = of_hash_add(hash, &req->ib, sizeof(req->ib));
 
-	return finish_hash(hash);
+	return of_hash_finish(hash);
 }
 
 static int

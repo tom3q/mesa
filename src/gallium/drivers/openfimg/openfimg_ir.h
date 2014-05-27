@@ -33,6 +33,7 @@
 
 #include "openfimg_context.h"
 #include "openfimg_instr.h"
+#include "openfimg_util.h"
 
 /* low level intermediate representation of an adreno a2xx shader program */
 

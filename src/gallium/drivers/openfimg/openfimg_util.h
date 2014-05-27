@@ -112,6 +112,14 @@ enum fgpf_logical_op of_logic_op(unsigned op);
 enum fgra_bfcull_face of_cull_face(unsigned face);
 enum fgpf_test_mode of_test_mode(unsigned mode);
 
+uint32_t of_hash_add(uint32_t hash, const void *data, size_t size);
+uint32_t of_hash_finish(uint32_t hash);
+
+static inline uint32_t of_hash_oneshot(const void *data, size_t size)
+{
+	return of_hash_finish(of_hash_add(0, data, size));
+}
+
 /* convert x,y to dword */
 static inline uint32_t xy2d(uint16_t x, uint16_t y)
 {
