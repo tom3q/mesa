@@ -368,3 +368,28 @@ of_test_mode(unsigned mode)
 		return 0;
 	}
 }
+
+uint32_t
+of_hash_add(uint32_t hash, const void *data, size_t size)
+{
+	const uint32_t *key = data;
+	uint32_t i;
+
+	for (i = 0; i < size / 4; ++i) {
+		hash += key[i];
+		hash += (hash << 10);
+		hash ^= (hash >> 6);
+	}
+
+	return hash;
+}
+
+uint32_t
+of_hash_finish(uint32_t hash)
+{
+	hash += (hash << 3);
+	hash ^= (hash >> 11);
+	hash += (hash << 15);
+
+	return hash;
+}

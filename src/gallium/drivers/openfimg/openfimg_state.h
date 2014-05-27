@@ -56,6 +56,16 @@ struct of_zsa_stateobj {
 	uint32_t fgpf_dbmsk;
 };
 
+#define OF_CSO_BIND(pctx, name, dirty_flag, hwcso)		\
+	do {							\
+		struct of_context *ctx = of_context(pctx);	\
+		ctx->cso.name = hwcso;				\
+		if (ctx->cso_active.name != hwcso)		\
+			ctx->dirty |= dirty_flag;		\
+		else						\
+			ctx->dirty &= ~dirty_flag;		\
+	} while (0)
+
 static inline bool of_depth_enabled(struct of_context *ctx)
 {
 	return ctx->cso.zsa && ctx->cso.zsa->depth.enabled;

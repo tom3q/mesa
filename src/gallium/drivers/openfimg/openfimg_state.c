@@ -276,12 +276,7 @@ of_blend_state_create(struct pipe_context *pctx,
 static void
 of_blend_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	struct of_context *ctx = of_context(pctx);
-	ctx->cso.blend = hwcso;
-	if (ctx->cso_active.blend != hwcso)
-		ctx->dirty |= OF_DIRTY_BLEND;
-	else
-		ctx->dirty &= ~OF_DIRTY_BLEND;
+	OF_CSO_BIND(pctx, blend, OF_DIRTY_BLEND, hwcso);
 }
 
 static void
@@ -329,12 +324,7 @@ of_rasterizer_state_create(struct pipe_context *pctx,
 static void
 of_rasterizer_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	struct of_context *ctx = of_context(pctx);
-	ctx->cso.rasterizer = hwcso;
-	if (ctx->cso_active.rasterizer != hwcso)
-		ctx->dirty |= OF_DIRTY_RASTERIZER;
-	else
-		ctx->dirty &= ~OF_DIRTY_RASTERIZER;
+	OF_CSO_BIND(pctx, rasterizer, OF_DIRTY_RASTERIZER, hwcso);
 }
 
 static void
@@ -402,12 +392,7 @@ of_zsa_state_create(struct pipe_context *pctx,
 static void
 of_zsa_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	struct of_context *ctx = of_context(pctx);
-	ctx->cso.zsa = hwcso;
-	if (ctx->cso_active.zsa != hwcso)
-		ctx->dirty |= OF_DIRTY_ZSA;
-	else
-		ctx->dirty &= ~OF_DIRTY_ZSA;
+	OF_CSO_BIND(pctx, zsa, OF_DIRTY_ZSA, hwcso);
 }
 
 static void
@@ -670,12 +655,7 @@ of_vertex_state_delete(struct pipe_context *pctx, void *hwcso)
 static void
 of_vertex_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	struct of_context *ctx = of_context(pctx);
-	ctx->cso.vtx = hwcso;
-	if (ctx->cso_active.vtx != hwcso)
-		ctx->dirty |= OF_DIRTY_VTXSTATE;
-	else
-		ctx->dirty &= ~OF_DIRTY_VTXSTATE;
+	OF_CSO_BIND(pctx, vtx, OF_DIRTY_VTXSTATE, hwcso);
 }
 
 void
