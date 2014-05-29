@@ -40,10 +40,11 @@
 #include "openfimg_emit.h"
 #include "openfimg_context.h"
 #include "openfimg_state.h"
-#include "openfimg_program.h"
 #include "openfimg_resource.h"
 #include "openfimg_vertex.h"
 #include "openfimg_util.h"
+
+#include "compiler/openfimg_program.h"
 
 #include <stdlib.h>
 

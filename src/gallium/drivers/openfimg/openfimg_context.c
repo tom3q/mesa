@@ -32,12 +32,13 @@
 #include "openfimg_draw.h"
 #include "openfimg_emit.h"
 #include "openfimg_fence.h"
-#include "openfimg_program.h"
 #include "openfimg_resource.h"
 #include "openfimg_texture.h"
 #include "openfimg_state.h"
 #include "openfimg_vertex.h"
 #include "openfimg_util.h"
+
+#include "compiler/openfimg_program.h"
 
 static struct fd_ringbuffer *next_rb(struct of_context *ctx)
 {
