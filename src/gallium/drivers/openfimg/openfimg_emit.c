@@ -33,10 +33,11 @@
 #include "openfimg_resource.h"
 #include "openfimg_emit.h"
 #include "openfimg_context.h"
-#include "openfimg_program.h"
 #include "openfimg_texture.h"
 #include "openfimg_util.h"
 #include "openfimg_state.h"
+
+#include "compiler/openfimg_program.h"
 
 /*
  * Utility functions
