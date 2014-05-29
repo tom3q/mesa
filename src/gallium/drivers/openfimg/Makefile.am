@@ -1,3 +1,5 @@
+AUTOMAKE_OPTIONS = subdir-objects
+
 include Makefile.sources
 include $(top_srcdir)/src/gallium/Automake.inc
 
@@ -10,4 +12,6 @@ AM_CFLAGS = \
 	$(OPENFIMG_CFLAGS) \
 	$(VISIBILITY_CFLAGS)
 
-libopenfimg_la_SOURCES = $(C_SOURCES)
+libopenfimg_la_SOURCES = \
+	$(C_SOURCES) \
+	$(COMPILER_SOURCES)
