@@ -42,6 +42,102 @@
 #include "openfimg_state.h"
 
 /*
+ * Shader overriding support
+ */
+static int
+override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
+{
+	char path[] = "Xs_YYYYYYYY.bin";
+	struct pipe_transfer *transfer = NULL;
+	struct pipe_resource *buffer = NULL;
+	struct shader_header hdr;
+	uint32_t *dwords = NULL;
+	FILE *file;
+	size_t ret;
+
+	snprintf(path, sizeof(path), "%s_%08x.bin",
+			(so->type == SHADER_VERTEX) ? "vs" : "fs", so->hash);
+
+	file = fopen(path, "rb");
+	if (!file)
+		return -1;
+
+	_debug_printf("%s: loading shader from '%s'\n", __func__, path);
+
+	ret = fread(&hdr, sizeof(hdr), 1, file);
+	if (ret != 1) {
+		DBG("truncated shader binary file");
+		goto fail;
+	}
+
+	if (fseek(file, hdr.header_size, SEEK_SET)) {
+		DBG("truncated shader binary file");
+		goto fail;
+	}
+
+	buffer = pipe_buffer_create(ctx->base.screen,
+					PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
+					16 * hdr.instruct_size);
+	if (!buffer) {
+		DBG("shader BO allocation failed");
+		goto fail;
+	}
+
+	dwords = pipe_buffer_map(&ctx->base, buffer, PIPE_TRANSFER_WRITE,
+					&transfer);
+	if (!dwords) {
+		DBG("failed to map shader BO");
+		goto fail;
+	}
+
+	ret = fread(dwords, 16, hdr.instruct_size, file);
+	if (ret != hdr.instruct_size) {
+		DBG("truncated shader binary file");
+		goto fail;
+	}
+
+	if (hdr.const_float_size > so->first_immediate) {
+		hdr.const_float_size -= so->first_immediate;
+		if (hdr.const_float_size > ARRAY_SIZE(so->immediates))
+			hdr.const_float_size = ARRAY_SIZE(so->immediates);
+
+		if (fseek(file, 16 * so->first_immediate, SEEK_CUR)) {
+			DBG("truncated shader binary file");
+			goto fail;
+		}
+
+		ret = fread(so->immediates, 16, hdr.const_float_size, file);
+		if (ret != hdr.const_float_size) {
+			DBG("truncated shader binary file");
+			goto fail;
+		}
+	}
+
+	so->buffer = buffer;
+	so->info.sizedwords = 4 * hdr.instruct_size;
+
+	if (transfer)
+		pipe_buffer_unmap(&ctx->base, transfer);
+
+	pipe_resource_reference(&so->buffer, NULL);
+
+	fclose(file);
+
+	_debug_printf("%s: successfully loaded shader '%s'\n", __func__, path);
+
+	return 0;
+
+fail:
+	fclose(file);
+	if (transfer)
+		pipe_buffer_unmap(&ctx->base, transfer);
+	if (buffer)
+		pipe_resource_reference(&buffer, NULL);
+
+	return -1;
+}
+
+/*
  * Compilation wrappers
  */
 static int
@@ -60,13 +156,6 @@ compile(struct of_shader_stateobj *so)
 		return -1;
 	}
 
-	/* NOTE: we don't assemble yet because for VS we don't know the
-	 * type information for vertex fetch yet.. so those need to be
-	 * patched up later before assembling.
-	 */
-
-	so->info.sizedwords = 0;
-
 	return 0;
 }
 
@@ -81,6 +170,12 @@ assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 		ret = compile(so);
 		if (ret)
 			return -1;
+	}
+
+	if (of_mesa_debug & OF_DBG_SHADER_OVERRIDE) {
+		ret = override_shader(ctx, so);
+		if (!ret)
+			return 0;
 	}
 
 	so->buffer = of_ir_shader_assemble(ctx, so->ir, &so->info);
@@ -157,95 +252,6 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 }
 
 /*
- * Shader overriding support
- */
-static void
-override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
-{
-	char path[] = "Xs_YYYYYYYY.bin";
-	struct pipe_transfer *transfer = NULL;
-	struct pipe_resource *buffer = NULL;
-	struct shader_header hdr;
-	uint32_t *dwords = NULL;
-	FILE *file;
-	size_t ret;
-
-	snprintf(path, sizeof(path), "%s_%08x.bin",
-			(so->type == SHADER_VERTEX) ? "vs" : "fs", so->hash);
-
-	file = fopen(path, "rb");
-	if (!file)
-		return;
-
-	_debug_printf("%s: loading shader from '%s'\n", __func__, path);
-
-	ret = fread(&hdr, sizeof(hdr), 1, file);
-	if (ret != 1) {
-		DBG("truncated shader binary file");
-		goto fail;
-	}
-
-	if (fseek(file, hdr.header_size, SEEK_SET)) {
-		DBG("truncated shader binary file");
-		goto fail;
-	}
-
-	buffer = pipe_buffer_create(ctx->base.screen,
-					PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
-					16 * hdr.instruct_size);
-	if (!buffer) {
-		DBG("shader BO allocation failed");
-		goto fail;
-	}
-
-	dwords = pipe_buffer_map(&ctx->base, buffer, PIPE_TRANSFER_WRITE,
-					&transfer);
-	if (!dwords) {
-		DBG("failed to map shader BO");
-		goto fail;
-	}
-
-	ret = fread(dwords, 16, hdr.instruct_size, file);
-	if (ret != hdr.instruct_size) {
-		DBG("truncated shader binary file");
-		goto fail;
-	}
-
-	if (hdr.const_float_size) {
-		if (hdr.const_float_size > 64)
-			hdr.const_float_size = 64;
-
-		ret = fread(so->immediates, 16, hdr.const_float_size, file);
-		if (ret != hdr.const_float_size) {
-			DBG("truncated shader binary file");
-			goto fail;
-		}
-	}
-
-	so->num_immediates = hdr.const_float_size;
-	so->buffer = buffer;
-	so->info.sizedwords = 4 * hdr.instruct_size;
-
-	if (transfer)
-		pipe_buffer_unmap(&ctx->base, transfer);
-
-	pipe_resource_reference(&so->buffer, NULL);
-
-	fclose(file);
-
-	_debug_printf("%s: successfully loaded shader '%s'\n", __func__, path);
-
-	return;
-
-fail:
-	fclose(file);
-	if (transfer)
-		pipe_buffer_unmap(&ctx->base, transfer);
-	if (buffer)
-		pipe_resource_reference(&buffer, NULL);
-}
-
-/*
  * State management
  */
 static struct of_shader_stateobj *
@@ -263,9 +269,6 @@ create_shader(struct of_context *ctx, const struct pipe_shader_state *cso,
 	so->tokens = tgsi_dup_tokens(cso->tokens);
 	so->hash = of_hash_oneshot(cso->tokens, n * sizeof(struct tgsi_token));
 	so->type = type;
-
-	if (of_mesa_debug & OF_DBG_SHADER_OVERRIDE)
-		override_shader(ctx, so);
 
 	return so;
 }

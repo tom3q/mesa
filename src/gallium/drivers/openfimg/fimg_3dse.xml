@@ -30,6 +30,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	</license>
 </copyright>
 
+<!--
+ FIMG-3DSE registers (as visible from userspace)
+-->
+
 <enum name="fghi_attrib_dt">
 	<value value="0" name="DT_BYTE"/>
 	<value value="1" name="DT_SHORT"/>
@@ -341,8 +345,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	</reg32>
 </domain>
 
+<!--
+ Texture-specific definitions
+-->
+
 <domain name="TEX" width="32" bare="yes">
-	<reg32 offset="0x00" name="TSTA">
+	<reg32 offset="0" name="TSTA">
 		<bitfield name="MIPMAP_EN" high="1" low="0" type="fgtu_mipmap_mode"/>
 		<bitfield name="TEX_FLT_EN" pos="2"/>
 		<bitfield name="MAG_FILTER" pos="3"/>
@@ -358,15 +366,19 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		<bitfield name="CK2" pos="22"/>
 		<bitfield name="TYPE" high="28" low="27" type="fgtu_tex_type"/>
 	</reg32>
-	<reg32 offset="0x04" name="USIZE" type="uint"/>
-	<reg32 offset="0x08" name="VSIZE" type="uint"/>
-	<reg32 offset="0x0c" name="PSIZE" type="uint"/>
-	<stripe offset="0x10" stride="0x04" length="11">
+	<reg32 offset="1" name="USIZE" type="uint"/>
+	<reg32 offset="2" name="VSIZE" type="uint"/>
+	<reg32 offset="3" name="PSIZE" type="uint"/>
+	<stripe offset="4" stride="1" length="11">
 		<reg32 offset="0x00" name="TOFFS" type="uint"/>
 	</stripe>
-	<reg32 offset="0x3c" name="MIN_L" type="uint"/>
-	<reg32 offset="0x40" name="MAX_L" type="uint"/>
+	<reg32 offset="15" name="MIN_L" type="uint"/>
+	<reg32 offset="16" name="MAX_L" type="uint"/>
 </domain>
+
+<!--
+ Vertex texture-specific definitions
+-->
 
 <domain name="VTEX" width="32" bare="yes">
 	<reg32 offset="0x00" name="VTSTA">
@@ -374,6 +386,128 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		<bitfield name="USIZE" high="7" low="4" type="uint"/>
 		<bitfield name="VMOD" high="9" low="8" type="fgtu_addr_mode"/>
 		<bitfield name="UMOD" high="11" low="10" type="fgtu_addr_mode"/>
+	</reg32>
+</domain>
+
+<!--
+ Shader-specific definitions
+-->
+
+<enum name="instr_type" inline="yes">
+	<value name="INSTR"/>
+	<value name="ALU"/>
+	<value name="CF"/>
+</enum>
+
+<enum name="of_instr_src">
+	<value name="OF_SRC_V" value="0"/>
+	<value name="OF_SRC_R" value="1"/>
+	<value name="OF_SRC_C" value="2"/>
+	<value name="OF_SRC_I" value="3"/>
+	<value name="OF_SRC_AL" value="4"/>
+	<value name="OF_SRC_B" value="5"/>
+	<value name="OF_SRC_P" value="6"/>
+	<value name="OF_SRC_S" value="7"/>
+	<value name="OF_SRC_D" value="8"/>
+	<value name="OF_SRC_VFACE" value="9"/>
+	<value name="OF_SRC_VPOS" value="10"/>
+</enum>
+
+<enum name="of_instr_dst">
+	<value name="OF_DST_O" value="0"/>
+	<value name="OF_DST_R" value="1"/>
+	<value name="OF_DST_P" value="2"/>
+	<value name="OF_DST_A0" value="3"/>
+	<value name="OF_DST_AL" value="4"/>
+</enum>
+
+<enum name="of_instr_opcode">
+	<value name="OF_OP_NOP" value="0"/>
+	<value name="OF_OP_MOV" value="1"/>
+	<value name="OF_OP_MOVA" value="2"/>
+	<value name="OF_OP_MOVC" value="3"/>
+	<value name="OF_OP_ADD" value="4"/>
+	<value name="OF_OP_MUL" value="6"/>
+	<value name="OF_OP_MUL_LIT" value="7"/>
+	<value name="OF_OP_DP3" value="8"/>
+	<value name="OF_OP_DP4" value="9"/>
+	<value name="OF_OP_DPH" value="10"/>
+	<value name="OF_OP_DST" value="11"/>
+	<value name="OF_OP_EXP" value="12"/>
+	<value name="OF_OP_EXP_LIT" value="13"/>
+	<value name="OF_OP_LOG" value="14"/>
+	<value name="OF_OP_LOG_LIT" value="15"/>
+	<value name="OF_OP_RCP" value="16"/>
+	<value name="OF_OP_RSQ" value="17"/>
+	<value name="OF_OP_DP2ADD" value="18"/>
+	<value name="OF_OP_MAX" value="20"/>
+	<value name="OF_OP_MIN" value="21"/>
+	<value name="OF_OP_SGE" value="22"/>
+	<value name="OF_OP_SLT" value="23"/>
+	<value name="OF_OP_SETP_EQ" value="24"/>
+	<value name="OF_OP_SETP_GE" value="25"/>
+	<value name="OF_OP_SETP_GT" value="26"/>
+	<value name="OF_OP_SETP_NE" value="27"/>
+	<value name="OF_OP_CMP" value="28"/>
+	<value name="OF_OP_MAD" value="29"/>
+	<value name="OF_OP_FRC" value="30"/>
+	<value name="OF_OP_FLR" value="31"/>
+	<value name="OF_OP_TEXLD" value="32"/>
+	<value name="OF_OP_CUBEDIR" value="33"/>
+	<value name="OF_OP_MAXCOMP" value="34"/>
+	<value name="OF_OP_TEXLDC" value="35"/>
+	<value name="OF_OP_TEXKILL" value="39"/>
+	<value name="OF_OP_MOVIPS" value="40"/>
+	<value name="OF_OP_ADDI" value="41"/>
+	<value name="OF_OP_B" value="48"/>
+	<value name="OF_OP_BF" value="49"/>
+	<value name="OF_OP_BP" value="52"/>
+	<value name="OF_OP_BFP" value="53"/>
+	<value name="OF_OP_BZP" value="54"/>
+	<value name="OF_OP_CALL" value="56"/>
+	<value name="OF_OP_CALLNZ" value="57"/>
+	<value name="OF_OP_RET" value="60"/>
+</enum>
+
+<domain name="INSTR" width="32" bare="yes" prefix="instr_type">
+	<reg32 offset="0" name="WORD0">
+		<bitfield name="SRC2_NUM" high="4" low="0" type="uint" variants="ALU"/>
+		<bitfield name="SRC2_TYPE" high="10" low="8" type="of_instr_src" variants="ALU"/>
+		<bitfield name="SRC2_AR" pos="11" variants="ALU"/>
+		<bitfield name="SRC2_NEGATE" pos="14" variants="ALU"/>
+		<bitfield name="SRC2_ABS" pos="15" variants="ALU"/>
+		<bitfield name="SRC2_SWIZZLE" high="23" low="16" type="uint" variants="ALU"/>
+		<bitfield name="SRC1_NUM" high="28" low="24" type="uint" variants="ALU"/>
+		<bitfield name="PRED_CHANNEL" high="30" low="29" type="uint" variants="ALU"/>
+		<bitfield name="PRED_UNKNOWN" pos="31" variants="ALU"/>
+	</reg32>
+	<reg32 offset="1" name="WORD1">
+		<bitfield name="SRC1_TYPE" high="2" low="0" type="of_instr_src" variants="ALU"/>
+		<bitfield name="SRC1_AR" pos="3" variants="ALU"/>
+		<bitfield name="PRED_NEGATE" pos="4" variants="ALU"/>
+		<bitfield name="PRED_ENABLE" pos="5" variants="ALU"/>
+		<bitfield name="SRC1_NEGATE" pos="6" variants="ALU"/>
+		<bitfield name="SRC1_ABS" pos="7" variants="ALU"/>
+		<bitfield name="SRC1_SWIZZLE" high="15" low="8" type="uint" variants="ALU"/>
+		<bitfield name="SRC0_NUM" high="20" low="16" type="uint"/>
+		<bitfield name="SRC_EXTNUM" high="23" low="21" type="uint"/>
+		<bitfield name="SRC0_TYPE" high="26" low="24" type="of_instr_src"/>
+		<bitfield name="SRC_AR_CHAN" high="28" low="27" type="uint"/>
+		<bitfield name="SRC0_AR" pos="29"/>
+		<bitfield name="SRC0_NEGATE" pos="30"/>
+		<bitfield name="SRC0_ABS" pos="31"/>
+	</reg32>
+	<reg32 offset="2" name="WORD2">
+		<bitfield name="SRC0_SWIZZLE" high="7" low="0" type="uint"/>
+		<bitfield name="DST_NUM" high="12" low="8" type="uint" variants="ALU"/>
+		<bitfield name="DST_TYPE" high="15" low="13" type="of_instr_dst" variants="ALU"/>
+		<bitfield name="DST_A" pos="16" variants="ALU"/>
+		<bitfield name="DST_SAT" pos="17" variants="ALU"/>
+		<bitfield name="JUMP_OFFS" high="15" low="8" variants="CF"/>
+		<bitfield name="JUMP_BACK" pos="16" variants="CF"/>
+		<bitfield name="DST_MASK" high="22" low="19" type="uint" variants="ALU"/>
+		<bitfield name="OPCODE" high="28" low="23" type="uint"/>
+		<bitfield name="NEXT_3SRC" pos="29"/>
 	</reg32>
 </domain>
 
