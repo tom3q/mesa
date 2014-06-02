@@ -8,7 +8,7 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- ./fimg_3dse.xml (  15069 bytes, from 2014-03-16 17:27:26)
+- ./fimg_3dse.xml (  19860 bytes, from 2014-06-01 23:52:38)
 
 Copyright (C) 2013-2014 by the following authors:
 - Tomasz Figa <tomasz.figa@gmail.com> (t.figa)
@@ -200,6 +200,82 @@ enum fgtu_mipmap_mode {
 	MIPMAP_DISABLED = 0,
 	MIPMAP_NEAREST = 1,
 	MIPMAP_LINEAR = 2,
+};
+
+enum instr_type {
+	INSTR = 0,
+	ALU = 0,
+	CF = 0,
+};
+
+enum of_instr_src {
+	OF_SRC_V = 0,
+	OF_SRC_R = 1,
+	OF_SRC_C = 2,
+	OF_SRC_I = 3,
+	OF_SRC_AL = 4,
+	OF_SRC_B = 5,
+	OF_SRC_P = 6,
+	OF_SRC_S = 7,
+	OF_SRC_D = 8,
+	OF_SRC_VFACE = 9,
+	OF_SRC_VPOS = 10,
+};
+
+enum of_instr_dst {
+	OF_DST_O = 0,
+	OF_DST_R = 1,
+	OF_DST_P = 2,
+	OF_DST_A0 = 3,
+	OF_DST_AL = 4,
+};
+
+enum of_instr_opcode {
+	OF_OP_NOP = 0,
+	OF_OP_MOV = 1,
+	OF_OP_MOVA = 2,
+	OF_OP_MOVC = 3,
+	OF_OP_ADD = 4,
+	OF_OP_MUL = 6,
+	OF_OP_MUL_LIT = 7,
+	OF_OP_DP3 = 8,
+	OF_OP_DP4 = 9,
+	OF_OP_DPH = 10,
+	OF_OP_DST = 11,
+	OF_OP_EXP = 12,
+	OF_OP_EXP_LIT = 13,
+	OF_OP_LOG = 14,
+	OF_OP_LOG_LIT = 15,
+	OF_OP_RCP = 16,
+	OF_OP_RSQ = 17,
+	OF_OP_DP2ADD = 18,
+	OF_OP_MAX = 20,
+	OF_OP_MIN = 21,
+	OF_OP_SGE = 22,
+	OF_OP_SLT = 23,
+	OF_OP_SETP_EQ = 24,
+	OF_OP_SETP_GE = 25,
+	OF_OP_SETP_GT = 26,
+	OF_OP_SETP_NE = 27,
+	OF_OP_CMP = 28,
+	OF_OP_MAD = 29,
+	OF_OP_FRC = 30,
+	OF_OP_FLR = 31,
+	OF_OP_TEXLD = 32,
+	OF_OP_CUBEDIR = 33,
+	OF_OP_MAXCOMP = 34,
+	OF_OP_TEXLDC = 35,
+	OF_OP_TEXKILL = 39,
+	OF_OP_MOVIPS = 40,
+	OF_OP_ADDI = 41,
+	OF_OP_B = 48,
+	OF_OP_BF = 49,
+	OF_OP_BP = 52,
+	OF_OP_BFP = 53,
+	OF_OP_BZP = 54,
+	OF_OP_CALL = 56,
+	OF_OP_CALLNZ = 57,
+	OF_OP_RET = 60,
 };
 
 #define FGRA_LODCTL_LOD						0x00000001
@@ -740,18 +816,18 @@ static inline uint32_t TSTA_TYPE(enum fgtu_tex_type val)
 	return ((val) << TSTA_TYPE__SHIFT) & TSTA_TYPE__MASK;
 }
 
-#define REG_USIZE						0x00000004
+#define REG_USIZE						0x00000001
 
-#define REG_VSIZE						0x00000008
+#define REG_VSIZE						0x00000002
 
-#define REG_PSIZE						0x0000000c
+#define REG_PSIZE						0x00000003
 
 
-static inline uint32_t REG_TOFFS(uint32_t i0) { return 0x00000010 + 0x4*i0; }
+static inline uint32_t REG_TOFFS(uint32_t i0) { return 0x00000004 + 0x1*i0; }
 
-#define REG_MIN_L						0x0000003c
+#define REG_MIN_L						0x0000000f
 
-#define REG_MAX_L						0x00000040
+#define REG_MAX_L						0x00000010
 
 #define REG_VTSTA						0x00000000
 #define VTSTA_VSIZE__MASK					0x0000000f
@@ -778,6 +854,130 @@ static inline uint32_t VTSTA_UMOD(enum fgtu_addr_mode val)
 {
 	return ((val) << VTSTA_UMOD__SHIFT) & VTSTA_UMOD__MASK;
 }
+
+#define REG_INSTR_WORD0						0x00000000
+#define ALU_WORD0_SRC2_NUM__MASK				0x0000001f
+#define ALU_WORD0_SRC2_NUM__SHIFT				0
+static inline uint32_t ALU_WORD0_SRC2_NUM(uint32_t val)
+{
+	return ((val) << ALU_WORD0_SRC2_NUM__SHIFT) & ALU_WORD0_SRC2_NUM__MASK;
+}
+#define ALU_WORD0_SRC2_TYPE__MASK				0x00000700
+#define ALU_WORD0_SRC2_TYPE__SHIFT				8
+static inline uint32_t ALU_WORD0_SRC2_TYPE(enum of_instr_src val)
+{
+	return ((val) << ALU_WORD0_SRC2_TYPE__SHIFT) & ALU_WORD0_SRC2_TYPE__MASK;
+}
+#define ALU_WORD0_SRC2_AR					0x00000800
+#define ALU_WORD0_SRC2_NEGATE					0x00004000
+#define ALU_WORD0_SRC2_ABS					0x00008000
+#define ALU_WORD0_SRC2_SWIZZLE__MASK				0x00ff0000
+#define ALU_WORD0_SRC2_SWIZZLE__SHIFT				16
+static inline uint32_t ALU_WORD0_SRC2_SWIZZLE(uint32_t val)
+{
+	return ((val) << ALU_WORD0_SRC2_SWIZZLE__SHIFT) & ALU_WORD0_SRC2_SWIZZLE__MASK;
+}
+#define ALU_WORD0_SRC1_NUM__MASK				0x1f000000
+#define ALU_WORD0_SRC1_NUM__SHIFT				24
+static inline uint32_t ALU_WORD0_SRC1_NUM(uint32_t val)
+{
+	return ((val) << ALU_WORD0_SRC1_NUM__SHIFT) & ALU_WORD0_SRC1_NUM__MASK;
+}
+#define ALU_WORD0_PRED_CHANNEL__MASK				0x60000000
+#define ALU_WORD0_PRED_CHANNEL__SHIFT				29
+static inline uint32_t ALU_WORD0_PRED_CHANNEL(uint32_t val)
+{
+	return ((val) << ALU_WORD0_PRED_CHANNEL__SHIFT) & ALU_WORD0_PRED_CHANNEL__MASK;
+}
+#define ALU_WORD0_PRED_UNKNOWN					0x80000000
+
+#define REG_INSTR_WORD1						0x00000001
+#define ALU_WORD1_SRC1_TYPE__MASK				0x00000007
+#define ALU_WORD1_SRC1_TYPE__SHIFT				0
+static inline uint32_t ALU_WORD1_SRC1_TYPE(enum of_instr_src val)
+{
+	return ((val) << ALU_WORD1_SRC1_TYPE__SHIFT) & ALU_WORD1_SRC1_TYPE__MASK;
+}
+#define ALU_WORD1_SRC1_AR					0x00000008
+#define ALU_WORD1_PRED_NEGATE					0x00000010
+#define ALU_WORD1_PRED_ENABLE					0x00000020
+#define ALU_WORD1_SRC1_NEGATE					0x00000040
+#define ALU_WORD1_SRC1_ABS					0x00000080
+#define ALU_WORD1_SRC1_SWIZZLE__MASK				0x0000ff00
+#define ALU_WORD1_SRC1_SWIZZLE__SHIFT				8
+static inline uint32_t ALU_WORD1_SRC1_SWIZZLE(uint32_t val)
+{
+	return ((val) << ALU_WORD1_SRC1_SWIZZLE__SHIFT) & ALU_WORD1_SRC1_SWIZZLE__MASK;
+}
+#define INSTR_WORD1_SRC0_NUM__MASK				0x001f0000
+#define INSTR_WORD1_SRC0_NUM__SHIFT				16
+static inline uint32_t INSTR_WORD1_SRC0_NUM(uint32_t val)
+{
+	return ((val) << INSTR_WORD1_SRC0_NUM__SHIFT) & INSTR_WORD1_SRC0_NUM__MASK;
+}
+#define INSTR_WORD1_SRC_EXTNUM__MASK				0x00e00000
+#define INSTR_WORD1_SRC_EXTNUM__SHIFT				21
+static inline uint32_t INSTR_WORD1_SRC_EXTNUM(uint32_t val)
+{
+	return ((val) << INSTR_WORD1_SRC_EXTNUM__SHIFT) & INSTR_WORD1_SRC_EXTNUM__MASK;
+}
+#define INSTR_WORD1_SRC0_TYPE__MASK				0x07000000
+#define INSTR_WORD1_SRC0_TYPE__SHIFT				24
+static inline uint32_t INSTR_WORD1_SRC0_TYPE(enum of_instr_src val)
+{
+	return ((val) << INSTR_WORD1_SRC0_TYPE__SHIFT) & INSTR_WORD1_SRC0_TYPE__MASK;
+}
+#define INSTR_WORD1_SRC_AR_CHAN__MASK				0x18000000
+#define INSTR_WORD1_SRC_AR_CHAN__SHIFT				27
+static inline uint32_t INSTR_WORD1_SRC_AR_CHAN(uint32_t val)
+{
+	return ((val) << INSTR_WORD1_SRC_AR_CHAN__SHIFT) & INSTR_WORD1_SRC_AR_CHAN__MASK;
+}
+#define INSTR_WORD1_SRC0_AR					0x20000000
+#define INSTR_WORD1_SRC0_NEGATE					0x40000000
+#define INSTR_WORD1_SRC0_ABS					0x80000000
+
+#define REG_INSTR_WORD2						0x00000002
+#define INSTR_WORD2_SRC0_SWIZZLE__MASK				0x000000ff
+#define INSTR_WORD2_SRC0_SWIZZLE__SHIFT				0
+static inline uint32_t INSTR_WORD2_SRC0_SWIZZLE(uint32_t val)
+{
+	return ((val) << INSTR_WORD2_SRC0_SWIZZLE__SHIFT) & INSTR_WORD2_SRC0_SWIZZLE__MASK;
+}
+#define ALU_WORD2_DST_NUM__MASK					0x00001f00
+#define ALU_WORD2_DST_NUM__SHIFT				8
+static inline uint32_t ALU_WORD2_DST_NUM(uint32_t val)
+{
+	return ((val) << ALU_WORD2_DST_NUM__SHIFT) & ALU_WORD2_DST_NUM__MASK;
+}
+#define ALU_WORD2_DST_TYPE__MASK				0x0000e000
+#define ALU_WORD2_DST_TYPE__SHIFT				13
+static inline uint32_t ALU_WORD2_DST_TYPE(enum of_instr_dst val)
+{
+	return ((val) << ALU_WORD2_DST_TYPE__SHIFT) & ALU_WORD2_DST_TYPE__MASK;
+}
+#define ALU_WORD2_DST_A						0x00010000
+#define ALU_WORD2_DST_SAT					0x00020000
+#define CF_WORD2_JUMP_OFFS__MASK				0x0000ff00
+#define CF_WORD2_JUMP_OFFS__SHIFT				8
+static inline uint32_t CF_WORD2_JUMP_OFFS(uint32_t val)
+{
+	return ((val) << CF_WORD2_JUMP_OFFS__SHIFT) & CF_WORD2_JUMP_OFFS__MASK;
+}
+#define CF_WORD2_JUMP_BACK					0x00010000
+#define ALU_WORD2_DST_MASK__MASK				0x00780000
+#define ALU_WORD2_DST_MASK__SHIFT				19
+static inline uint32_t ALU_WORD2_DST_MASK(uint32_t val)
+{
+	return ((val) << ALU_WORD2_DST_MASK__SHIFT) & ALU_WORD2_DST_MASK__MASK;
+}
+#define INSTR_WORD2_OPCODE__MASK				0x1f800000
+#define INSTR_WORD2_OPCODE__SHIFT				23
+static inline uint32_t INSTR_WORD2_OPCODE(uint32_t val)
+{
+	return ((val) << INSTR_WORD2_OPCODE__SHIFT) & INSTR_WORD2_OPCODE__MASK;
+}
+#define INSTR_WORD2_NEXT_3SRC					0x20000000
 
 
 #endif /* FIMG_3DSE_XML */

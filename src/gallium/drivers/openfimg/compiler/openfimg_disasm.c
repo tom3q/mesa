@@ -36,8 +36,63 @@
 #include <assert.h>
 
 #include "openfimg_disasm.h"
-#include "openfimg_instr.h"
 #include "openfimg_util.h"
+
+#include "fimg_3dse.xml.h"
+
+struct __attribute__((__packed__)) instr {
+	struct {
+		unsigned src2_regnum	:5;
+		unsigned		:3;
+		unsigned src2_regtype	:3;
+		unsigned src2_ar	:1;
+		unsigned		:2;
+		unsigned src2_negate	:1;
+		unsigned src2_abs	:1;
+		unsigned src2_swizzle	:8;
+		unsigned src1_regnum	:5;
+		unsigned pred_channel	:2;
+		unsigned pred_unknown	:1;
+	};
+	struct {
+		unsigned src1_regtype	:3;
+		unsigned src1_ar	:1;
+		unsigned pred_negate	:1;
+		unsigned pred_enable	:1;
+		unsigned src1_negate	:1;
+		unsigned src1_abs	:1;
+		unsigned src1_swizzle	:8;
+		unsigned src0_regnum	:8;
+		unsigned src0_regtype	:3;
+		unsigned src0_ar_chan	:2;
+		unsigned src0_ar	:1;
+		unsigned src0_negate	:1;
+		unsigned src0_abs	:1;
+	};
+	union {
+		struct {
+			unsigned src0_swizzle	:8;
+			unsigned dest_regnum	:5;
+			unsigned dest_regtype	:3;
+			unsigned dest_a		:1;
+			unsigned dest_clamp	:1;
+			unsigned		:1;
+			unsigned dest_mask	:4;
+			unsigned opcode		:6;
+			unsigned next_3src	:1;
+			unsigned		:2;
+		};
+		struct {
+			unsigned 		:8;
+			unsigned branch_offs	:8;
+			unsigned branch_dir	:1;
+			unsigned		:15;
+		};
+	};
+	struct {
+		uint32_t reserved;
+	};
+};
 
 static const char *levels[] = {
 		"\t",
@@ -68,17 +123,17 @@ static const char chan_names[] = {
 };
 
 static const char *src_type_str[] = {
-	[REG_SRC_V] = "V",
-	[REG_SRC_R] = "R",
-	[REG_SRC_C] = "C",
-	[REG_SRC_I] = "I",
-	[REG_SRC_AL] = "AL",
-	[REG_SRC_B] = "B",
-	[REG_SRC_P] = "P",
-	[REG_SRC_S] = "S",
-	[REG_SRC_D] = "D",
-	[REG_SRC_VFACE] = "VFACE",
-	[REG_SRC_VPOS] = "VPOS",
+	[OF_SRC_V] = "V",
+	[OF_SRC_R] = "R",
+	[OF_SRC_C] = "C",
+	[OF_SRC_I] = "I",
+	[OF_SRC_AL] = "AL",
+	[OF_SRC_B] = "B",
+	[OF_SRC_P] = "P",
+	[OF_SRC_S] = "S",
+	[OF_SRC_D] = "D",
+	[OF_SRC_VFACE] = "VFACE",
+	[OF_SRC_VPOS] = "VPOS",
 };
 
 static void print_srcreg(uint32_t num, uint32_t type,
@@ -107,11 +162,11 @@ static void print_srcreg(uint32_t num, uint32_t type,
 }
 
 static const char *dst_type_str[] = {
-	[REG_DST_O] = "O",
-	[REG_DST_R] = "R",
-	[REG_DST_P] = "P",
-	[REG_DST_A0] = "A",
-	[REG_DST_AL] = "AL",
+	[OF_DST_O] = "O",
+	[OF_DST_R] = "R",
+	[OF_DST_P] = "P",
+	[OF_DST_A0] = "A",
+	[OF_DST_AL] = "AL",
 };
 
 static void print_dstreg(uint32_t num, uint32_t mask, uint32_t type)
@@ -159,30 +214,35 @@ static void print_dstreg(uint32_t num, uint32_t mask, uint32_t type)
 // 	}
 // }
 
-typedef struct {
-	instr_opc_t opcode;
-	opcode_type_t type;
+enum opcode_type {
+	OP_TYPE_FLOW,
+	OP_TYPE_NORMAL,
+};
+
+struct opcode_disasm {
+	enum of_instr_opcode opcode;
+	enum opcode_type type;
 	unsigned src_count;
 	const char *name;
-} opcode_disasm_t;
+};
 
 #define OP_FLOW(_op, _srcs)		\
-	[OP_ ##_op] = {			\
-		.opcode = OP_ ##_op,		\
+	[OF_OP_ ##_op] = {			\
+		.opcode = OF_OP_ ##_op,		\
 		.type = OP_TYPE_FLOW,	\
 		.src_count = _srcs,	\
 		.name = #_op,		\
 	}
 
 #define OP_NORMAL(_op, _srcs)		\
-	[OP_ ##_op] = {			\
-		.opcode = OP_ ##_op,		\
+	[OF_OP_ ##_op] = {			\
+		.opcode = OF_OP_ ##_op,		\
 		.type = OP_TYPE_NORMAL,	\
 		.src_count = _srcs,	\
 		.name = #_op,		\
 	}
 
-static const opcode_disasm_t opcode_info[] = {
+static const struct opcode_disasm opcode_info[] = {
 	OP_NORMAL(NOP, 0),
 	OP_NORMAL(MOV, 1),
 	OP_NORMAL(MOVA, 1),
@@ -232,7 +292,7 @@ static const opcode_disasm_t opcode_info[] = {
 static int disasm_alu(uint32_t *dwords, uint32_t alu_off,
 		      int level, enum shader_t type)
 {
-	instr_t *alu = (instr_t *)dwords;
+	struct instr *alu = (struct instr *)dwords;
 
 	_debug_printf("%s", levels[level]);
 	if (debug & PRINT_RAW) {

@@ -25,19 +25,22 @@
  * SOFTWARE.
  */
 
-#ifndef IR2_H_
-#define IR2_H_
+#ifndef OF_IR_H_
+#define OF_IR_H_
 
 #include <stdint.h>
 #include <stdbool.h>
 
 #include "openfimg_context.h"
-#include "openfimg_instr.h"
 #include "openfimg_util.h"
 
-/* low level intermediate representation of an adreno a2xx shader program */
+#include "fimg_3dse.xml.h"
 
-struct of_ir_shader;
+/*
+ * Low level intermediate representation of a FIMG-3DSE shader program.
+ */
+
+#define OF_IR_NUM_SRCS		3
 
 struct of_ir_shader_info {
 	uint64_t regs_written;
@@ -48,35 +51,27 @@ struct of_ir_shader_info {
 
 struct of_ir_register {
 	enum {
-		IR2_REG_NEGATE = 0x4,
-		IR2_REG_ABS    = 0x8,
+		OF_IR_REG_NEGATE = (1 << 0),
+		OF_IR_REG_ABS = (1 << 1),
+		OF_IR_REG_SAT = (1 << 2),
 	} flags;
 	int num;
 	const char *swizzle;
 	uint8_t type;
 };
 
-enum of_ir_pred {
-	IR2_PRED_NONE = 0,
-	IR2_PRED_EQ = 1,
-	IR2_PRED_NE = 2,
-};
-
 enum of_ir_instr_type {
-	IR2_CF,
-	IR2_ALU,
+	OF_IR_CF,
+	OF_IR_ALU,
 };
 
 struct of_ir_instruction {
-	struct of_ir_shader *shader;
 	enum of_ir_instr_type instr_type;
-	enum of_ir_pred pred;
-	int sync;
-	unsigned regs_count;
-	struct of_ir_register *regs[5];
+	unsigned src_count;
+	struct of_ir_register *dst;
+	struct of_ir_register *src[OF_IR_NUM_SRCS];
 
-	instr_opc_t opc;
-	bool clamp :1;
+	enum of_instr_opcode opc;
 	bool next_3arg :1;
 };
 
@@ -85,22 +80,21 @@ struct of_ir_shader {
 	struct of_ir_instruction *instrs[512];
 	uint32_t heap[100 * 4096];
 	unsigned heap_idx;
-
-	enum of_ir_pred pred;  /* pred inherited by newly created instrs */
 };
 
-struct of_ir_shader * of_ir_shader_create(void);
+struct of_ir_shader *of_ir_shader_create(void);
 void of_ir_shader_destroy(struct of_ir_shader *shader);
 struct pipe_resource *of_ir_shader_assemble(struct of_context *ctx,
-					  struct of_ir_shader *shader,
-					  struct of_ir_shader_info *info);
+					    struct of_ir_shader *shader,
+					    struct of_ir_shader_info *info);
 
-struct of_ir_instruction * of_ir_instr_create_alu(struct of_ir_shader *shader,
-					      instr_opc_t opc);
-struct of_ir_instruction * of_ir_instr_create_cf(struct of_ir_shader *shader,
-					     instr_opc_t opc);
-struct of_ir_register * of_ir_reg_create(struct of_ir_instruction *instr,
-				     int num, const char *swizzle, int flags,
-				     int type);
+struct of_ir_instruction *of_ir_instr_create_alu(struct of_ir_shader *shader,
+						 enum of_instr_opcode opc);
+struct of_ir_instruction *of_ir_instr_create_cf(struct of_ir_shader *shader,
+						enum of_instr_opcode opc);
+struct of_ir_register *of_ir_reg_create(struct of_ir_shader *shader,
+					struct of_ir_instruction *instr,
+					int num, const char *swizzle,
+					int flags, int type);
 
-#endif /* IR2_H_ */
+#endif /* OF_IR_H_ */

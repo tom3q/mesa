@@ -323,10 +323,6 @@ of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_FRAGMENT:
 	case PIPE_SHADER_VERTEX:
 		break;
-	case PIPE_SHADER_COMPUTE:
-	case PIPE_SHADER_GEOMETRY:
-		/* maye we could emulate.. */
-		return 0;
 	default:
 		DBG("unknown shader type %d", shader);
 		return 0;
