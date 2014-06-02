@@ -38,8 +38,9 @@
 #include "openfimg_compiler.h"
 #include "openfimg_program.h"
 #include "openfimg_util.h"
-#include "openfimg_instr.h"
 #include "openfimg_ir.h"
+
+#include "fimg_3dse.xml.h"
 
 #define TMP_REG_BAND_SIZE	16
 #define OF_SRC_REG_NUM		3
@@ -58,10 +59,6 @@ struct of_compile_context {
 
 	struct tgsi_parse_context parser;
 	unsigned type;
-
-	/* predicate stack: */
-	int pred_depth;
-	enum of_ir_pred pred_stack[8];
 
 	/* Internal-Temporary and Predicate register assignment:
 	 *
@@ -102,8 +99,6 @@ struct of_compile_context {
 	// and get rid perhaps of num_param..
 	unsigned num_position, num_param;
 	unsigned position, psize;
-
-	uint64_t need_sync;
 
 	/* current shader */
 	struct of_ir_shader *shader;
@@ -246,7 +241,6 @@ compile_init(struct of_compile_context *ctx, struct of_shader_stateobj *so)
 	unsigned ret;
 
 	ctx->so = so;
-	ctx->pred_depth = 0;
 	ctx->shader = so->ir;
 
 	ret = tgsi_parse_init(&ctx->parser, so->tokens);
@@ -258,7 +252,6 @@ compile_init(struct of_compile_context *ctx, struct of_shader_stateobj *so)
 	ctx->psize = ~0;
 	ctx->num_position = 0;
 	ctx->num_param = 0;
-	ctx->need_sync = 0;
 	ctx->immediate_idx = 0;
 	ctx->pred_reg = -1;
 	ctx->num_internal_temps = 0;
@@ -328,12 +321,12 @@ static struct of_ir_register *add_dst_reg(struct of_compile_context *ctx,
 					struct of_ir_instruction *alu,
 					const struct tgsi_dst_register *dst)
 {
-	unsigned flags = 0, num = dst->Index, type = REG_DST_R;
+	unsigned flags = 0, num = dst->Index, type = OF_DST_R;
 	char swiz[5];
 
 	switch (dst->File) {
 	case TGSI_FILE_OUTPUT:
-		type = REG_DST_O;
+		type = OF_DST_O;
 		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
 			if (dst->Index < ctx->position)
 				num = 1 + dst->Index;
@@ -346,7 +339,7 @@ static struct of_ir_register *add_dst_reg(struct of_compile_context *ctx,
 		}
 		break;
 	case TGSI_FILE_TEMPORARY:
-		type = REG_DST_R;
+		type = OF_DST_R;
 		num = dst->Index;
 		break;
 	default:
@@ -362,7 +355,7 @@ static struct of_ir_register *add_dst_reg(struct of_compile_context *ctx,
 	swiz[3] = (dst->WriteMask & TGSI_WRITEMASK_W) ? 'w' : '_';
 	swiz[4] = '\0';
 
-	return of_ir_reg_create(alu, num, swiz, flags, type);
+	return of_ir_reg_create(ctx->shader, alu, num, swiz, flags, type);
 }
 
 static struct of_ir_register *add_src_reg(struct of_compile_context *ctx,
@@ -373,30 +366,30 @@ static struct of_ir_register *add_src_reg(struct of_compile_context *ctx,
 			'x', 'y', 'z', 'w',
 	};
 	char swiz[5];
-	unsigned flags = 0, num = src->Index, type = REG_SRC_R;
+	unsigned flags = 0, num = src->Index, type = OF_SRC_R;
 
 	switch (src->File) {
 	case TGSI_FILE_CONSTANT:
 		num = src->Index;
-		type = REG_SRC_C;
+		type = OF_SRC_C;
 		break;
 	case TGSI_FILE_INPUT:
 		num = src->Index;
-		type = REG_SRC_V;
+		type = OF_SRC_V;
 		break;
 	case TGSI_FILE_TEMPORARY:
 		num = src->Index;
-		type = REG_SRC_R;
+		type = OF_SRC_R;
 		break;
 	case TGSI_FILE_IMMEDIATE:
 		num = src->Index + ctx->num_regs[TGSI_FILE_CONSTANT];
-		type = REG_SRC_C;
+		type = OF_SRC_C;
 		break;
 	case TGSI_FILE_SAMPLER:
 	case TGSI_FILE_SAMPLER_VIEW:
 		DBG("sampler source %d (File = %d)", src->Index, src->File);
 		num = src->Index;
-		type = REG_SRC_S;
+		type = OF_SRC_S;
 		break;
 	default:
 		DBG("unsupported src register file: %s",
@@ -406,9 +399,9 @@ static struct of_ir_register *add_src_reg(struct of_compile_context *ctx,
 	}
 
 	if (src->Absolute)
-		flags |= IR2_REG_ABS;
+		flags |= OF_IR_REG_ABS;
 	if (src->Negate)
-		flags |= IR2_REG_NEGATE;
+		flags |= OF_IR_REG_NEGATE;
 
 	swiz[0] = swiz_vals[src->SwizzleX];
 	swiz[1] = swiz_vals[src->SwizzleY];
@@ -416,13 +409,7 @@ static struct of_ir_register *add_src_reg(struct of_compile_context *ctx,
 	swiz[3] = swiz_vals[src->SwizzleW];
 	swiz[4] = '\0';
 
-	if ((ctx->need_sync & (uint64_t)(1 << num)) &&
-			type != REG_SRC_C) {
-		alu->sync = true;
-		ctx->need_sync &= ~(uint64_t)(1 << num);
-	}
-
-	return of_ir_reg_create(alu, num, swiz, flags, type);
+	return of_ir_reg_create(ctx->shader, alu, num, swiz, flags, type);
 }
 
 static void
@@ -432,7 +419,7 @@ add_vector_clamp(struct tgsi_full_instruction *inst, struct of_ir_instruction *a
 	case TGSI_SAT_NONE:
 		break;
 	case TGSI_SAT_ZERO_ONE:
-		alu->clamp = true;
+		alu->dst->flags |= OF_IR_REG_SAT;
 		break;
 	case TGSI_SAT_MINUS_PLUS_ONE:
 		DBG("unsupported saturate");
@@ -546,14 +533,14 @@ translate_tex(struct of_compile_context *ctx,
 		get_internal_temp(ctx, REG_BAND_ANY, &tmp_dst, &tmp_src);
 
 		/* tmp_dst.x___ = 1.0 / src.wwww */
-		instr = of_ir_instr_create_alu(ctx->shader, OP_RCP);
+		instr = of_ir_instr_create_alu(ctx->shader, OF_OP_RCP);
 
 		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "x___";
 		add_src_reg(ctx, instr, &inst->Src[0].Register)->swizzle =
 					swiz[inst->Src[0].Register.SwizzleW];
 
 		/* tmp_dst.xyz_ = src0.xyzw * src.xxxx */
-		instr = of_ir_instr_create_alu(ctx->shader, OP_MUL);
+		instr = of_ir_instr_create_alu(ctx->shader, OF_OP_MUL);
 		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "xyz_";
 		add_src_reg(ctx, instr, &tmp_src)->swizzle = "xxxx";
 		add_src_reg(ctx, instr, &inst->Src[0].Register);
@@ -563,7 +550,7 @@ translate_tex(struct of_compile_context *ctx,
 
 	assert(inst->Texture.NumOffsets <= 1); // TODO what to do in other cases?
 
-	instr = of_ir_instr_create_alu(ctx->shader, OP_TEXLD);
+	instr = of_ir_instr_create_alu(ctx->shader, OF_OP_TEXLD);
 
 	add_dst_reg(ctx, instr, &inst->Dst[0].Register);
 	add_src_reg(ctx, instr, coord);
@@ -665,65 +652,68 @@ translate_endif(struct of_compile_context *ctx,
 	DBG("TODO");
 }
 
+typedef struct {
+	enum of_instr_opcode opcode;
+	unsigned src_count;
+} opcode_info_t;
+
 #define OP_FLOW(_op, _srcs)		\
 	[_op] = {			\
 		.opcode = _op,		\
-		.type = OP_TYPE_FLOW,	\
 		.src_count = _srcs,	\
 	}
 
 #define OP_NORMAL(_op, _srcs)		\
 	[_op] = {			\
 		.opcode = _op,		\
-		.type = OP_TYPE_NORMAL,	\
 		.src_count = _srcs,	\
 	}
 
 static const opcode_info_t opcode_info[] = {
-	OP_NORMAL(OP_NOP, 0),
-	OP_NORMAL(OP_MOV, 1),
-	OP_NORMAL(OP_MOVA, 1),
-	OP_NORMAL(OP_MOVC, 2),
-	OP_NORMAL(OP_ADD, 2),
-	OP_NORMAL(OP_MUL, 2),
-	OP_NORMAL(OP_MUL_LIT, 2),
-	OP_NORMAL(OP_DP3, 2),
-	OP_NORMAL(OP_DP4, 2),
-	OP_NORMAL(OP_DPH, 2),
-	OP_NORMAL(OP_DST, 2),
-	OP_NORMAL(OP_EXP, 1),
-	OP_NORMAL(OP_EXP_LIT, 1),
-	OP_NORMAL(OP_LOG, 1),
-	OP_NORMAL(OP_LOG_LIT, 1),
-	OP_NORMAL(OP_RCP, 1),
-	OP_NORMAL(OP_RSQ, 1),
-	OP_NORMAL(OP_DP2ADD, 3),
-	OP_NORMAL(OP_MAX, 2),
-	OP_NORMAL(OP_MIN, 2),
-	OP_NORMAL(OP_SGE, 2),
-	OP_NORMAL(OP_SLT, 2),
-	OP_NORMAL(OP_SETP_EQ, 2),
-	OP_NORMAL(OP_SETP_GE, 2),
-	OP_NORMAL(OP_SETP_GT, 2),
-	OP_NORMAL(OP_SETP_NE, 2),
-	OP_NORMAL(OP_CMP, 3),
-	OP_NORMAL(OP_MAD, 3),
-	OP_NORMAL(OP_FRC, 1),
-	OP_NORMAL(OP_TEXLD, 2),
-	OP_NORMAL(OP_CUBEDIR, 1),
-	OP_NORMAL(OP_MAXCOMP, 1),
-	OP_NORMAL(OP_TEXLDC, 3),
-	OP_NORMAL(OP_TEXKILL, 1),
-	OP_NORMAL(OP_MOVIPS, 1),
-	OP_NORMAL(OP_ADDI, 2),
-	OP_FLOW(OP_B, 0),
-	OP_FLOW(OP_BF, 1),
-	OP_FLOW(OP_BP, 0),
-	OP_FLOW(OP_BFP, 1),
-	OP_FLOW(OP_BZP, 1),
-	OP_FLOW(OP_CALL, 0),
-	OP_FLOW(OP_CALLNZ, 1),
-	OP_FLOW(OP_RET, 0),
+	OP_NORMAL(OF_OP_NOP, 0),
+	OP_NORMAL(OF_OP_MOV, 1),
+	OP_NORMAL(OF_OP_MOVA, 1),
+	OP_NORMAL(OF_OP_MOVC, 2),
+	OP_NORMAL(OF_OP_ADD, 2),
+	OP_NORMAL(OF_OP_MUL, 2),
+	OP_NORMAL(OF_OP_MUL_LIT, 2),
+	OP_NORMAL(OF_OP_DP3, 2),
+	OP_NORMAL(OF_OP_DP4, 2),
+	OP_NORMAL(OF_OP_DPH, 2),
+	OP_NORMAL(OF_OP_DST, 2),
+	OP_NORMAL(OF_OP_EXP, 1),
+	OP_NORMAL(OF_OP_EXP_LIT, 1),
+	OP_NORMAL(OF_OP_LOG, 1),
+	OP_NORMAL(OF_OP_LOG_LIT, 1),
+	OP_NORMAL(OF_OP_RCP, 1),
+	OP_NORMAL(OF_OP_RSQ, 1),
+	OP_NORMAL(OF_OP_DP2ADD, 3),
+	OP_NORMAL(OF_OP_MAX, 2),
+	OP_NORMAL(OF_OP_MIN, 2),
+	OP_NORMAL(OF_OP_SGE, 2),
+	OP_NORMAL(OF_OP_SLT, 2),
+	OP_NORMAL(OF_OP_SETP_EQ, 2),
+	OP_NORMAL(OF_OP_SETP_GE, 2),
+	OP_NORMAL(OF_OP_SETP_GT, 2),
+	OP_NORMAL(OF_OP_SETP_NE, 2),
+	OP_NORMAL(OF_OP_CMP, 3),
+	OP_NORMAL(OF_OP_MAD, 3),
+	OP_NORMAL(OF_OP_FRC, 1),
+	OP_NORMAL(OF_OP_TEXLD, 2),
+	OP_NORMAL(OF_OP_CUBEDIR, 1),
+	OP_NORMAL(OF_OP_MAXCOMP, 1),
+	OP_NORMAL(OF_OP_TEXLDC, 3),
+	OP_NORMAL(OF_OP_TEXKILL, 1),
+	OP_NORMAL(OF_OP_MOVIPS, 1),
+	OP_NORMAL(OF_OP_ADDI, 2),
+	OP_FLOW(OF_OP_B, 0),
+	OP_FLOW(OF_OP_BF, 1),
+	OP_FLOW(OF_OP_BP, 0),
+	OP_FLOW(OF_OP_BFP, 1),
+	OP_FLOW(OF_OP_BZP, 1),
+	OP_FLOW(OF_OP_CALL, 0),
+	OP_FLOW(OF_OP_CALLNZ, 1),
+	OP_FLOW(OF_OP_RET, 0),
 };
 
 static void
@@ -741,7 +731,7 @@ translate_direct(struct of_compile_context *ctx,
 		struct tgsi_dst_register tmp_dst;
 		struct tgsi_src_register tmp_src;
 
-		ins = of_ir_instr_create_alu(ctx->shader, OP_NOP);
+		ins = of_ir_instr_create_alu(ctx->shader, OF_OP_NOP);
 		get_internal_temp(ctx, REG_BAND_ANY, &tmp_dst, &tmp_src);
 		add_dst_reg(ctx, ins, &tmp_dst);
 		add_src_reg(ctx, ins, &tmp_src);
@@ -774,43 +764,43 @@ translate_direct(struct of_compile_context *ctx,
 	}
 
 static const of_tgsi_map_entry_t translate_table[] = {
-	IR_DIRECT(TGSI_OPCODE_ARL, OP_FLR),
-	IR_DIRECT(TGSI_OPCODE_MOV, OP_MOV),
+	IR_DIRECT(TGSI_OPCODE_ARL, OF_OP_FLR),
+	IR_DIRECT(TGSI_OPCODE_MOV, OF_OP_MOV),
 	IR_EMULATE(TGSI_OPCODE_LIT, translate_lit, NULL),
-	IR_DIRECT(TGSI_OPCODE_RCP, OP_RCP),
-	IR_DIRECT(TGSI_OPCODE_RSQ, OP_RSQ),
-	IR_DIRECT(TGSI_OPCODE_EXP, OP_EXP_LIT),
-	IR_DIRECT(TGSI_OPCODE_LOG, OP_LOG_LIT),
-	IR_DIRECT(TGSI_OPCODE_MUL, OP_MUL),
-	IR_DIRECT(TGSI_OPCODE_ADD, OP_ADD),
-	IR_DIRECT(TGSI_OPCODE_DP3, OP_DP3),
-	IR_DIRECT(TGSI_OPCODE_DP4, OP_DP4),
-	IR_DIRECT(TGSI_OPCODE_DST, OP_DST),
-	IR_DIRECT(TGSI_OPCODE_MIN, OP_MIN),
-	IR_DIRECT(TGSI_OPCODE_MAX, OP_MAX),
-	IR_DIRECT(TGSI_OPCODE_SLT, OP_SLT),
-	IR_DIRECT(TGSI_OPCODE_SGE, OP_SGE),
-	IR_DIRECT(TGSI_OPCODE_MAD, OP_MAD),
+	IR_DIRECT(TGSI_OPCODE_RCP, OF_OP_RCP),
+	IR_DIRECT(TGSI_OPCODE_RSQ, OF_OP_RSQ),
+	IR_DIRECT(TGSI_OPCODE_EXP, OF_OP_EXP_LIT),
+	IR_DIRECT(TGSI_OPCODE_LOG, OF_OP_LOG_LIT),
+	IR_DIRECT(TGSI_OPCODE_MUL, OF_OP_MUL),
+	IR_DIRECT(TGSI_OPCODE_ADD, OF_OP_ADD),
+	IR_DIRECT(TGSI_OPCODE_DP3, OF_OP_DP3),
+	IR_DIRECT(TGSI_OPCODE_DP4, OF_OP_DP4),
+	IR_DIRECT(TGSI_OPCODE_DST, OF_OP_DST),
+	IR_DIRECT(TGSI_OPCODE_MIN, OF_OP_MIN),
+	IR_DIRECT(TGSI_OPCODE_MAX, OF_OP_MAX),
+	IR_DIRECT(TGSI_OPCODE_SLT, OF_OP_SLT),
+	IR_DIRECT(TGSI_OPCODE_SGE, OF_OP_SGE),
+	IR_DIRECT(TGSI_OPCODE_MAD, OF_OP_MAD),
 	IR_EMULATE(TGSI_OPCODE_SUB, translate_sub, NULL),
 	IR_EMULATE(TGSI_OPCODE_LRP, translate_lrp, NULL),
 	IR_EMULATE(TGSI_OPCODE_CND, translate_cnd, NULL),
-	IR_DIRECT(TGSI_OPCODE_DP2A, OP_DP2ADD),
-	IR_DIRECT(TGSI_OPCODE_FRC, OP_FRC),
+	IR_DIRECT(TGSI_OPCODE_DP2A, OF_OP_DP2ADD),
+	IR_DIRECT(TGSI_OPCODE_FRC, OF_OP_FRC),
 	IR_EMULATE(TGSI_OPCODE_CLAMP, translate_clamp, NULL),
-	IR_DIRECT(TGSI_OPCODE_FLR, OP_FLR),
+	IR_DIRECT(TGSI_OPCODE_FLR, OF_OP_FLR),
 	IR_EMULATE(TGSI_OPCODE_ROUND, translate_round, NULL),
-	IR_DIRECT(TGSI_OPCODE_EX2, OP_EXP),
-	IR_DIRECT(TGSI_OPCODE_LG2, OP_LOG),
+	IR_DIRECT(TGSI_OPCODE_EX2, OF_OP_EXP),
+	IR_DIRECT(TGSI_OPCODE_LG2, OF_OP_LOG),
 	IR_EMULATE(TGSI_OPCODE_POW, translate_pow, NULL),
 	IR_EMULATE(TGSI_OPCODE_XPD, translate_xpd, NULL),
 	IR_EMULATE(TGSI_OPCODE_ABS, translate_abs, NULL),
 	IR_EMULATE(TGSI_OPCODE_RCC, translate_rcc, NULL),
-	IR_DIRECT(TGSI_OPCODE_DPH, OP_DPH),
+	IR_DIRECT(TGSI_OPCODE_DPH, OF_OP_DPH),
 	IR_EMULATE(TGSI_OPCODE_COS, translate_trig, NULL),
 	IR_EMULATE(TGSI_OPCODE_SIN, translate_trig, NULL),
 	IR_EMULATE(TGSI_OPCODE_TEX, translate_tex, NULL),
 	IR_EMULATE(TGSI_OPCODE_TXP, translate_tex, NULL),
-	IR_DIRECT(TGSI_OPCODE_CMP, OP_CMP),
+	IR_DIRECT(TGSI_OPCODE_CMP, OF_OP_CMP),
 	IR_EMULATE(TGSI_OPCODE_IF, translate_if, NULL),
 	IR_EMULATE(TGSI_OPCODE_ELSE, translate_else, NULL),
 	IR_EMULATE(TGSI_OPCODE_ENDIF, translate_endif, NULL),
