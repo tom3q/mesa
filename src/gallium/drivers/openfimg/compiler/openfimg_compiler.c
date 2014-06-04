@@ -105,12 +105,13 @@ struct of_compile_context {
 };
 
 typedef void (*of_tgsi_opcode_handler_t)(struct of_compile_context *,
-				struct tgsi_full_instruction *, const void *);
+					 struct tgsi_full_instruction *,
+					 unsigned long);
 
-typedef struct {
+struct of_tgsi_map_entry {
 	of_tgsi_opcode_handler_t handler;
-	const void *handler_data;
-} of_tgsi_map_entry_t;
+	unsigned long handler_data;
+};
 
 static int
 semantic_idx(struct tgsi_declaration_semantic *semantic)
@@ -317,36 +318,57 @@ compile_free(struct of_compile_context *ctx)
  *
  */
 
-static struct of_ir_register *add_dst_reg(struct of_compile_context *ctx,
-					struct of_ir_instruction *alu,
-					const struct tgsi_dst_register *dst)
+static struct of_ir_register *
+get_dst_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst,
+	    const struct tgsi_dst_register *dst)
 {
-	unsigned flags = 0, num = dst->Index, type = OF_DST_R;
+	enum of_ir_reg_type type;
+	unsigned flags = 0;
+	unsigned num;
 	char swiz[5];
 
 	switch (dst->File) {
 	case TGSI_FILE_OUTPUT:
-		type = OF_DST_O;
-		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
-			if (dst->Index < ctx->position)
-				num = 1 + dst->Index;
-			else if (dst->Index > ctx->position)
-				num = dst->Index;
-			else
-				num = 0;
-		} else {
-			num = dst->Index;
-		}
+		type = OF_IR_REG_O;
+		num = dst->Index;
+
+		if (ctx->type == TGSI_PROCESSOR_FRAGMENT)
+			break;
+
+		/*
+		 * Position must always be the first output of vertex shader,
+		 * so, if there is any other element there, we swap it with
+		 * position.
+		 */
+		if (dst->Index == ctx->position)
+			num = 0;
+		else if (dst->Index == 0)
+			num = ctx->position;
+
 		break;
+
 	case TGSI_FILE_TEMPORARY:
-		type = OF_DST_R;
+		type = OF_IR_REG_R;
 		num = dst->Index;
 		break;
+
 	default:
 		DBG("unsupported dst register file: %s",
 			tgsi_file_name(dst->File));
 		assert(0);
+		return NULL;
+	}
+
+	switch (inst->Instruction.Saturate) {
+	case TGSI_SAT_NONE:
 		break;
+	case TGSI_SAT_ZERO_ONE:
+		flags |= OF_IR_REG_SAT;
+		break;
+	case TGSI_SAT_MINUS_PLUS_ONE:
+		DBG("unsupported saturate");
+		assert(0);
+		return NULL;
 	}
 
 	swiz[0] = (dst->WriteMask & TGSI_WRITEMASK_X) ? 'x' : '_';
@@ -355,47 +377,49 @@ static struct of_ir_register *add_dst_reg(struct of_compile_context *ctx,
 	swiz[3] = (dst->WriteMask & TGSI_WRITEMASK_W) ? 'w' : '_';
 	swiz[4] = '\0';
 
-	return of_ir_reg_create(ctx->shader, alu, num, swiz, flags, type);
+	return of_ir_reg_create(ctx->shader, type, num, swiz, flags);
 }
 
-static struct of_ir_register *add_src_reg(struct of_compile_context *ctx,
-					struct of_ir_instruction *alu,
-					const struct tgsi_src_register *src)
+static struct of_ir_register *
+get_src_reg(struct of_compile_context *ctx, const struct tgsi_src_register *src)
 {
-	static const char swiz_vals[] = {
-			'x', 'y', 'z', 'w',
-	};
+	static const char swiz_vals[] = "xyzw";
+	enum of_ir_reg_type type;
+	unsigned flags = 0;
+	unsigned num;
 	char swiz[5];
-	unsigned flags = 0, num = src->Index, type = OF_SRC_R;
 
 	switch (src->File) {
 	case TGSI_FILE_CONSTANT:
 		num = src->Index;
-		type = OF_SRC_C;
+		type = OF_IR_REG_C;
 		break;
+
 	case TGSI_FILE_INPUT:
 		num = src->Index;
-		type = OF_SRC_V;
+		type = OF_IR_REG_V;
 		break;
+
 	case TGSI_FILE_TEMPORARY:
 		num = src->Index;
-		type = OF_SRC_R;
+		type = OF_IR_REG_C;
 		break;
+
 	case TGSI_FILE_IMMEDIATE:
 		num = src->Index + ctx->num_regs[TGSI_FILE_CONSTANT];
-		type = OF_SRC_C;
+		type = OF_IR_REG_C;
 		break;
+
 	case TGSI_FILE_SAMPLER:
-	case TGSI_FILE_SAMPLER_VIEW:
-		DBG("sampler source %d (File = %d)", src->Index, src->File);
 		num = src->Index;
-		type = OF_SRC_S;
+		type = OF_IR_REG_S;
 		break;
+
 	default:
 		DBG("unsupported src register file: %s",
 			tgsi_file_name(src->File));
 		assert(0);
-		break;
+		return NULL;
 	}
 
 	if (src->Absolute)
@@ -409,107 +433,29 @@ static struct of_ir_register *add_src_reg(struct of_compile_context *ctx,
 	swiz[3] = swiz_vals[src->SwizzleW];
 	swiz[4] = '\0';
 
-	return of_ir_reg_create(ctx->shader, alu, num, swiz, flags, type);
-}
-
-static void
-add_vector_clamp(struct tgsi_full_instruction *inst, struct of_ir_instruction *alu)
-{
-	switch (inst->Instruction.Saturate) {
-	case TGSI_SAT_NONE:
-		break;
-	case TGSI_SAT_ZERO_ONE:
-		alu->dst->flags |= OF_IR_REG_SAT;
-		break;
-	case TGSI_SAT_MINUS_PLUS_ONE:
-		DBG("unsupported saturate");
-		assert(0);
-		break;
-	}
+	return of_ir_reg_create(ctx->shader, type, num, swiz, flags);
 }
 
 /*
  * Helpers for TGSI instructions that don't map to a single shader instr:
  */
 
-static void
-src_from_dst(struct tgsi_src_register *src, struct tgsi_dst_register *dst)
-{
-	src->File      = dst->File;
-	src->Indirect  = dst->Indirect;
-	src->Dimension = dst->Dimension;
-	src->Index     = dst->Index;
-	src->Absolute  = 0;
-	src->Negate    = 0;
-	src->SwizzleX  = TGSI_SWIZZLE_X;
-	src->SwizzleY  = TGSI_SWIZZLE_Y;
-	src->SwizzleZ  = TGSI_SWIZZLE_Z;
-	src->SwizzleW  = TGSI_SWIZZLE_W;
-}
-
-/* Get internal-temp src/dst to use for a sequence of instructions
- * generated by a single TGSI op.
- */
-static void
-get_internal_temp(struct of_compile_context *ctx, enum of_register_band band,
-		  struct tgsi_dst_register *tmp_dst,
-		  struct tgsi_src_register *tmp_src)
-{
-	int n;
-
-	if (band == REG_BAND_ANY) {
-		if (ctx->temp_count[REG_BAND_EVEN]
-		    < ctx->temp_count[REG_BAND_ODD])
-			band = REG_BAND_EVEN;
-		else
-			band = REG_BAND_ODD;
-	}
-
-	/* assign next temporary: */
-	n = ffs(ctx->temp_bitmap[band]) - 1;
-	assert(n >= 0);
-
-	++ctx->temp_count[band];
-	ctx->temp_bitmap[band] &= ~(1 << n);
-
-	tmp_dst->File      = TGSI_FILE_TEMPORARY;
-	tmp_dst->WriteMask = TGSI_WRITEMASK_XYZW;
-	tmp_dst->Indirect  = 0;
-	tmp_dst->Dimension = 0;
-	tmp_dst->Index     = 2 * n + band;
-
-	src_from_dst(tmp_src, tmp_dst);
-}
-
-static void
-put_internal_temp(struct of_compile_context *ctx,
-		  struct tgsi_dst_register *tmp_dst,
-		  struct tgsi_src_register *tmp_src)
-{
-	unsigned band = tmp_dst->Index % 2;
-	unsigned num = tmp_dst->Index / 2;
-
-	ctx->temp_bitmap[band] |= 1 << num;
-	--ctx->temp_count[band];
-}
-
 /* POW(a,b) = EXP2(b * LOG2(a)) */
 static void
 translate_pow(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, const void *data)
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_tex(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, const void *data)
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	unsigned opc = inst->Instruction.Opcode;
 	struct of_ir_instruction *instr;
-	struct tgsi_dst_register tmp_dst;
-	struct tgsi_src_register tmp_src;
-	const struct tgsi_src_register *coord = &inst->Src[0].Register;
+	struct of_ir_register *coord = NULL;
+	struct of_ir_register *reg;
 
 	if (opc == TGSI_OPCODE_TXP) {
 		static const char *swiz[] = {
@@ -530,221 +476,172 @@ translate_tex(struct of_compile_context *ctx,
 		 *  dst = texture_sample(unit, coord, bias)
 		 */
 
-		get_internal_temp(ctx, REG_BAND_ANY, &tmp_dst, &tmp_src);
+		/* reg.x___ = 1.0 / src0.wwww */
+		instr = of_ir_instr_create(ctx->shader, OF_OP_RCP);
 
-		/* tmp_dst.x___ = 1.0 / src.wwww */
-		instr = of_ir_instr_create_alu(ctx->shader, OF_OP_RCP);
+		reg = of_ir_reg_temporary(ctx->shader);
+		of_ir_reg_set_swizzle(reg, "x___");
+		of_ir_instr_add_dst(instr, reg);
 
-		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "x___";
-		add_src_reg(ctx, instr, &inst->Src[0].Register)->swizzle =
-					swiz[inst->Src[0].Register.SwizzleW];
+		reg = of_ir_reg_clone(ctx->shader, reg);
+		of_ir_reg_set_swizzle(reg,
+					swiz[inst->Src[0].Register.SwizzleW]);
+		of_ir_instr_add_src(instr, reg);
 
-		/* tmp_dst.xyz_ = src0.xyzw * src.xxxx */
-		instr = of_ir_instr_create_alu(ctx->shader, OF_OP_MUL);
-		add_dst_reg(ctx, instr, &tmp_dst)->swizzle = "xyz_";
-		add_src_reg(ctx, instr, &tmp_src)->swizzle = "xxxx";
-		add_src_reg(ctx, instr, &inst->Src[0].Register);
+		of_ir_instr_insert(ctx->shader, NULL, NULL, instr);
 
-		coord = &tmp_src;
+		/* reg.xyz_ = src0.xyzw * src0.xxxx */
+		instr = of_ir_instr_create(ctx->shader, OF_OP_MUL);
+
+		reg = of_ir_reg_clone(ctx->shader, reg);
+		of_ir_reg_set_swizzle(reg, "xyz_");
+		of_ir_instr_add_dst(instr, reg);
+
+		reg = of_ir_reg_clone(ctx->shader, reg);
+		of_ir_reg_set_swizzle(reg, "xxxx");
+		of_ir_instr_add_src(instr, reg);
+
+		reg = get_src_reg(ctx, &inst->Src[0].Register);
+		of_ir_instr_add_src(instr, reg);
+
+		of_ir_instr_insert(ctx->shader, NULL, NULL, instr);
+
+		coord = of_ir_reg_clone(ctx->shader, reg);
+		of_ir_reg_set_swizzle(coord, "xyzw");
 	}
 
 	assert(inst->Texture.NumOffsets <= 1); // TODO what to do in other cases?
 
-	instr = of_ir_instr_create_alu(ctx->shader, OF_OP_TEXLD);
+	instr = of_ir_instr_create(ctx->shader, OF_OP_TEXLD);
 
-	add_dst_reg(ctx, instr, &inst->Dst[0].Register);
-	add_src_reg(ctx, instr, coord);
-	add_src_reg(ctx, instr, &inst->Src[1].Register);
+	reg = get_dst_reg(ctx, inst, &inst->Dst[0].Register);
+	of_ir_instr_add_dst(instr, reg);
 
-	if (opc == TGSI_OPCODE_TXP)
-		put_internal_temp(ctx, &tmp_dst, &tmp_src);
+	reg = get_src_reg(ctx, &inst->Src[1].Register);
+	of_ir_instr_add_src(instr, reg);
+
+	if (!coord)
+		coord = get_src_reg(ctx, &inst->Src[0].Register);
+	of_ir_instr_add_src(instr, coord);
+
+	of_ir_instr_insert(ctx->shader, NULL, NULL, instr);
 }
 
 /* LRP(a,b,c) = (a * b) + ((1 - a) * c) */
 static void
 translate_lrp(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, const void *data)
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_trig(struct of_compile_context *ctx,
-	       struct tgsi_full_instruction *inst, const void *data)
+	       struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_lit(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, const void *data)
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_sub(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, const void *data)
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_cnd(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, const void *data)
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_clamp(struct of_compile_context *ctx,
-		struct tgsi_full_instruction *inst, const void *data)
+		struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_round(struct of_compile_context *ctx,
-		struct tgsi_full_instruction *inst, const void *data)
+		struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_xpd(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, const void *data)
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_abs(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, const void *data)
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_rcc(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, const void *data)
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_if(struct of_compile_context *ctx,
-	     struct tgsi_full_instruction *inst, const void *data)
+	     struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_else(struct of_compile_context *ctx,
-	       struct tgsi_full_instruction *inst, const void *data)
+	       struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
 static void
 translate_endif(struct of_compile_context *ctx,
-		struct tgsi_full_instruction *inst, const void *data)
+		struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
 
-typedef struct {
-	enum of_instr_opcode opcode;
-	unsigned src_count;
-} opcode_info_t;
-
-#define OP_FLOW(_op, _srcs)		\
-	[_op] = {			\
-		.opcode = _op,		\
-		.src_count = _srcs,	\
-	}
-
-#define OP_NORMAL(_op, _srcs)		\
-	[_op] = {			\
-		.opcode = _op,		\
-		.src_count = _srcs,	\
-	}
-
-static const opcode_info_t opcode_info[] = {
-	OP_NORMAL(OF_OP_NOP, 0),
-	OP_NORMAL(OF_OP_MOV, 1),
-	OP_NORMAL(OF_OP_MOVA, 1),
-	OP_NORMAL(OF_OP_MOVC, 2),
-	OP_NORMAL(OF_OP_ADD, 2),
-	OP_NORMAL(OF_OP_MUL, 2),
-	OP_NORMAL(OF_OP_MUL_LIT, 2),
-	OP_NORMAL(OF_OP_DP3, 2),
-	OP_NORMAL(OF_OP_DP4, 2),
-	OP_NORMAL(OF_OP_DPH, 2),
-	OP_NORMAL(OF_OP_DST, 2),
-	OP_NORMAL(OF_OP_EXP, 1),
-	OP_NORMAL(OF_OP_EXP_LIT, 1),
-	OP_NORMAL(OF_OP_LOG, 1),
-	OP_NORMAL(OF_OP_LOG_LIT, 1),
-	OP_NORMAL(OF_OP_RCP, 1),
-	OP_NORMAL(OF_OP_RSQ, 1),
-	OP_NORMAL(OF_OP_DP2ADD, 3),
-	OP_NORMAL(OF_OP_MAX, 2),
-	OP_NORMAL(OF_OP_MIN, 2),
-	OP_NORMAL(OF_OP_SGE, 2),
-	OP_NORMAL(OF_OP_SLT, 2),
-	OP_NORMAL(OF_OP_SETP_EQ, 2),
-	OP_NORMAL(OF_OP_SETP_GE, 2),
-	OP_NORMAL(OF_OP_SETP_GT, 2),
-	OP_NORMAL(OF_OP_SETP_NE, 2),
-	OP_NORMAL(OF_OP_CMP, 3),
-	OP_NORMAL(OF_OP_MAD, 3),
-	OP_NORMAL(OF_OP_FRC, 1),
-	OP_NORMAL(OF_OP_TEXLD, 2),
-	OP_NORMAL(OF_OP_CUBEDIR, 1),
-	OP_NORMAL(OF_OP_MAXCOMP, 1),
-	OP_NORMAL(OF_OP_TEXLDC, 3),
-	OP_NORMAL(OF_OP_TEXKILL, 1),
-	OP_NORMAL(OF_OP_MOVIPS, 1),
-	OP_NORMAL(OF_OP_ADDI, 2),
-	OP_FLOW(OF_OP_B, 0),
-	OP_FLOW(OF_OP_BF, 1),
-	OP_FLOW(OF_OP_BP, 0),
-	OP_FLOW(OF_OP_BFP, 1),
-	OP_FLOW(OF_OP_BZP, 1),
-	OP_FLOW(OF_OP_CALL, 0),
-	OP_FLOW(OF_OP_CALLNZ, 1),
-	OP_FLOW(OF_OP_RET, 0),
-};
-
 static void
 translate_direct(struct of_compile_context *ctx,
-		 struct tgsi_full_instruction *inst, const void *data)
+		 struct tgsi_full_instruction *inst, unsigned long data)
 {
+	const struct of_ir_opc_info *info = of_ir_get_opc_info(data);
 	struct of_ir_instruction *ins;
-	const opcode_info_t *info = data;
+	struct of_ir_register *reg;
 	int src;
 
-	assert(inst->Instruction.NumSrcRegs == info->src_count);
+	assert(inst->Instruction.NumSrcRegs == info->num_srcs);
 	assert(inst->Instruction.NumDstRegs == 1);
 
-	if (info->src_count == 3 && !ctx->shader->instrs_count) {
-		struct tgsi_dst_register tmp_dst;
-		struct tgsi_src_register tmp_src;
+	ins = of_ir_instr_create(ctx->shader, data);
 
-		ins = of_ir_instr_create_alu(ctx->shader, OF_OP_NOP);
-		get_internal_temp(ctx, REG_BAND_ANY, &tmp_dst, &tmp_src);
-		add_dst_reg(ctx, ins, &tmp_dst);
-		add_src_reg(ctx, ins, &tmp_src);
-		put_internal_temp(ctx, &tmp_dst, &tmp_src);
+	reg = get_dst_reg(ctx, inst, &inst->Dst[0].Register);
+	of_ir_instr_add_dst(ins, reg);
+
+	for (src = 0; src < info->num_srcs; ++src) {
+		reg = get_src_reg(ctx, &inst->Src[src].Register);
+		of_ir_instr_add_src(ins, reg);
 	}
 
-	ins = of_ir_instr_create_alu(ctx->shader, info->opcode);
-	add_dst_reg(ctx, ins, &inst->Dst[0].Register);
-
-	for (src = 0; src < info->src_count; ++src)
-		add_src_reg(ctx, ins, &inst->Src[src].Register);
-
-	add_vector_clamp(inst, ins);
+	of_ir_instr_insert(ctx->shader, NULL, NULL, ins);
 }
 
 /*
@@ -754,7 +651,7 @@ translate_direct(struct of_compile_context *ctx,
 #define IR_DIRECT(_tgsi, _op)				\
 	[_tgsi] = {					\
 		.handler = translate_direct,		\
-		.handler_data = &opcode_info[_op],	\
+		.handler_data = _op,	\
 	}
 
 #define IR_EMULATE(_tgsi, _handler, _data)		\
@@ -763,10 +660,10 @@ translate_direct(struct of_compile_context *ctx,
 		.handler_data = _data,			\
 	}
 
-static const of_tgsi_map_entry_t translate_table[] = {
+static const struct of_tgsi_map_entry translate_table[] = {
 	IR_DIRECT(TGSI_OPCODE_ARL, OF_OP_FLR),
 	IR_DIRECT(TGSI_OPCODE_MOV, OF_OP_MOV),
-	IR_EMULATE(TGSI_OPCODE_LIT, translate_lit, NULL),
+	IR_EMULATE(TGSI_OPCODE_LIT, translate_lit, 0),
 	IR_DIRECT(TGSI_OPCODE_RCP, OF_OP_RCP),
 	IR_DIRECT(TGSI_OPCODE_RSQ, OF_OP_RSQ),
 	IR_DIRECT(TGSI_OPCODE_EXP, OF_OP_EXP_LIT),
@@ -781,29 +678,29 @@ static const of_tgsi_map_entry_t translate_table[] = {
 	IR_DIRECT(TGSI_OPCODE_SLT, OF_OP_SLT),
 	IR_DIRECT(TGSI_OPCODE_SGE, OF_OP_SGE),
 	IR_DIRECT(TGSI_OPCODE_MAD, OF_OP_MAD),
-	IR_EMULATE(TGSI_OPCODE_SUB, translate_sub, NULL),
-	IR_EMULATE(TGSI_OPCODE_LRP, translate_lrp, NULL),
-	IR_EMULATE(TGSI_OPCODE_CND, translate_cnd, NULL),
+	IR_EMULATE(TGSI_OPCODE_SUB, translate_sub, 0),
+	IR_EMULATE(TGSI_OPCODE_LRP, translate_lrp, 0),
+	IR_EMULATE(TGSI_OPCODE_CND, translate_cnd, 0),
 	IR_DIRECT(TGSI_OPCODE_DP2A, OF_OP_DP2ADD),
 	IR_DIRECT(TGSI_OPCODE_FRC, OF_OP_FRC),
-	IR_EMULATE(TGSI_OPCODE_CLAMP, translate_clamp, NULL),
+	IR_EMULATE(TGSI_OPCODE_CLAMP, translate_clamp, 0),
 	IR_DIRECT(TGSI_OPCODE_FLR, OF_OP_FLR),
-	IR_EMULATE(TGSI_OPCODE_ROUND, translate_round, NULL),
+	IR_EMULATE(TGSI_OPCODE_ROUND, translate_round, 0),
 	IR_DIRECT(TGSI_OPCODE_EX2, OF_OP_EXP),
 	IR_DIRECT(TGSI_OPCODE_LG2, OF_OP_LOG),
-	IR_EMULATE(TGSI_OPCODE_POW, translate_pow, NULL),
-	IR_EMULATE(TGSI_OPCODE_XPD, translate_xpd, NULL),
-	IR_EMULATE(TGSI_OPCODE_ABS, translate_abs, NULL),
-	IR_EMULATE(TGSI_OPCODE_RCC, translate_rcc, NULL),
+	IR_EMULATE(TGSI_OPCODE_POW, translate_pow, 0),
+	IR_EMULATE(TGSI_OPCODE_XPD, translate_xpd, 0),
+	IR_EMULATE(TGSI_OPCODE_ABS, translate_abs, 0),
+	IR_EMULATE(TGSI_OPCODE_RCC, translate_rcc, 0),
 	IR_DIRECT(TGSI_OPCODE_DPH, OF_OP_DPH),
-	IR_EMULATE(TGSI_OPCODE_COS, translate_trig, NULL),
-	IR_EMULATE(TGSI_OPCODE_SIN, translate_trig, NULL),
-	IR_EMULATE(TGSI_OPCODE_TEX, translate_tex, NULL),
-	IR_EMULATE(TGSI_OPCODE_TXP, translate_tex, NULL),
+	IR_EMULATE(TGSI_OPCODE_COS, translate_trig, 0),
+	IR_EMULATE(TGSI_OPCODE_SIN, translate_trig, 0),
+	IR_EMULATE(TGSI_OPCODE_TEX, translate_tex, 0),
+	IR_EMULATE(TGSI_OPCODE_TXP, translate_tex, 0),
 	IR_DIRECT(TGSI_OPCODE_CMP, OF_OP_CMP),
-	IR_EMULATE(TGSI_OPCODE_IF, translate_if, NULL),
-	IR_EMULATE(TGSI_OPCODE_ELSE, translate_else, NULL),
-	IR_EMULATE(TGSI_OPCODE_ENDIF, translate_endif, NULL),
+	IR_EMULATE(TGSI_OPCODE_IF, translate_if, 0),
+	IR_EMULATE(TGSI_OPCODE_ELSE, translate_else, 0),
+	IR_EMULATE(TGSI_OPCODE_ENDIF, translate_endif, 0),
 };
 
 static void
