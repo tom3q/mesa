@@ -231,10 +231,8 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
 	case PIPE_CAP_TEXTURE_GATHER_SM5:
         case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
-		return 0;
-
-	case PIPE_CAP_TGSI_TEXCOORD:
 	case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+	case PIPE_CAP_TGSI_TEXCOORD:
 		return 0;
 
 	case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
@@ -330,6 +328,7 @@ of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 
 	/* this is probably not totally correct.. but it's a start: */
 	switch (param) {
+	/* Limits */
 	case PIPE_SHADER_CAP_MAX_INSTRUCTIONS:
 	case PIPE_SHADER_CAP_MAX_ALU_INSTRUCTIONS:
 	case PIPE_SHADER_CAP_MAX_TEX_INSTRUCTIONS:
@@ -338,40 +337,40 @@ of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
 		return 8; /* XXX */
 	case PIPE_SHADER_CAP_MAX_INPUTS:
-		return 32;
+		return shader == PIPE_SHADER_VERTEX ? OF_MAX_ATTRIBS : 8;
 	case PIPE_SHADER_CAP_MAX_TEMPS:
 		return 32; /* Max native temporaries. */
 	case PIPE_SHADER_CAP_MAX_ADDRS:
 		return 4; /* Max native address registers */
 	case PIPE_SHADER_CAP_MAX_CONSTS:
-		return 1024;
+		return 256;
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
 		return 0;
 	case PIPE_SHADER_CAP_MAX_PREDS:
 		return 7; /* nothing uses this */
-	case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
-		return 0;
+	case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
+	case PIPE_SHADER_CAP_MAX_SAMPLER_VIEWS:
+		return shader == PIPE_SHADER_VERTEX ? 4 : 8;
+
+	/* Capabilities */
 	case PIPE_SHADER_CAP_INDIRECT_INPUT_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
-		return 1;
 	case PIPE_SHADER_CAP_SUBROUTINES:
-		return 0; /* Supported by HW, but needs more work... */
+		return 1;
+	case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
 	case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
 	case PIPE_SHADER_CAP_INTEGERS:
 		return 0;
-	case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
-		if (shader == PIPE_SHADER_VERTEX)
-			return 4;
-		return 8;
+
+	/* Other */
 	case PIPE_SHADER_CAP_PREFERRED_IR:
 		return PIPE_SHADER_IR_TGSI;
 	default:
 		DBG("unknown shader param %d", param);
 		return 0;
 	}
-	return 0;
 }
 
 boolean
