@@ -416,9 +416,10 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 <enum name="of_instr_dst">
 	<value name="OF_DST_O" value="0"/>
 	<value name="OF_DST_R" value="1"/>
-	<value name="OF_DST_P" value="2"/>
-	<value name="OF_DST_A0" value="3"/>
-	<value name="OF_DST_AL" value="4"/>
+
+	<value name="OF_DST_P" value="3"/>
+	<value name="OF_DST_A0" value="4"/>
+	<value name="OF_DST_AL" value="5"/>
 </enum>
 
 <enum name="of_instr_opcode">
@@ -427,6 +428,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	<value name="OF_OP_MOVA" value="2"/>
 	<value name="OF_OP_MOVC" value="3"/>
 	<value name="OF_OP_ADD" value="4"/>
+
 	<value name="OF_OP_MUL" value="6"/>
 	<value name="OF_OP_MUL_LIT" value="7"/>
 	<value name="OF_OP_DP3" value="8"/>
@@ -440,6 +442,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	<value name="OF_OP_RCP" value="16"/>
 	<value name="OF_OP_RSQ" value="17"/>
 	<value name="OF_OP_DP2ADD" value="18"/>
+
 	<value name="OF_OP_MAX" value="20"/>
 	<value name="OF_OP_MIN" value="21"/>
 	<value name="OF_OP_SGE" value="22"/>
@@ -456,16 +459,21 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	<value name="OF_OP_CUBEDIR" value="33"/>
 	<value name="OF_OP_MAXCOMP" value="34"/>
 	<value name="OF_OP_TEXLDC" value="35"/>
+
 	<value name="OF_OP_TEXKILL" value="39"/>
 	<value name="OF_OP_MOVIPS" value="40"/>
 	<value name="OF_OP_ADDI" value="41"/>
+
 	<value name="OF_OP_B" value="48"/>
 	<value name="OF_OP_BF" value="49"/>
+
 	<value name="OF_OP_BP" value="52"/>
 	<value name="OF_OP_BFP" value="53"/>
 	<value name="OF_OP_BZP" value="54"/>
+
 	<value name="OF_OP_CALL" value="56"/>
 	<value name="OF_OP_CALLNZ" value="57"/>
+
 	<value name="OF_OP_RET" value="60"/>
 </enum>
 
