@@ -1,9 +1,5 @@
 /*
- * Copyright (C) 2013 Tomasz Figa <tomasz.figa@gmail.com>
- *
- * Parts shamelessly copied from Freedreno driver:
- *
- * Copyright (C) 2012 Rob Clark <robclark@freedesktop.org>
+ * Copyright (C) 2013-2014 Tomasz Figa <tomasz.figa@gmail.com>
  *
  * Permission is hereby granted, free of charge, to any person obtaining a
  * copy of this software and associated documentation files (the "Software"),

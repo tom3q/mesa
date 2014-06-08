@@ -8,7 +8,7 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- ./fimg_3dse.xml (  19860 bytes, from 2014-06-01 23:52:38)
+- ./fimg_3dse.xml (  20052 bytes, from 2014-06-07 15:16:40)
 
 Copyright (C) 2013-2014 by the following authors:
 - Tomasz Figa <tomasz.figa@gmail.com> (t.figa)
@@ -225,9 +225,9 @@ enum of_instr_src {
 enum of_instr_dst {
 	OF_DST_O = 0,
 	OF_DST_R = 1,
-	OF_DST_P = 2,
-	OF_DST_A0 = 3,
-	OF_DST_AL = 4,
+	OF_DST_P = 3,
+	OF_DST_A0 = 4,
+	OF_DST_AL = 5,
 };
 
 enum of_instr_opcode {
