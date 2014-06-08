@@ -107,12 +107,8 @@ emit_constants(struct fd_ringbuffer *ring,
 	OUT_RING(ring, RSD_UNIT_TYPE_OFFS(shader->type,
 			G3D_SHADER_DATA_FLOAT, 4 * shader->first_immediate));
 
-	for (i = 0; i < shader->num_immediates; i++) {
-		OUT_RING(ring, shader->immediates[i].val[0]);
-		OUT_RING(ring, shader->immediates[i].val[1]);
-		OUT_RING(ring, shader->immediates[i].val[2]);
-		OUT_RING(ring, shader->immediates[i].val[3]);
-	}
+	for (i = 0; i < shader->num_immediates; i++)
+		OUT_RING(ring, shader->immediates[i]);
 
 	END_PKT(ring, pkt);
 }
