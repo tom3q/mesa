@@ -111,6 +111,7 @@ enum fgpf_stencil_action of_stencil_op(unsigned op);
 enum fgpf_logical_op of_logic_op(unsigned op);
 enum fgra_bfcull_face of_cull_face(unsigned face);
 enum fgpf_test_mode of_test_mode(unsigned mode);
+enum fgpf_stencil_mode of_stencil_mode(unsigned mode);
 
 uint32_t of_hash_add(uint32_t hash, const void *data, size_t size);
 uint32_t of_hash_finish(uint32_t hash);

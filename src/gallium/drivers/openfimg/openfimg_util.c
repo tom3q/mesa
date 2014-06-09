@@ -369,6 +369,32 @@ of_test_mode(unsigned mode)
 	}
 }
 
+enum fgpf_stencil_mode
+of_stencil_mode(unsigned mode)
+{
+	switch (mode) {
+	case PIPE_FUNC_NEVER:
+		return STENCIL_NEVER;
+	case PIPE_FUNC_LESS:
+		return STENCIL_LESS;
+	case PIPE_FUNC_EQUAL:
+		return STENCIL_EQUAL;
+	case PIPE_FUNC_LEQUAL:
+		return STENCIL_LEQUAL;
+	case PIPE_FUNC_GREATER:
+		return STENCIL_GREATER;
+	case PIPE_FUNC_NOTEQUAL:
+		return STENCIL_NOTEQUAL;
+	case PIPE_FUNC_GEQUAL:
+		return STENCIL_GEQUAL;
+	case PIPE_FUNC_ALWAYS:
+		return STENCIL_ALWAYS;
+	default:
+		DBG("invalid test mode: %u", mode);
+		return 0;
+	}
+}
+
 uint32_t
 of_hash_add(uint32_t hash, const void *data, size_t size)
 {
