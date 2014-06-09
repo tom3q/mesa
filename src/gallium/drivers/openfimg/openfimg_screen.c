@@ -335,7 +335,14 @@ of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_MAX_TEX_INDIRECTIONS:
 		return 512;
 	case PIPE_SHADER_CAP_MAX_CONTROL_FLOW_DEPTH:
-		return 8; /* XXX */
+		/*
+		 * FIXME: Determine exact value.
+		 *
+		 * Available documentation states compatibility with Direct3D
+		 * Shader Model 3.0, which requires dynamic control flow depth
+		 * of 24 and so the value used below.
+		 */
+		return 24;
 	case PIPE_SHADER_CAP_MAX_INPUTS:
 		return shader == PIPE_SHADER_VERTEX ? OF_MAX_ATTRIBS : 8;
 	case PIPE_SHADER_CAP_MAX_TEMPS:
