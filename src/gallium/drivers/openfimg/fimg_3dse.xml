@@ -98,6 +98,17 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 	<value value="7" name="TEST_NOTEQUAL"/>
 </enum>
 
+<enum name="fgpf_stencil_mode">
+	<value value="0" name="STENCIL_NEVER"/>
+	<value value="1" name="STENCIL_ALWAYS"/>
+	<value value="2" name="STENCIL_GREATER"/>
+	<value value="3" name="STENCIL_GEQUAL"/>
+	<value value="4" name="STENCIL_EQUAL"/>
+	<value value="5" name="STENCIL_LEQUAL"/>
+	<value value="6" name="STENCIL_LESS"/>
+	<value value="7" name="STENCIL_NOTEQUAL"/>
+</enum>
+
 <enum name="fgpf_stencil_action">
 	<value value="0" name="STENCIL_KEEP"/>
 	<value value="1" name="STENCIL_ZERO"/>
