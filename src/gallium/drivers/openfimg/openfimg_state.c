@@ -359,7 +359,7 @@ of_zsa_state_create(struct pipe_context *pctx,
 
 		so->fgpf_frontst =
 			FGPF_FRONTST_ENABLE |
-			FGPF_FRONTST_MODE(of_test_mode(s->func)) |
+			FGPF_FRONTST_MODE(of_stencil_mode(s->func)) |
 			FGPF_FRONTST_MASK(s->valuemask) |
 			FGPF_FRONTST_SFAIL(of_stencil_op(s->fail_op)) |
 			FGPF_FRONTST_DPPASS(of_stencil_op(s->zpass_op)) |
@@ -371,7 +371,7 @@ of_zsa_state_create(struct pipe_context *pctx,
 			s = &cso->stencil[1];
 
 		so->fgpf_backst =
-			FGPF_FRONTST_MODE(of_test_mode(s->func)) |
+			FGPF_FRONTST_MODE(of_stencil_mode(s->func)) |
 			FGPF_FRONTST_MASK(s->valuemask) |
 			FGPF_FRONTST_SFAIL(of_stencil_op(s->fail_op)) |
 			FGPF_FRONTST_DPPASS(of_stencil_op(s->zpass_op)) |
