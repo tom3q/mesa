@@ -167,6 +167,16 @@ get_dst_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst)
 		num = dst->Index;
 		break;
 
+	case TGSI_FILE_ADDRESS:
+		type = OF_IR_REG_AL;
+		num = dst->Index;
+		break;
+
+	case TGSI_FILE_PREDICATE:
+		type = OF_IR_REG_P;
+		num = dst->Index;
+		break;
+
 	default:
 		compile_error(ctx, "unsupported dst register file: %s\n",
 				tgsi_file_name(dst->File));
@@ -759,26 +769,6 @@ translate_ssg(struct of_compile_context *ctx,
 }
 
 static void
-translate_sgt_sle(struct of_compile_context *ctx,
-		  struct tgsi_full_instruction *inst, unsigned long data)
-{
-	struct of_ir_instr_template instr;
-
-	memset(&instr, 0, sizeof(instr));
-
-	if (inst->Instruction.Opcode == TGSI_OPCODE_SGT)
-		instr.opc = OF_OP_SLT;
-	else /* if (inst->Instruction.Opcode == TGSI_OPCODE_SLE) */
-		instr.opc = OF_OP_SGE;
-
-	instr.dst.reg = get_dst_reg(ctx, inst);
-	instr.src[0].reg = get_src_reg(ctx, inst, 1);
-	instr.src[1].reg = get_src_reg(ctx, inst, 0);
-
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
-}
-
-static void
 translate_sne_seq(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -809,7 +799,6 @@ translate_sne_seq(struct of_compile_context *ctx,
 	instrs[2].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[2].src[0].flags = OF_IR_REG_NEGATE;
 	instrs[2].src[1].reg = of_ir_reg_clone(ctx->shader, const0);
-	instrs[2].src[1].swizzle = "yyyy";
 	instrs[2].src[2].reg = get_dst_reg(ctx, inst);
 	if (inst->Instruction.Opcode == TGSI_OPCODE_SNE)
 		instrs[2].src[1].swizzle = "yyyy";
@@ -824,30 +813,60 @@ static void
 translate_dp2(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
-	struct of_ir_instr_template instrs[2];
+	const float const_zero = 0.0f;
+	struct of_ir_instr_template instr;
 	struct of_ir_register *tmp;
 
-	memset(instrs, 0, sizeof(instrs));
+	memset(&instr, 0, sizeof(instr));
 
-	instrs[0].opc = OF_OP_MUL;
-	instrs[0].dst.reg = tmp = of_ir_reg_temporary(ctx->shader);
-	instrs[0].dst.mask = "xy__";
-	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
-	instrs[0].src[0].swizzle = "xyyy";
-	instrs[0].src[1].reg = get_src_reg(ctx, inst, 1);
-	instrs[0].src[1].swizzle = "xyyy";
+	instr.opc = OF_OP_DP2ADD;
+	instr.dst.reg = tmp = get_dst_reg(ctx, inst);
+	instr.src[0].reg = get_src_reg(ctx, inst, 0);
+	instr.src[1].reg = get_src_reg(ctx, inst, 1);
+	instr.src[2].reg = get_immediate(ctx, 1, &const_zero);
+	instr.src[2].swizzle = "xxxx";
 
-	instrs[1].opc = OF_OP_ADD;
-	instrs[1].dst.reg = get_dst_reg(ctx, inst);
-	instrs[1].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
-	instrs[1].src[0].swizzle = "xxxx";
-	instrs[1].src[1].reg = of_ir_reg_clone(ctx->shader, tmp);
-	instrs[1].src[1].swizzle = "yyyy";
-
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
-					instrs, ARRAY_SIZE(instrs));
+	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
 }
 
+static void
+translate_ddx(struct of_compile_context *ctx,
+	      struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+static void
+translate_ddy(struct of_compile_context *ctx,
+	      struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+static void
+translate_trunc(struct of_compile_context *ctx,
+		struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+static void
+translate_ceil(struct of_compile_context *ctx,
+	       struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+static void
+translate_kill_if(struct of_compile_context *ctx,
+		  struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+/*
+ * Dynamic flow control
+ */
 static void
 translate_if(struct of_compile_context *ctx,
 	     struct tgsi_full_instruction *inst, unsigned long data)
@@ -865,6 +884,62 @@ translate_else(struct of_compile_context *ctx,
 static void
 translate_endif(struct of_compile_context *ctx,
 		struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+/*
+ * Subroutines.
+ */
+
+static void
+translate_bgnsub(struct of_compile_context *ctx,
+		 struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+static void
+translate_ret(struct of_compile_context *ctx,
+	      struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+static void
+translate_endsub(struct of_compile_context *ctx,
+		 struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+static void
+translate_cal(struct of_compile_context *ctx,
+	      struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+/*
+ * Loops.
+ */
+static void
+translate_bgnloop(struct of_compile_context *ctx,
+		  struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+static void
+translate_endloop(struct of_compile_context *ctx,
+		  struct tgsi_full_instruction *inst, unsigned long data)
+{
+	DBG("TODO");
+}
+
+static void
+translate_brk(struct of_compile_context *ctx,
+	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
 }
@@ -911,6 +986,7 @@ translate_direct(struct of_compile_context *ctx,
 	}
 
 static const struct of_tgsi_map_entry translate_table[] = {
+	/* ALU */
 	IR_DIRECT(TGSI_OPCODE_MOV, OF_OP_MOV),
 	IR_DIRECT(TGSI_OPCODE_RCP, OF_OP_RCP),
 	IR_DIRECT(TGSI_OPCODE_RSQ, OF_OP_RSQ),
@@ -924,26 +1000,19 @@ static const struct of_tgsi_map_entry translate_table[] = {
 	IR_DIRECT(TGSI_OPCODE_FLR, OF_OP_FLR),
 	IR_EMULATE(TGSI_OPCODE_ROUND, translate_round, 0),
 	IR_EMULATE(TGSI_OPCODE_SSG, translate_ssg, 0),
-	IR_DIRECT(TGSI_OPCODE_ARL, OF_OP_FLR),
+	IR_DIRECT(TGSI_OPCODE_ARL, OF_OP_MOVA),
 	IR_DIRECT(TGSI_OPCODE_EX2, OF_OP_EXP),
 	IR_DIRECT(TGSI_OPCODE_LG2, OF_OP_LOG),
 	IR_EMULATE(TGSI_OPCODE_ABS, translate_abs, 0),
 	IR_EMULATE(TGSI_OPCODE_COS, translate_trig, 0),
 	IR_EMULATE(TGSI_OPCODE_SIN, translate_trig, 0),
-	IR_EMULATE(TGSI_OPCODE_TEX, translate_tex, 0),
-	IR_EMULATE(TGSI_OPCODE_TXP, translate_tex, 0),
-	IR_EMULATE(TGSI_OPCODE_SGT, translate_sgt_sle, 0),
 	IR_DIRECT(TGSI_OPCODE_SLT, OF_OP_SLT),
 	IR_DIRECT(TGSI_OPCODE_SGE, OF_OP_SGE),
-	IR_EMULATE(TGSI_OPCODE_SLE, translate_sgt_sle, 0),
 	IR_EMULATE(TGSI_OPCODE_SNE, translate_sne_seq, 0),
 	IR_EMULATE(TGSI_OPCODE_SEQ, translate_sne_seq, 0),
 	IR_DIRECT(TGSI_OPCODE_CMP, OF_OP_CMP),
-	IR_EMULATE(TGSI_OPCODE_IF, translate_if, 0),
-	IR_EMULATE(TGSI_OPCODE_ELSE, translate_else, 0),
-	IR_EMULATE(TGSI_OPCODE_ENDIF, translate_endif, 0),
 	IR_DIRECT(TGSI_OPCODE_KILL, OF_OP_TEXKILL),
-
+	IR_EMULATE(TGSI_OPCODE_KILL_IF, translate_kill_if, 0),
 	IR_DIRECT(TGSI_OPCODE_DST, OF_OP_DST),
 	IR_EMULATE(TGSI_OPCODE_XPD, translate_xpd, 0),
 	IR_EMULATE(TGSI_OPCODE_SCS, translate_trig, 0),
@@ -951,15 +1020,44 @@ static const struct of_tgsi_map_entry translate_table[] = {
 	IR_DIRECT(TGSI_OPCODE_FRC, OF_OP_FRC),
 	IR_EMULATE(TGSI_OPCODE_POW, translate_pow, 0),
 	IR_EMULATE(TGSI_OPCODE_LIT, translate_lit, 0),
-
-	IR_DIRECT(TGSI_OPCODE_EXP, OF_OP_EXP_LIT),// FIXME?
-	IR_DIRECT(TGSI_OPCODE_LOG, OF_OP_LOG_LIT),// FIXME?
-
 	IR_DIRECT(TGSI_OPCODE_DP4, OF_OP_DP4),
 	IR_DIRECT(TGSI_OPCODE_DP3, OF_OP_DP3),
 	IR_DIRECT(TGSI_OPCODE_DPH, OF_OP_DPH),
 	IR_EMULATE(TGSI_OPCODE_DP2, translate_dp2, 0),
 	IR_DIRECT(TGSI_OPCODE_DP2A, OF_OP_DP2ADD),
+	IR_EMULATE(TGSI_OPCODE_DDX, translate_ddx, 0),
+	IR_EMULATE(TGSI_OPCODE_DDY, translate_ddy, 0),
+	IR_EMULATE(TGSI_OPCODE_TRUNC, translate_trunc, 0),
+	IR_EMULATE(TGSI_OPCODE_CEIL, translate_ceil, 0),
+	IR_DIRECT(TGSI_OPCODE_NOP, OF_OP_NOP),
+	IR_DIRECT(TGSI_OPCODE_END, OF_OP_RET),
+
+	/* Dynamic flow control */
+	IR_EMULATE(TGSI_OPCODE_IF, translate_if, 0),
+	IR_EMULATE(TGSI_OPCODE_ELSE, translate_else, 0),
+	IR_EMULATE(TGSI_OPCODE_ENDIF, translate_endif, 0),
+
+	/* Subroutines */
+	IR_EMULATE(TGSI_OPCODE_BGNSUB, translate_bgnsub, 0),
+	IR_EMULATE(TGSI_OPCODE_RET, translate_ret, 0),
+	IR_EMULATE(TGSI_OPCODE_ENDSUB, translate_endsub, 0),
+	IR_EMULATE(TGSI_OPCODE_CAL, translate_cal, 0),
+
+	/* Loops */
+	IR_EMULATE(TGSI_OPCODE_BGNLOOP, translate_bgnloop, 0),
+	IR_EMULATE(TGSI_OPCODE_BRK, translate_brk, 0),
+	IR_EMULATE(TGSI_OPCODE_ENDLOOP, translate_endloop, 0),
+
+	/* Texture lookup */
+	IR_EMULATE(TGSI_OPCODE_TEX, translate_tex, 0),
+	IR_EMULATE(TGSI_OPCODE_TXP, translate_tex, 0),
+// 	IR_EMULATE(TGSI_OPCODE_TXB, translate_tex, 0),
+// 	IR_EMULATE(TGSI_OPCODE_TXL, translate_tex, 0),
+// 	IR_EMULATE(TGSI_OPCODE_TXD, translate_tex, 0),
+// 	IR_EMULATE(TGSI_OPCODE_TXQ, translate_tex, 0),
+// 	IR_EMULATE(TGSI_OPCODE_TXF, translate_tex, 0),
+// 	IR_EMULATE(TGSI_OPCODE_TG4, translate_tex, 0),
+// 	IR_EMULATE(TGSI_OPCODE_LODQ, translate_tex, 0),
 };
 
 static void

@@ -8,7 +8,7 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- ./fimg_3dse.xml (  20052 bytes, from 2014-06-07 15:16:40)
+- ./fimg_3dse.xml (  20429 bytes, from 2014-06-09 14:57:19)
 
 Copyright (C) 2013-2014 by the following authors:
 - Tomasz Figa <tomasz.figa@gmail.com> (t.figa)
@@ -91,6 +91,17 @@ enum fgpf_test_mode {
 	TEST_GREATER = 5,
 	TEST_GEQUAL = 6,
 	TEST_NOTEQUAL = 7,
+};
+
+enum fgpf_stencil_mode {
+	STENCIL_NEVER = 0,
+	STENCIL_ALWAYS = 1,
+	STENCIL_GREATER = 2,
+	STENCIL_GEQUAL = 3,
+	STENCIL_EQUAL = 4,
+	STENCIL_LEQUAL = 5,
+	STENCIL_LESS = 6,
+	STENCIL_NOTEQUAL = 7,
 };
 
 enum fgpf_stencil_action {
