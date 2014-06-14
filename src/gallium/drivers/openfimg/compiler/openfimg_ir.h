@@ -42,6 +42,11 @@ enum {
 	OF_IR_NUM_SRCS = 3,
 };
 
+enum of_ir_shader_type {
+	OF_IR_SHADER_VERTEX,
+	OF_IR_SHADER_PIXEL,
+};
+
 enum of_ir_cf_target {
 	OF_IR_CF_TARGET_FALL,
 	OF_IR_CF_TARGET_JUMP,
@@ -105,13 +110,6 @@ struct of_ir_opc_info {
 	unsigned num_srcs;
 };
 
-struct of_ir_shader_info {
-	uint64_t regs_written;
-	uint16_t sizedwords;
-	int8_t   max_reg;
-	uint8_t  max_input_reg;
-};
-
 struct of_ir_instr_template {
 	enum of_instr_opcode opc;
 	struct {
@@ -163,10 +161,9 @@ struct of_ir_cf_block *of_ir_cf_create(struct of_ir_shader *shader);
 void of_ir_cf_insert(struct of_ir_shader *shader, struct of_ir_cf_block *where,
 		     struct of_ir_cf_block *block);
 
-struct of_ir_shader *of_ir_shader_create(void);
+struct of_ir_shader *of_ir_shader_create(enum of_ir_shader_type type);
 void of_ir_shader_destroy(struct of_ir_shader *shader);
-struct pipe_resource *of_ir_shader_assemble(struct of_context *ctx,
-					    struct of_ir_shader *shader,
-					    struct of_ir_shader_info *info);
+int of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
+			  struct of_shader_stateobj *so);
 
 #endif /* OF_IR_H_ */

@@ -132,7 +132,7 @@ process_tokens(struct of_compile_context *ctx, const token_handler_t *handlers,
 
 		token_type = ctx->parser.FullToken.Token.Type;
 
-		if (token_type > num_handlers)
+		if (token_type >= num_handlers)
 			continue;
 
 		handler = handlers[token_type];
@@ -1101,7 +1101,7 @@ init_handle_declaration(struct of_compile_context *ctx)
 	last = decl->Range.Last;
 	file = decl->Declaration.File;
 
-	ctx->num_regs[file] += MAX2(ctx->num_regs[file], last + 1);
+	ctx->num_regs[file] = MAX2(ctx->num_regs[file], last + 1);
 
 	switch (file) {
 	case TGSI_FILE_OUTPUT:
@@ -1173,7 +1173,18 @@ compile_init(const struct tgsi_token *tokens)
 		return ctx;
 	}
 
-	ctx->shader = of_ir_shader_create();
+	switch (ctx->parser.FullHeader.Processor.Processor) {
+	case TGSI_PROCESSOR_VERTEX:
+		ctx->type = OF_IR_SHADER_VERTEX;
+		break;
+	case TGSI_PROCESSOR_FRAGMENT:
+		ctx->type = OF_IR_SHADER_PIXEL;
+		break;
+	default:
+		assert(0);
+	}
+
+	ctx->shader = of_ir_shader_create(ctx->type);
 	if (!ctx->shader) {
 		DBG("failed to create IR shader");
 		goto err_free_ctx;
@@ -1244,8 +1255,12 @@ of_compile_shader(struct of_shader_stateobj *so)
 	so->ir = ctx->shader;
 	ctx->num_immediates = ROUND_UP(ctx->num_immediates, 4);
 	so->immediates = MALLOC(ctx->num_immediates * sizeof(uint32_t));
+	so->num_immediates = ctx->num_immediates;
+	so->first_immediate = ctx->num_regs[TGSI_FILE_CONSTANT];
 	memcpy(so->immediates, ctx->immediates,
 		ctx->num_immediates * sizeof(uint32_t));
+
+	so->num_inputs = ctx->num_regs[TGSI_FILE_INPUT];
 
 	compile_free(ctx);
 	return 0;
