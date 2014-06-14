@@ -35,8 +35,7 @@ boolean
 of_fence_wait(struct of_fence *fence)
 {
 	DBG("fence = %p", fence);
-	//return !fd_pipe_wait(fence->pipe, fence->timestamp);
-	return false;
+	return !fd_pipe_wait(fence->pipe, fence->timestamp);
 }
 
 boolean

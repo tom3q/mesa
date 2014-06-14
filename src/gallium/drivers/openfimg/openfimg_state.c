@@ -417,9 +417,9 @@ of_allocate_vertex_buffer(struct of_context *ctx, struct of_vertex_stateobj *so,
 	unsigned sum;
 	unsigned i;
 
-	transfer = so->transfers;
 	sum = 0;
 
+	transfer = so->transfers;
 	for (i = 0; i < so->num_transfers; ++i, ++transfer)
 		sum += ROUND_UP(transfer->width, 4);
 
@@ -427,6 +427,7 @@ of_allocate_vertex_buffer(struct of_context *ctx, struct of_vertex_stateobj *so,
 
 	for (; batch_size > 0; --batch_size) {
 		size = 0;
+		transfer = so->transfers;
 		for (i = 0; i < so->num_transfers; ++i, ++transfer) {
 			transfer->offset = size;
 			size += ROUND_UP(batch_size

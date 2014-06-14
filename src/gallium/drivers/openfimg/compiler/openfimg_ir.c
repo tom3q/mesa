@@ -28,6 +28,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include "openfimg_program.h"
 #include "openfimg_util.h"
 
 #include "fimg_3dse.xml.h"
@@ -99,7 +100,7 @@ struct of_ir_cf_block {
 /** Representation of a shader program. */
 struct of_ir_shader {
 	/** Total number of generated instructions. */
-	unsigned instrs_count;
+	unsigned num_instrs;
 	/** List of basic blocks in the program. */
 	struct list_head cf_blocks;
 
@@ -109,6 +110,7 @@ struct of_ir_shader {
 	unsigned heap_idx;
 
 	unsigned num_temporaries;
+	const struct of_ir_reg_info *reg_info;
 };
 
 const struct of_ir_opc_info of_ir_opc_info[] = {
@@ -583,6 +585,7 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block,
 				shader->cf_blocks.prev, list);
 
 	list_addtail(&instr->list, &block->instrs);
+	++shader->num_instrs;
 }
 
 static void
@@ -634,7 +637,7 @@ of_ir_instr_insert_templ(struct of_ir_shader *shader,
 
 			merge_flags(instrs->src[src].reg,
 					instrs->src[src].flags);
-			of_ir_instr_add_dst(instr, instrs->src[src].reg);
+			of_ir_instr_add_src(instr, instrs->src[src].reg);
 		}
 
 		of_ir_instr_insert(shader, block, where, instr);
@@ -680,7 +683,7 @@ of_ir_cf_insert(struct of_ir_shader *shader, struct of_ir_cf_block *where,
  */
 
 struct of_ir_shader *
-of_ir_shader_create(void)
+of_ir_shader_create(enum of_ir_shader_type type)
 {
 	struct of_ir_shader *shader;
 	struct of_ir_cf_block *cf;
@@ -695,6 +698,13 @@ of_ir_shader_create(void)
 	cf = of_ir_cf_create(shader);
 	of_ir_cf_insert(shader, NULL, cf);
 
+	if (type == OF_IR_SHADER_VERTEX)
+		shader->reg_info = vs_reg_info;
+	else if (type == OF_IR_SHADER_PIXEL)
+		shader->reg_info = ps_reg_info;
+	else
+		assert(0);
+
 	return shader;
 }
 
@@ -708,34 +718,6 @@ of_ir_shader_destroy(struct of_ir_shader *shader)
 /*
  * Assembler.
  */
-
-static void
-reg_update_stats(struct of_ir_register *reg, struct of_ir_shader_info *info,
-		 bool dest)
-{
-	if (dest) {
-		switch (reg->type) {
-		case OF_DST_R:
-			info->max_reg = MAX2(info->max_reg, reg->num);
-			info->regs_written |= (1 << reg->num);
-			break;
-		default:
-			break;
-		}
-	} else {
-		switch (reg->type) {
-		case OF_SRC_R:
-			info->max_reg = MAX2(info->max_reg, reg->num);
-			break;
-		case OF_SRC_V:
-			info->max_input_reg = MAX2(info->max_input_reg,
-								reg->num);
-			break;
-		default:
-			break;
-		}
-	}
-}
 
 static uint32_t
 dst_mask(struct of_ir_register *reg)
@@ -789,16 +771,17 @@ src_swiz(struct of_ir_register *reg)
 }
 
 static void
-instr_emit_cf(struct of_ir_cf_block *cf, uint32_t *dwords,
-	      struct of_ir_shader_info *info)
+instr_emit_cf(struct of_ir_shader *shader, struct of_ir_cf_block *cf,
+	      uint32_t *dwords)
 {
 	DBG("TODO");
 }
 
 static void
-instr_emit_alu(struct of_ir_instruction *instr, uint32_t *dwords,
-	       struct of_ir_shader_info *info)
+instr_emit_alu(struct of_ir_shader *shader, struct of_ir_instruction *instr,
+	       uint32_t *dwords)
 {
+	const struct of_ir_reg_info *reg;
 	struct of_ir_register *src0_reg;
 	struct of_ir_register *src1_reg;
 	struct of_ir_register *src2_reg;
@@ -814,12 +797,10 @@ instr_emit_alu(struct of_ir_instruction *instr, uint32_t *dwords,
 	/* Source register 1 */
 	src2_reg = instr->srcs[2];
 	if (src2_reg) {
-		reg_update_stats(src2_reg, info, false);
-
-		assert(!src2_reg->swizzle || (strlen(src2_reg->swizzle) == 4));
+		reg = &shader->reg_info[src2_reg->type];
 
 		dwords[0] |= ALU_WORD0_SRC2_NUM(src2_reg->num) |
-				ALU_WORD0_SRC2_TYPE(src2_reg->type) |
+				ALU_WORD0_SRC2_TYPE(reg->src_type) |
 				ALU_WORD0_SRC2_SWIZZLE(src_swiz(src2_reg));
 
 		if (src2_reg->flags & OF_IR_REG_NEGATE)
@@ -832,12 +813,10 @@ instr_emit_alu(struct of_ir_instruction *instr, uint32_t *dwords,
 	/* Source register 1 */
 	src1_reg = instr->srcs[1];
 	if (src1_reg) {
-		reg_update_stats(src1_reg, info, false);
-
-		assert(!src1_reg->swizzle || (strlen(src1_reg->swizzle) == 4));
+		reg = &shader->reg_info[src1_reg->type];
 
 		dwords[0] |= ALU_WORD0_SRC1_NUM(src1_reg->num);
-		dwords[1] |= ALU_WORD1_SRC1_TYPE(src1_reg->type) |
+		dwords[1] |= ALU_WORD1_SRC1_TYPE(reg->src_type) |
 				ALU_WORD1_SRC1_SWIZZLE(src_swiz(src1_reg));
 
 		if (src1_reg->flags & OF_IR_REG_NEGATE)
@@ -850,12 +829,10 @@ instr_emit_alu(struct of_ir_instruction *instr, uint32_t *dwords,
 	/* Source register 0 (always used) */
 	src0_reg = instr->srcs[0];
 	assert(src0_reg);
-	reg_update_stats(src0_reg, info, false);
-
-	assert(!src0_reg->swizzle || (strlen(src0_reg->swizzle) == 4));
+	reg = &shader->reg_info[src0_reg->type];
 
 	dwords[1] |= INSTR_WORD1_SRC0_NUM(src0_reg->num) |
-			INSTR_WORD1_SRC0_TYPE(src0_reg->type);
+			INSTR_WORD1_SRC0_TYPE(reg->src_type);
 
 	if (src0_reg->flags & OF_IR_REG_NEGATE)
 		dwords[1] |= INSTR_WORD1_SRC0_NEGATE;
@@ -868,12 +845,10 @@ instr_emit_alu(struct of_ir_instruction *instr, uint32_t *dwords,
 	/* Destination register */
 	dst_reg = instr->dst;
 	assert(dst_reg);
-	reg_update_stats(dst_reg, info, true);
-
-	assert(!dst_reg->swizzle || (strlen(dst_reg->swizzle) == 4));
+	reg = &shader->reg_info[dst_reg->type];
 
 	dwords[2] |= ALU_WORD2_DST_NUM(dst_reg->num) |
-			ALU_WORD2_DST_TYPE(dst_reg->type) |
+			ALU_WORD2_DST_TYPE(reg->dst_type) |
 			ALU_WORD2_DST_MASK(dst_mask(dst_reg));
 
 	if (dst_reg->flags & OF_IR_REG_SAT)
@@ -882,9 +857,9 @@ instr_emit_alu(struct of_ir_instruction *instr, uint32_t *dwords,
 	/* TODO: Implement predicate support */
 }
 
-struct pipe_resource *
+int
 of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
-		      struct of_ir_shader_info *info)
+		      struct of_shader_stateobj *so)
 {
 	uint32_t *ptr, *dwords = NULL;
 	struct pipe_resource *buffer;
@@ -892,19 +867,14 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 	struct of_ir_cf_block *cf;
 	unsigned idx = 0;
 
-	assert(shader->instrs_count);
-
-	info->sizedwords    = 4 * shader->instrs_count;
-	info->max_reg       = -1;
-	info->max_input_reg = 0;
-	info->regs_written  = 0;
+	assert(shader->num_instrs);
 
 	buffer = pipe_buffer_create(ctx->base.screen,
 					PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
-					4 * info->sizedwords);
+					16 * shader->num_instrs);
 	if (!buffer) {
 		ERROR_MSG("shader BO allocation failed");
-		return NULL;
+		return -1;
 	}
 
 	ptr = dwords = pipe_buffer_map(&ctx->base, buffer, PIPE_TRANSFER_WRITE,
@@ -926,7 +896,7 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 
 		/* Emit each instruction of the basic block. */
 		LIST_FOR_EACH_ENTRY(ins, &cf->instrs, list) {
-			instr_emit_alu(ins, ptr, info);
+			instr_emit_alu(shader, ins, ptr);
 			ptr += 4;
 			++idx;
 		}
@@ -946,17 +916,21 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 	 * Emit CF instructions, as we know addresses of all basic blocks now.
 	 */
 	LIST_FOR_EACH_ENTRY(cf, &shader->cf_blocks, list)
-		instr_emit_cf(cf, dwords, info);
+		instr_emit_cf(shader, cf, dwords);
 
 	if (transfer)
 		pipe_buffer_unmap(&ctx->base, transfer);
 
-	return buffer;
+	pipe_resource_reference(&so->buffer, NULL);
+	so->buffer = buffer;
+	so->num_instrs = shader->num_instrs;
+
+	return 0;
 
 fail:
 	if (transfer)
 		pipe_buffer_unmap(&ctx->base, transfer);
 	if (buffer)
 		pipe_resource_reference(&buffer, NULL);
-	return NULL;
+	return -1;
 }
