@@ -54,11 +54,13 @@ override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
 	snprintf(path, sizeof(path), "%s_%08x.bin",
 			(so->type == SHADER_VERTEX) ? "vs" : "fs", so->hash);
 
+	DBG("%s: looking for replacement shader in '%s'", __func__, path);
+
 	file = fopen(path, "rb");
 	if (!file)
 		return -1;
 
-	_debug_printf("%s: loading shader from '%s'\n", __func__, path);
+	DBG("%s: loading shader from '%s'", __func__, path);
 
 	ret = fread(&hdr, sizeof(hdr), 1, file);
 	if (ret != 1) {
@@ -93,9 +95,12 @@ override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
 	}
 
 	if (hdr.const_float_size > so->first_immediate) {
+		uint32_t *immediates;
+
 		hdr.const_float_size -= so->first_immediate;
-		if (hdr.const_float_size > ARRAY_SIZE(so->immediates))
-			hdr.const_float_size = ARRAY_SIZE(so->immediates);
+
+		immediates = CALLOC(hdr.const_float_size, 16);
+		assert(immediates);
 
 		if (fseek(file, 16 * so->first_immediate, SEEK_CUR)) {
 			DBG("truncated shader binary file");
@@ -107,19 +112,21 @@ override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
 			DBG("truncated shader binary file");
 			goto fail;
 		}
+
+		FREE(so->immediates);
+		so->immediates = immediates;
+		so->num_immediates = hdr.const_float_size;
 	}
 
 	so->buffer = buffer;
-	so->info.sizedwords = 4 * hdr.instruct_size;
+	so->num_instrs = hdr.instruct_size;
 
 	if (transfer)
 		pipe_buffer_unmap(&ctx->base, transfer);
 
-	pipe_resource_reference(&so->buffer, NULL);
-
 	fclose(file);
 
-	_debug_printf("%s: successfully loaded shader '%s'\n", __func__, path);
+	DBG("%s: successfully loaded shader '%s'", __func__, path);
 
 	return 0;
 
@@ -160,8 +167,6 @@ assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 {
 	int ret;
 
-	pipe_resource_reference(&so->buffer, NULL);
-
 	if (!so->ir) {
 		ret = compile(so);
 		if (ret)
@@ -171,18 +176,19 @@ assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 	if (of_mesa_debug & OF_DBG_SHADER_OVERRIDE) {
 		ret = override_shader(ctx, so);
 		if (!ret)
-			return 0;
+			goto overridden;
 	}
 
-	so->buffer = of_ir_shader_assemble(ctx, so->ir, &so->info);
-	if (!so->buffer) {
+	ret = of_ir_shader_assemble(ctx, so->ir, so);
+	if (ret) {
 		debug_error("assemble failed!");
 		return -1;
 	}
 
+overridden:
 	if (of_mesa_debug & OF_DBG_DISASM) {
 		DBG("disassemble: type=%d", so->type);
-		disasm_fimg_3dse(ctx, so->buffer, so->info.sizedwords,
+		disasm_fimg_3dse(ctx, so->buffer, 4 * so->num_instrs,
 					0, so->type);
 	}
 
@@ -200,7 +206,7 @@ emit_dummy_shader(struct of_context *ctx, struct of_shader_stateobj *so)
 		/* Workaround for HW bug. */
 		num_attribs = 8;
 	} else {
-		num_attribs = so->info.max_input_reg + 1;
+		num_attribs = so->num_inputs;
 	}
 
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM);
@@ -234,7 +240,7 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 		/* Workaround for HW bug. */
 		num_attribs = 8;
 	} else {
-		num_attribs = so->info.max_input_reg + 1;
+		num_attribs = so->num_inputs;
 	}
 
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM);
@@ -243,7 +249,7 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(of_resource(so->buffer)->bo));
 	OUT_RING(ring, 0);
-	OUT_RING(ring, so->info.sizedwords * 4);
+	OUT_RING(ring, so->num_instrs * 16);
 	END_PKT(ring, pkt);
 }
 
