@@ -70,6 +70,14 @@ extern int of_mesa_debug;
 #define min(a, b)	((a) < (b) ? (a) : (b))
 #define max(a, b)	((a) > (b) ? (a) : (b))
 
+#define swap(a, b, type) \
+		do { \
+			type __tmp = a; \
+			\
+			a = b; \
+			b = __tmp; \
+		} while (0)
+
 /* for conditionally setting boolean flag(s): */
 #define COND(bool, val) ((bool) ? (val) : 0)
 
