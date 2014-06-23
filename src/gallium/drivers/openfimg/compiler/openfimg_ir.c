@@ -21,7 +21,7 @@
  * SOFTWARE.
  */
 
-#include "openfimg_ir.h"
+#include "openfimg_ir_priv.h"
 
 #include <stdlib.h>
 #include <stdio.h>
@@ -32,86 +32,6 @@
 #include "openfimg_util.h"
 
 #include "fimg_3dse.xml.h"
-
-#define DEBUG_MSG(f, ...)  do { if (0) DBG(f, ##__VA_ARGS__); } while (0)
-#define WARN_MSG(f, ...)   DBG("WARN:  "f, ##__VA_ARGS__)
-#define ERROR_MSG(f, ...)  DBG("ERROR: "f, ##__VA_ARGS__)
-
-/** Representation of single register usage. */
-struct of_ir_register {
-	/** Register modifiers. */
-	enum of_ir_reg_flags flags;
-	/* Register number. */
-	unsigned num;
-	/* Register channel swizzle(map)/mask. */
-	char swizzle[4];
-	/* Register type. */
-	enum of_ir_reg_type type;
-};
-
-/** Representation of single instruction. */
-struct of_ir_instruction {
-	/** Extra modifiers. */
-	enum of_ir_instr_flags flags;
-	/** Number of source registers. */
-	unsigned num_srcs;
-	/** Source registers. */
-	struct of_ir_register *srcs[OF_IR_NUM_SRCS];
-	/** Destination register. */
-	struct of_ir_register *dst;
-
-	/** Opcode. */
-	enum of_instr_opcode opc;
-
-	/** Basic block to which the instruction belongs. */
-	struct of_ir_cf_block *block;
-	/** List head to link all instructions of the block. */
-	struct list_head list;
-};
-
-/** Representation of a basic block (without CF inside). */
-struct of_ir_cf_block {
-	/** List of PSI() operators at the beginning of the block. */
-	struct list_head psis;
-	/** List of instructions in the block. */
-	struct list_head instrs;
-
-	/** CF instruction that ends the block (if present). */
-	struct of_ir_instruction *cf_instr;
-	/** Number of branch targets. */
-	unsigned num_targets;
-	/** Branch targets. */
-	struct {
-		/** Basic block which is the target. */
-		struct of_ir_cf_block *block;
-		/** List head used to link all sources of target block. */
-		struct list_head list;
-	} targets[OF_IR_NUM_CF_TARGETS];
-
-	/** Shader to which the basic block belongs. */
-	struct of_ir_shader *shader;
-	/** List head used to link all basic blocks of the shader. */
-	struct list_head list;
-
-	/* Address assigned by assembler. */
-	unsigned address;
-};
-
-/** Representation of a shader program. */
-struct of_ir_shader {
-	/** Total number of generated instructions. */
-	unsigned num_instrs;
-	/** List of basic blocks in the program. */
-	struct list_head cf_blocks;
-
-	/** Heap to allocate IR data from. */
-	uint32_t heap[100 * 4096];
-	/** Index of first unused dword on the heap. */
-	unsigned heap_idx;
-
-	unsigned num_temporaries;
-	const struct of_ir_reg_info *reg_info;
-};
 
 const struct of_ir_opc_info of_ir_opc_info[] = {
 	[OF_OP_NOP] = {
@@ -294,20 +214,6 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 		.type = OF_IR_CF,
 		.num_srcs = 0,
 	},
-};
-
-struct of_ir_reg_info {
-	enum of_instr_src src_type;
-	enum of_instr_dst dst_type;
-
-	unsigned num_reads;
-	unsigned num_regs;
-
-	bool writable :1;
-	bool readable :1;
-	bool scalar :1;
-	bool al_addr :1;
-	bool a0_addr :1;
 };
 
 static const struct of_ir_reg_info vs_reg_info[OF_IR_NUM_REG_TYPES] = {
@@ -547,6 +453,7 @@ of_ir_instr_create(struct of_ir_shader *shader, enum of_instr_opcode opc)
 
 	DEBUG_MSG("%d", opc);
 	instr->opc = opc;
+	LIST_INITHEAD(&instr->list);
 
 	return instr;
 }
@@ -575,8 +482,11 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block,
 	assert(instr->num_srcs == info->num_srcs);
 	assert(info->type != OF_IR_CF);
 
+	++shader->num_instrs;
+
 	if (where) {
 		list_addtail(&instr->list, &where->list);
+		instr->block = where->block;
 		return;
 	}
 
@@ -585,7 +495,7 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block,
 				shader->cf_blocks.prev, list);
 
 	list_addtail(&instr->list, &block->instrs);
-	++shader->num_instrs;
+	instr->block = block;
 }
 
 static void
@@ -655,6 +565,9 @@ of_ir_cf_create(struct of_ir_shader *shader)
 	struct of_ir_cf_block *cf = of_ir_alloc(shader, sizeof(*cf));
 	int i;
 
+	cf->shader = shader;
+
+	LIST_INITHEAD(&cf->list);
 	LIST_INITHEAD(&cf->psis);
 	LIST_INITHEAD(&cf->instrs);
 
@@ -676,6 +589,7 @@ of_ir_cf_insert(struct of_ir_shader *shader, struct of_ir_cf_block *where,
 		head = &shader->cf_blocks;
 
 	list_addtail(&block->list, head);
+	++shader->num_cf_blocks;
 }
 
 /*
