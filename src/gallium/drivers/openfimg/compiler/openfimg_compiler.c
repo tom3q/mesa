@@ -815,12 +815,11 @@ translate_dp2(struct of_compile_context *ctx,
 {
 	const float const_zero = 0.0f;
 	struct of_ir_instr_template instr;
-	struct of_ir_register *tmp;
 
 	memset(&instr, 0, sizeof(instr));
 
 	instr.opc = OF_OP_DP2ADD;
-	instr.dst.reg = tmp = get_dst_reg(ctx, inst);
+	instr.dst.reg = get_dst_reg(ctx, inst);
 	instr.src[0].reg = get_src_reg(ctx, inst, 0);
 	instr.src[1].reg = get_src_reg(ctx, inst, 1);
 	instr.src[2].reg = get_immediate(ctx, 1, &const_zero);
@@ -1051,13 +1050,6 @@ static const struct of_tgsi_map_entry translate_table[] = {
 	/* Texture lookup */
 	IR_EMULATE(TGSI_OPCODE_TEX, translate_tex, 0),
 	IR_EMULATE(TGSI_OPCODE_TXP, translate_tex, 0),
-// 	IR_EMULATE(TGSI_OPCODE_TXB, translate_tex, 0),
-// 	IR_EMULATE(TGSI_OPCODE_TXL, translate_tex, 0),
-// 	IR_EMULATE(TGSI_OPCODE_TXD, translate_tex, 0),
-// 	IR_EMULATE(TGSI_OPCODE_TXQ, translate_tex, 0),
-// 	IR_EMULATE(TGSI_OPCODE_TXF, translate_tex, 0),
-// 	IR_EMULATE(TGSI_OPCODE_TG4, translate_tex, 0),
-// 	IR_EMULATE(TGSI_OPCODE_LODQ, translate_tex, 0),
 };
 
 static void
