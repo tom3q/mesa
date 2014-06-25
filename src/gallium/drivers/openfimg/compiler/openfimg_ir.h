@@ -154,7 +154,7 @@ void of_ir_instr_insert(struct of_ir_shader *shader,
 void of_ir_instr_insert_templ(struct of_ir_shader *shader,
 			      struct of_ir_cf_block *block,
 			      struct of_ir_instruction *where,
-			      struct of_ir_instr_template *instrs,
+			      const struct of_ir_instr_template *instrs,
 			      unsigned num_instrs);
 
 struct of_ir_cf_block *of_ir_cf_create(struct of_ir_shader *shader);
