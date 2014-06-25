@@ -26,9 +26,9 @@
 
 #include "openfimg_ir.h"
 
-#define DEBUG_MSG(f, ...)  do { if (0) DBG(f, ##__VA_ARGS__); } while (0)
-#define WARN_MSG(f, ...)   DBG("WARN:  "f, ##__VA_ARGS__)
-#define ERROR_MSG(f, ...)  DBG("ERROR: "f, ##__VA_ARGS__)
+#define DEBUG_MSG(...)  do { if (0) DBG(__VA_ARGS__); } while (0)
+#define WARN_MSG(...)   DBG("WARN:  "__VA_ARGS__)
+#define ERROR_MSG(...)  DBG("ERROR: "__VA_ARGS__)
 
 /** Representation of single register usage. */
 struct of_ir_register {
