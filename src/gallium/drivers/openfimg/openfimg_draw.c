@@ -189,7 +189,8 @@ of_build_vertex_data_repack(struct of_context *ctx,
 							&vb_transfer[buf_idx]);
 		}
 
-		vdata->transfers[i] = vb_ptr[buf_idx] + transfer->src_offset;
+		vdata->transfers[i] = CBUF_ADDR_8(vb_ptr[buf_idx],
+							transfer->src_offset);
 	}
 
 	if (!vertex->indexed) {

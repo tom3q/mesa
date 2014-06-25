@@ -38,20 +38,6 @@
 
 #include <util/u_double_list.h>
 
-#define CBUF_ADDR_32(buf, offs)	\
-			((const uint32_t *)((const uint8_t *)(buf) + (offs)))
-#define CBUF_ADDR_16(buf, offs)	\
-			((const uint16_t *)((const uint8_t *)(buf) + (offs)))
-#define CBUF_ADDR_8(buf, offs)	\
-			((const uint8_t *)(buf) + (offs))
-
-#define BUF_ADDR_32(buf, offs)	\
-			((uint32_t *)((uint8_t *)(buf) + (offs)))
-#define BUF_ADDR_16(buf, offs)	\
-			((uint16_t *)((uint8_t *)(buf) + (offs)))
-#define BUF_ADDR_8(buf, offs)	\
-			((uint8_t *)(buf) + (offs))
-
 struct of_transfer_data {
 	uint8_t *buf;
 	const void *pointer;
@@ -311,7 +297,7 @@ of_prepare_draw_direct_wa(struct of_vertex_data *vdata)
 							&ib_transfer);
 		}
 
-		idx = ib_ptr + ib_offset;
+		idx = BUF_ADDR_8(ib_ptr, ib_offset);
 		if (prim->repeat_first)
 			for (i = 0; i < 3; ++i)
 				*(idx++) = 0;
@@ -345,20 +331,21 @@ of_prepare_draw_direct_wa(struct of_vertex_data *vdata)
 		pipe_buffer_unmap(&ctx->base, ib_transfer);
 }
 
+#if 0
 static const void *
 get_next_index(const struct pipe_index_buffer *ib, const void *indices,
 	       uint32_t *index)
 {
 	switch (ib->index_size) {
 	case 1:
-		*index = *(uint8_t *)indices;
-		return indices + 1;
+		*index = *(const uint8_t *)indices;
+		return (const uint8_t *)indices + 1;
 	case 2:
-		*index = *(uint16_t *)indices;
-		return indices + 2;
+		*index = *(const uint16_t *)indices;
+		return (const uint16_t *)indices + 1;
 	case 4:
-		*index = *(uint32_t *)indices;
-		return indices + 4;
+		*index = *(const uint32_t *)indices;
+		return (const uint32_t *)indices + 1;
 	default:
 		assert(0);
 		*index = 0;
@@ -372,11 +359,11 @@ skip_n_indices(const struct pipe_index_buffer *ib, const void *indices,
 {
 	switch (ib->index_size) {
 	case 1:
-		return indices + 1 * n;
+		return (const uint8_t *)indices + n;
 	case 2:
-		return indices + 2 * n;
+		return (const uint16_t *)indices + n;
 	case 4:
-		return indices + 4 * n;
+		return (const uint32_t *)indices + n;
 	default:
 		assert(0);
 		return indices;
@@ -441,6 +428,7 @@ of_check_index_ranges(const struct of_vertex_info *vertex,
 
 	return num_parts;
 }
+#endif
 
 /*
  * Semi-fast path for aligned vertex data, indices with reasonable locality and
