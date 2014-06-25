@@ -54,15 +54,13 @@ extern int of_mesa_debug;
 #define debug_printf _debug_printf
 #endif
 
-#define DBG(fmt, ...) \
-		do { if (of_mesa_debug & OF_DBG_MSGS) \
-			debug_printf("%s:%d: "fmt "\n", \
-				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
+#define DBG_PRINT(mask, fmt, ...) \
+		do { if (of_mesa_debug & mask) \
+			debug_printf("%s%s:%d: "fmt "\n", \
+				__FUNCTION__, __LINE__, __VA_ARGS__); } while (0)
 
-#define VDBG(fmt, ...) \
-		do { if (of_mesa_debug & OF_DBG_VMSGS) \
-			debug_printf("%s:%d: "fmt "\n", \
-				__FUNCTION__, __LINE__, ##__VA_ARGS__); } while (0)
+#define DBG(...)	DBG_PRINT(OF_DBG_MSGS, __VA_ARGS__, "")
+#define VDBG(...)	DBG_PRINT(OF_DBG_VMSGS, __VA_ARGS__, "")
 
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #define ROUND_UP(val, to)	(((val) + (to) - 1) & ~((to) - 1))
@@ -77,6 +75,20 @@ extern int of_mesa_debug;
 			a = b; \
 			b = __tmp; \
 		} while (0)
+
+#define CBUF_ADDR_32(buf, offs)	\
+			((const uint32_t *)((const uint8_t *)(buf) + (offs)))
+#define CBUF_ADDR_16(buf, offs)	\
+			((const uint16_t *)((const uint8_t *)(buf) + (offs)))
+#define CBUF_ADDR_8(buf, offs)	\
+			((const uint8_t *)(buf) + (offs))
+
+#define BUF_ADDR_32(buf, offs)	\
+			((uint32_t *)((uint8_t *)(buf) + (offs)))
+#define BUF_ADDR_16(buf, offs)	\
+			((uint16_t *)((uint8_t *)(buf) + (offs)))
+#define BUF_ADDR_8(buf, offs)	\
+			((uint8_t *)(buf) + (offs))
 
 /* for conditionally setting boolean flag(s): */
 #define COND(bool, val) ((bool) ? (val) : 0)
@@ -112,7 +124,6 @@ enum fgpf_color_mode of_pipe2color(enum pipe_format format);
 int of_depth_supported(enum pipe_format format);
 uint32_t of_tex_swiz(enum pipe_format format, unsigned swizzle_r,
 		unsigned swizzle_g, unsigned swizzle_b, unsigned swizzle_a);
-enum pc_di_index_size of_pipe2index(enum pipe_format format);
 enum fgpf_blend_factor of_blend_factor(unsigned factor);
 enum fgpf_blend_op of_blend_func(unsigned func);
 enum fgpf_stencil_action of_stencil_op(unsigned op);
