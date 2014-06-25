@@ -112,11 +112,18 @@ struct of_ir_opc_info {
 
 struct of_ir_instr_template {
 	enum of_instr_opcode opc;
-	struct {
-		struct of_ir_register *reg;
-		const char *mask;
-		unsigned flags;
-	} dst;
+	union {
+		/* ALU destination register. */
+		struct {
+			struct of_ir_register *reg;
+			const char *mask;
+			unsigned flags;
+		} dst;
+		/* CF branch target. */
+		struct {
+			unsigned label;
+		} target;
+	};
 	struct {
 		struct of_ir_register *reg;
 		const char *swizzle;
