@@ -436,6 +436,13 @@ of_ir_reg_temporary(struct of_ir_shader *shader)
 				32 + shader->num_temporaries++, "xyzw", 0);
 }
 
+struct of_ir_register *
+of_ir_reg_predicate(struct of_ir_shader *shader)
+{
+	/* TODO */
+	return NULL;
+}
+
 void
 of_ir_reg_set_swizzle(struct of_ir_register *reg, const char *swizzle)
 {
@@ -501,19 +508,43 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block,
 static void
 merge_mask(struct of_ir_register *reg, const char *mask)
 {
+	unsigned comp;
 
+	for (comp = 0; comp < ARRAY_SIZE(reg->swizzle); ++comp)
+		if (mask[comp] != "xyzw"[comp])
+			reg->swizzle[comp] = '_';
 }
 
 static void
 merge_swizzle(struct of_ir_register *reg, const char *swizzle)
 {
+	unsigned comp;
+	char result[4];
 
+	for (comp = 0; comp < ARRAY_SIZE(reg->swizzle); ++comp) {
+		switch (swizzle[comp]) {
+		case 'x': result[comp] = reg->swizzle[0];
+		case 'y': result[comp] = reg->swizzle[1];
+		case 'z': result[comp] = reg->swizzle[2];
+		case 'w': result[comp] = reg->swizzle[3];
+		default:
+			ERROR_MSG("invalid vector src swizzle: %s",
+					reg->swizzle);
+		}
+	}
+
+	memcpy(reg->swizzle, result, sizeof(reg->swizzle));
 }
 
 static void
 merge_flags(struct of_ir_register *reg, enum of_ir_reg_flags flags)
 {
+	/* Exclusive flags */
+	if (reg->flags & OF_IR_REG_NEGATE && flags & OF_IR_REG_ABS)
+		reg->flags &= ~OF_IR_REG_NEGATE;
 
+	/* Additive flags */
+	reg->flags |= flags;
 }
 
 void
@@ -742,31 +773,33 @@ instr_emit_alu(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 
 	/* Source register 0 (always used) */
 	src0_reg = instr->srcs[0];
-	assert(src0_reg);
-	reg = &shader->reg_info[src0_reg->type];
+	if (src0_reg) {
+		reg = &shader->reg_info[src0_reg->type];
 
-	dwords[1] |= INSTR_WORD1_SRC0_NUM(src0_reg->num) |
-			INSTR_WORD1_SRC0_TYPE(reg->src_type);
+		dwords[1] |= INSTR_WORD1_SRC0_NUM(src0_reg->num) |
+				INSTR_WORD1_SRC0_TYPE(reg->src_type);
 
-	if (src0_reg->flags & OF_IR_REG_NEGATE)
-		dwords[1] |= INSTR_WORD1_SRC0_NEGATE;
+		if (src0_reg->flags & OF_IR_REG_NEGATE)
+			dwords[1] |= INSTR_WORD1_SRC0_NEGATE;
 
-	if (src0_reg->flags & OF_IR_REG_ABS)
-		dwords[1] |= INSTR_WORD1_SRC0_ABS;
+		if (src0_reg->flags & OF_IR_REG_ABS)
+			dwords[1] |= INSTR_WORD1_SRC0_ABS;
 
-	dwords[2] |= INSTR_WORD2_SRC0_SWIZZLE(src_swiz(src0_reg));
+		dwords[2] |= INSTR_WORD2_SRC0_SWIZZLE(src_swiz(src0_reg));
+	}
 
 	/* Destination register */
 	dst_reg = instr->dst;
-	assert(dst_reg);
-	reg = &shader->reg_info[dst_reg->type];
+	if (dst_reg) {
+		reg = &shader->reg_info[dst_reg->type];
 
-	dwords[2] |= ALU_WORD2_DST_NUM(dst_reg->num) |
-			ALU_WORD2_DST_TYPE(reg->dst_type) |
-			ALU_WORD2_DST_MASK(dst_mask(dst_reg));
+		dwords[2] |= ALU_WORD2_DST_NUM(dst_reg->num) |
+				ALU_WORD2_DST_TYPE(reg->dst_type) |
+				ALU_WORD2_DST_MASK(dst_mask(dst_reg));
 
-	if (dst_reg->flags & OF_IR_REG_SAT)
-		dwords[2] |= ALU_WORD2_DST_SAT;
+		if (dst_reg->flags & OF_IR_REG_SAT)
+			dwords[2] |= ALU_WORD2_DST_SAT;
+	}
 
 	/* TODO: Implement predicate support */
 }
