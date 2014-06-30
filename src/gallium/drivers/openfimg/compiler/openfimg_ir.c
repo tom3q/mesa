@@ -479,30 +479,78 @@ of_ir_instr_add_src(struct of_ir_instruction *instr, struct of_ir_register *reg)
 	instr->srcs[instr->num_srcs++] = reg;
 }
 
+static void
+of_ir_cf_branch(struct of_ir_shader *shader, struct of_ir_cf_block *cf)
+{
+	unsigned target = cf->num_targets++;
+	struct of_ir_cf_block *next_cf;
+
+	next_cf = of_ir_cf_push(shader);
+	cf->targets[target].block = next_cf;
+	list_addtail(&cf->targets[target].list, &next_cf->sources);
+}
+
+static void
+of_ir_instr_cf_fixup(struct of_ir_shader *shader,
+		     struct of_ir_instruction *instr)
+{
+	struct of_ir_cf_block *cf = instr->block;
+
+	/* TODO: Handle insertion in the middle of a block. */
+	assert(&instr->list == list_tail(&cf->instrs));
+
+	switch (instr->opc) {
+	case OF_OP_BP:
+	case OF_OP_B:
+		/* Basic block for unconditional branch */
+		of_ir_cf_branch(shader, cf);
+		/* Fall through */
+	case OF_OP_BFP:
+	case OF_OP_BZP:
+	case OF_OP_BF:
+		/* Basic block when condition passes */
+		of_ir_cf_branch(shader, cf);
+		break;
+	case OF_OP_CALL:
+	case OF_OP_CALLNZ:
+		/* TODO: Handle subroutine calls. */
+	case OF_OP_RET:
+		/* TODO: Handle subroutine returns. */
+	default:
+		assert(0);
+	}
+
+	cf->cf_instr = instr;
+}
+
 void
 of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block,
 		   struct of_ir_instruction *where,
 		   struct of_ir_instruction *instr)
 {
 	const struct of_ir_opc_info *info = of_ir_get_opc_info(instr->opc);
+	struct list_head *list;
 
+	assert(!LIST_IS_EMPTY(&shader->cf_stack));
 	assert(instr->num_srcs == info->num_srcs);
-	assert(info->type != OF_IR_CF);
 
 	++shader->num_instrs;
 
 	if (where) {
-		list_addtail(&instr->list, &where->list);
-		instr->block = where->block;
-		return;
+		block = where->block;
+		list = &where->list;
+	} else {
+		if (!block)
+			block = LIST_ENTRY(struct of_ir_cf_block,
+					list_head(&shader->cf_stack), list);
+		list = &block->instrs;
 	}
 
-	if (!block)
-		block = LIST_ENTRY(struct of_ir_cf_block,
-				shader->cf_blocks.prev, list);
-
-	list_addtail(&instr->list, &block->instrs);
+	list_addtail(&instr->list, list);
 	instr->block = block;
+
+	if (info->type == OF_IR_CF)
+		of_ir_instr_cf_fixup(shader, instr);
 }
 
 static void
@@ -623,6 +671,25 @@ of_ir_cf_insert(struct of_ir_shader *shader, struct of_ir_cf_block *where,
 	++shader->num_cf_blocks;
 }
 
+struct of_ir_cf_block *
+of_ir_cf_push(struct of_ir_shader *shader)
+{
+	struct of_ir_cf_block *cf;
+
+	cf = of_ir_cf_create(shader);
+	list_addtail(&cf->cf_stack_list, &shader->cf_stack);
+
+	return cf;
+}
+
+void
+of_ir_cf_pop(struct of_ir_shader *shader)
+{
+	assert(!LIST_IS_EMPTY(&shader->cf_stack));
+
+	list_pop(&shader->cf_stack);
+}
+
 /*
  * Shader-level operations.
  */
@@ -639,9 +706,11 @@ of_ir_shader_create(enum of_ir_shader_type type)
 		return NULL;
 
 	LIST_INITHEAD(&shader->cf_blocks);
+	LIST_INITHEAD(&shader->cf_stack);
 
 	cf = of_ir_cf_create(shader);
 	of_ir_cf_insert(shader, NULL, cf);
+	list_push(&cf->cf_stack_list, &shader->cf_stack);
 
 	if (type == OF_IR_SHADER_VERTEX)
 		shader->reg_info = vs_reg_info;
