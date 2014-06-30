@@ -80,11 +80,14 @@ struct of_ir_cf_block {
 		/** List head used to link all sources of target block. */
 		struct list_head list;
 	} targets[OF_IR_NUM_CF_TARGETS];
+	struct list_head sources;
 
 	/** Shader to which the basic block belongs. */
 	struct of_ir_shader *shader;
 	/** List head used to link all basic blocks of the shader. */
 	struct list_head list;
+	/** List head used by basic block stack. */
+	struct list_head cf_stack_list;
 
 	/* Address assigned by assembler. */
 	unsigned address;
@@ -101,6 +104,8 @@ struct of_ir_shader {
 	unsigned num_cf_blocks;
 	/** List of basic blocks in the program. */
 	struct list_head cf_blocks;
+	/** Stack of basic blocks */
+	struct list_head cf_stack;
 
 	/** Heap to allocate IR data from. */
 	uint32_t heap[100 * 4096];

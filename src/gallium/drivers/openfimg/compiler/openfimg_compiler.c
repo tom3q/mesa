@@ -947,8 +947,8 @@ translate_else(struct of_compile_context *ctx,
 }
 
 static void
-pop_cf_stack(struct of_compile_context *ctx, struct tgsi_full_instruction *inst,
-	     unsigned long data)
+translate_endif(struct of_compile_context *ctx,
+		struct tgsi_full_instruction *inst, unsigned long data)
 {
 	of_ir_cf_pop(ctx->shader);
 }
@@ -978,6 +978,13 @@ translate_bgnsub(struct of_compile_context *ctx,
 
 	cf = of_ir_cf_push(ctx->shader);
 	save_subroutine(ctx, cf);
+}
+
+static void
+translate_endsub(struct of_compile_context *ctx,
+		 struct tgsi_full_instruction *inst, unsigned long data)
+{
+	/* TODO */
 }
 
 static void
@@ -1162,12 +1169,12 @@ static const struct of_tgsi_map_entry translate_table[] = {
 	/* Dynamic flow control */
 	IR_EMULATE(TGSI_OPCODE_IF, translate_if, 0),
 	IR_EMULATE(TGSI_OPCODE_ELSE, translate_else, 0),
-	IR_EMULATE(TGSI_OPCODE_ENDIF, pop_cf_stack, 0),
+	IR_EMULATE(TGSI_OPCODE_ENDIF, translate_endif, 0),
 
 	/* Subroutines */
 	IR_EMULATE(TGSI_OPCODE_BGNSUB, translate_bgnsub, 0),
 	IR_EMULATE(TGSI_OPCODE_RET, translate_ret, 0),
-	IR_EMULATE(TGSI_OPCODE_ENDSUB, pop_cf_stack, 0),
+	IR_EMULATE(TGSI_OPCODE_ENDSUB, translate_endsub, 0),
 	IR_EMULATE(TGSI_OPCODE_CAL, translate_cal, 0),
 
 	/* Loops */
