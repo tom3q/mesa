@@ -33,38 +33,6 @@
 #include "openfimg_util.h"
 
 /*
- * List helpers
- */
-
-static inline struct list_head *
-list_head(struct list_head *head)
-{
-	return head->next;
-}
-
-static inline struct list_head *
-list_tail(struct list_head *head)
-{
-	return head->prev;
-}
-
-static inline struct list_head *
-list_pop(struct list_head *stack)
-{
-	struct list_head *item = list_head(stack);
-
-	list_del(item);
-
-	return item;
-}
-
-static inline void
-list_push(struct list_head *item, struct list_head *stack)
-{
-	list_add(item, stack);
-}
-
-/*
  * Fast dominator tree algorithm running in O(|E|a(|E|,|V|)), where a(x1,x2)
  * is the inverse Ackermann function.
  *
