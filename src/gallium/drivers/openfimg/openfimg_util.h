@@ -34,6 +34,7 @@
 #include "pipe/p_format.h"
 #include "pipe/p_state.h"
 #include "util/u_debug.h"
+#include "util/u_double_list.h"
 #include "util/u_math.h"
 
 #include "fimg_3dse.xml.h"
@@ -186,6 +187,38 @@ pipe_surface_format(struct pipe_surface *psurf)
 	if (!psurf)
 		return PIPE_FORMAT_NONE;
 	return psurf->format;
+}
+
+/*
+ * List helpers
+ */
+
+static inline struct list_head *
+list_head(struct list_head *head)
+{
+	return head->next;
+}
+
+static inline struct list_head *
+list_tail(struct list_head *head)
+{
+	return head->prev;
+}
+
+static inline struct list_head *
+list_pop(struct list_head *stack)
+{
+	struct list_head *item = list_head(stack);
+
+	list_del(item);
+
+	return item;
+}
+
+static inline void
+list_push(struct list_head *item, struct list_head *stack)
+{
+	list_add(item, stack);
 }
 
 #endif /* OPENFIMG_UTIL_H_ */

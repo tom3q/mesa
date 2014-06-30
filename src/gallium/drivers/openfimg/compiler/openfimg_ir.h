@@ -27,8 +27,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#include <util/u_double_list.h>
-
 #include "openfimg_context.h"
 #include "openfimg_util.h"
 
