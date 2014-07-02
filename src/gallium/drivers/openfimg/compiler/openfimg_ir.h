@@ -165,8 +165,7 @@ void of_ir_instr_insert_templ(struct of_ir_shader *shader,
 			      unsigned num_instrs);
 
 struct of_ir_cf_block *of_ir_cf_create(struct of_ir_shader *shader);
-void of_ir_cf_insert(struct of_ir_shader *shader, struct of_ir_cf_block *where,
-		     struct of_ir_cf_block *block);
+void of_ir_cf_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block);
 struct of_ir_cf_block *of_ir_cf_push(struct of_ir_shader *shader);
 void of_ir_cf_pop(struct of_ir_shader *shader);
 
