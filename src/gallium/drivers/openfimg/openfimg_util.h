@@ -221,4 +221,56 @@ list_push(struct list_head *item, struct list_head *stack)
 	list_add(item, stack);
 }
 
+/**
+ * list_is_singular - tests whether a list has just one entry.
+ * @head: the list to test.
+ */
+static inline int
+list_is_singular(const struct list_head *head)
+{
+	return !LIST_IS_EMPTY(head) && (head->next == head->prev);
+}
+
+static inline void
+__list_cut_position(struct list_head *list, struct list_head *head,
+		    struct list_head *entry)
+{
+	struct list_head *new_first = entry->next;
+	list->next = head->next;
+	list->next->prev = list;
+	list->prev = entry;
+	entry->next = list;
+	head->next = new_first;
+	new_first->prev = head;
+}
+
+/**
+ * list_cut_position - cut a list into two
+ * @list: a new list to add all removed entries
+ * @head: a list with entries
+ * @entry: an entry within head, could be the head itself
+ *	and if so we won't cut the list
+ *
+ * This helper moves the initial part of @head, up to and
+ * including @entry, from @head to @list. You should
+ * pass on @entry an element you know is on @head. @list
+ * should be an empty list or a list you do not care about
+ * losing its data.
+ *
+ */
+static inline void
+list_cut_position(struct list_head *list, struct list_head *head,
+		  struct list_head *entry)
+{
+	if (LIST_IS_EMPTY(head))
+		return;
+	if (list_is_singular(head) &&
+		(head->next != entry && head != entry))
+		return;
+	if (entry == head)
+		list_inithead(list);
+	else
+		__list_cut_position(list, head, entry);
+}
+
 #endif /* OPENFIMG_UTIL_H_ */
