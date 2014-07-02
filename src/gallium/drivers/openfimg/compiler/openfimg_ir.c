@@ -480,14 +480,50 @@ of_ir_instr_add_src(struct of_ir_instruction *instr, struct of_ir_register *reg)
 }
 
 static void
-of_ir_cf_branch(struct of_ir_shader *shader, struct of_ir_cf_block *cf)
+of_ir_cf_branch(struct of_ir_shader *shader, struct of_ir_cf_block *cf,
+		struct of_ir_cf_block *next_cf)
 {
 	unsigned target = cf->num_targets++;
-	struct of_ir_cf_block *next_cf;
 
-	next_cf = of_ir_cf_push(shader);
 	cf->targets[target].block = next_cf;
 	list_addtail(&cf->targets[target].list, &next_cf->sources);
+}
+
+static void
+of_ir_cf_split(struct of_ir_shader *shader, struct of_ir_instruction *instr)
+{
+	struct of_ir_cf_block *cf, *next_cf;
+	struct list_head tmp_list;
+	unsigned i;
+
+	cf = instr->block;
+	next_cf = of_ir_cf_create(shader);
+
+	/* Move instructions after instr to next basic block. */
+	list_inithead(&tmp_list);
+	list_cut_position(&tmp_list, &cf->instrs, &instr->list);
+	list_cut_position(&next_cf->instrs, &cf->instrs,
+				list_tail(&cf->instrs));
+	list_addtail(&next_cf->instrs, &tmp_list);
+	list_del(&tmp_list);
+	LIST_FOR_EACH_ENTRY(instr, &next_cf->instrs, list)
+		instr->block = next_cf;
+
+	/* Branch from next basic block to targets of original block. */
+	for (i = 0; i < cf->num_targets; ++i) {
+		of_ir_cf_branch(shader, next_cf, cf->targets[i].block);
+		list_del(&cf->targets[i].list);
+	}
+
+	/* Make original block branch only to new block. */
+	cf->num_targets = 0;
+	of_ir_cf_branch(shader, cf, next_cf);
+
+	/* Replace old block with new block on CF stack if present. */
+	if (!LIST_IS_EMPTY(&cf->cf_stack_list)) {
+		list_add(&next_cf->cf_stack_list, &cf->cf_stack_list);
+		list_delinit(&cf->cf_stack_list);
+	}
 }
 
 static void
@@ -495,21 +531,59 @@ of_ir_instr_cf_fixup(struct of_ir_shader *shader,
 		     struct of_ir_instruction *instr)
 {
 	struct of_ir_cf_block *cf = instr->block;
+	struct of_ir_instruction *dest = instr->target;
+	struct of_ir_cf_block *dest_cf = NULL, *fall_cf;
 
-	/* TODO: Handle insertion in the middle of a block. */
-	assert(&instr->list == list_tail(&cf->instrs));
+	if (&instr->list != list_tail(&cf->instrs)) {
+		/* Inserting CF in the middle of a block divides it. */
+		of_ir_cf_split(shader, instr);
+	} else if (cf->num_targets) {
+		/*
+		 * Appending CF instruction to a block that already has branch
+		 * targets set divides it. The assumption is that CF is always
+		 * the last instruction in the block.
+		 */
+		struct of_ir_instruction *prev;
+
+		prev = LIST_ENTRY(struct of_ir_instruction,
+					instr->list.prev, list);
+		of_ir_cf_split(shader, prev);
+	}
+
+	if (dest) {
+		/* Destination is specified explicitly. */
+		if (&dest->list != list_head(&dest->block->instrs)) {
+			/*
+			 * If destination is not at start of a basic block
+			 * then the block must be divided.
+			 */
+			struct of_ir_instruction *dest_prev;
+
+			dest_prev = LIST_ENTRY(struct of_ir_instruction,
+						dest->list.prev, list);
+			of_ir_cf_split(shader, dest_prev);
+		}
+		dest_cf = dest->block;
+	}
+
+	if (!dest_cf)
+		/* Create new basic block if destination not specified. */
+		dest_cf = of_ir_cf_create(shader);
 
 	switch (instr->opc) {
-	case OF_OP_BP:
-	case OF_OP_B:
-		/* Basic block for unconditional branch */
-		of_ir_cf_branch(shader, cf);
-		/* Fall through */
 	case OF_OP_BFP:
 	case OF_OP_BZP:
 	case OF_OP_BF:
-		/* Basic block when condition passes */
-		of_ir_cf_branch(shader, cf);
+		/* Basic block for fall. */
+		fall_cf = of_ir_cf_create(shader);
+		of_ir_cf_branch(shader, cf, fall_cf);
+		list_addtail(&fall_cf->cf_stack_list, &cf->cf_stack_list);
+		/* Intentional fall through... */
+	case OF_OP_BP:
+	case OF_OP_B:
+		/* Basic block for jump. */
+		of_ir_cf_branch(shader, cf, dest_cf);
+		list_addtail(&dest_cf->cf_stack_list, &cf->cf_stack_list);
 		break;
 	case OF_OP_CALL:
 	case OF_OP_CALLNZ:
@@ -520,7 +594,8 @@ of_ir_instr_cf_fixup(struct of_ir_shader *shader,
 		assert(0);
 	}
 
-	cf->cf_instr = instr;
+	/* Close current basic block. */
+	list_delinit(&cf->cf_stack_list);
 }
 
 void
@@ -531,24 +606,30 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block,
 	const struct of_ir_opc_info *info = of_ir_get_opc_info(instr->opc);
 	struct list_head *list;
 
-	assert(!LIST_IS_EMPTY(&shader->cf_stack));
 	assert(instr->num_srcs == info->num_srcs);
 
 	++shader->num_instrs;
 
 	if (where) {
+		/* Explicitly specified instruction to prepend. */
 		block = where->block;
 		list = &where->list;
 	} else {
-		if (!block)
+		/* Append to basic block. */
+		if (!block) {
+			/* Block not given - use currently active one or new. */
+			if (LIST_IS_EMPTY(&shader->cf_stack))
+				of_ir_cf_push(shader);
 			block = LIST_ENTRY(struct of_ir_cf_block,
 					list_head(&shader->cf_stack), list);
+		}
 		list = &block->instrs;
 	}
 
 	list_addtail(&instr->list, list);
 	instr->block = block;
 
+	/* A CF instruction ends the basic block. */
 	if (info->type == OF_IR_CF)
 		of_ir_instr_cf_fixup(shader, instr);
 }
@@ -657,17 +738,9 @@ of_ir_cf_create(struct of_ir_shader *shader)
 }
 
 void
-of_ir_cf_insert(struct of_ir_shader *shader, struct of_ir_cf_block *where,
-		struct of_ir_cf_block *block)
+of_ir_cf_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block)
 {
-	struct list_head *head;
-
-	if (where)
-		head = &where->list;
-	else
-		head = &shader->cf_blocks;
-
-	list_addtail(&block->list, head);
+	list_addtail(&block->list, &shader->cf_blocks);
 	++shader->num_cf_blocks;
 }
 
@@ -677,6 +750,7 @@ of_ir_cf_push(struct of_ir_shader *shader)
 	struct of_ir_cf_block *cf;
 
 	cf = of_ir_cf_create(shader);
+	of_ir_cf_insert(shader, cf);
 	list_addtail(&cf->cf_stack_list, &shader->cf_stack);
 
 	return cf;
@@ -685,9 +759,12 @@ of_ir_cf_push(struct of_ir_shader *shader)
 void
 of_ir_cf_pop(struct of_ir_shader *shader)
 {
+	struct list_head *item;
+
 	assert(!LIST_IS_EMPTY(&shader->cf_stack));
 
-	list_pop(&shader->cf_stack);
+	item = list_pop(&shader->cf_stack);
+	list_inithead(item);
 }
 
 /*
@@ -698,7 +775,6 @@ struct of_ir_shader *
 of_ir_shader_create(enum of_ir_shader_type type)
 {
 	struct of_ir_shader *shader;
-	struct of_ir_cf_block *cf;
 
 	DEBUG_MSG("");
 	shader = CALLOC_STRUCT(of_ir_shader);
@@ -708,9 +784,7 @@ of_ir_shader_create(enum of_ir_shader_type type)
 	LIST_INITHEAD(&shader->cf_blocks);
 	LIST_INITHEAD(&shader->cf_stack);
 
-	cf = of_ir_cf_create(shader);
-	of_ir_cf_insert(shader, NULL, cf);
-	list_push(&cf->cf_stack_list, &shader->cf_stack);
+	of_ir_cf_push(shader);
 
 	if (type == OF_IR_SHADER_VERTEX)
 		shader->reg_info = vs_reg_info;
@@ -917,14 +991,12 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 			++idx;
 		}
 
-		if (cf->cf_instr) {
-			/*
-			 * Keep place for CF instruction, that will be emitted
-			 * in second pass.
-			 */
-			ptr += 4;
-			++idx;
-		}
+		/*
+		 * Keep one slot for CF instruction that will be emitted
+		 * in second pass.
+		 */
+		ptr += 4;
+		++idx;
 	}
 
 	/*
