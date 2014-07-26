@@ -25,6 +25,7 @@
 #include "util/u_string.h"
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
+#include "util/u_hash_table.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_ureg.h"
 #include "tgsi/tgsi_info.h"
@@ -66,6 +67,8 @@ struct of_compile_context {
 
 	struct of_cf_stack cf_stack;
 	struct of_cf_stack loop_stack;
+
+	struct util_hash_table *subroutine_ht;
 };
 
 typedef void (*of_tgsi_opcode_handler_t)(struct of_compile_context *,
@@ -113,6 +116,18 @@ static const float cos_constants[4] = {
 /*
  * Helpers
  */
+
+static unsigned
+integer_hash(void *key)
+{
+	return (unsigned)key;
+}
+
+static int
+pointer_compare(void *key1, void *key2)
+{
+	return (unsigned)key1 - (unsigned)key2;
+}
 
 static void
 compile_error(struct of_compile_context *ctx, const char *format, ...)
@@ -269,11 +284,33 @@ get_src_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst,
 	return of_ir_reg_create(ctx->shader, type, num, swiz, flags);
 }
 
+/* TODO: Implement immediate coalescing. */
 static struct of_ir_register *
 get_immediate(struct of_compile_context *ctx, unsigned dim, const float *vals)
 {
-	/* TODO */
-	return NULL;
+	unsigned offset = ctx->num_immediates % 4;
+	unsigned free_in_slot = 4 - offset;
+	unsigned ptr = ctx->num_immediates;
+	char swizzle[4];
+	unsigned i;
+
+	assert(dim <= 4);
+
+	if (free_in_slot < dim) {
+		ptr += free_in_slot;
+		offset = 0;
+	}
+
+	memcpy(&ctx->immediates[ptr], vals, dim * sizeof(*vals));
+	ctx->num_immediates = ptr + dim;
+
+	for (i = 0; i < dim; ++i)
+		swizzle[i] = 'x' + offset + i;
+	for (i = dim; i < 4; ++i)
+		swizzle[i] = swizzle[dim - 1];
+
+	return of_ir_reg_create(ctx->shader, OF_IR_REG_C,
+		ctx->num_regs[TGSI_FILE_CONSTANT] + ptr / 4, swizzle, 0);
 }
 
 /*
@@ -1083,14 +1120,19 @@ translate_endif(struct of_compile_context *ctx,
 static void
 save_subroutine(struct of_compile_context *ctx, struct of_ir_cf_block *cf)
 {
-	/* TODO */
+	util_hash_table_set(ctx->subroutine_ht,
+				(void *)ctx->parser.Position, cf);
 }
 
 static struct of_ir_cf_block *
-find_subroutine(struct of_compile_context *ctx, unsigned id)
+find_subroutine(struct of_compile_context *ctx, unsigned label)
 {
-	/* TODO */
-	return NULL;
+	struct of_ir_cf_block *cf;
+
+	cf = util_hash_table_get(ctx->subroutine_ht, (void *)label);
+	assert(cf);
+
+	return cf;
 }
 
 static void
@@ -1444,16 +1486,23 @@ compile_init(const struct tgsi_token *tokens)
 	ctx->shader = of_ir_shader_create(ctx->type);
 	if (!ctx->shader) {
 		DBG("failed to create IR shader");
-		goto err_free_ctx;
+		goto fail;
 	}
 
 	ret = cf_stack_init(&ctx->cf_stack, 16);
 	if (!ret)
-		goto err_free_shader;
+		goto fail;
 
 	ret = cf_stack_init(&ctx->loop_stack, 4);
 	if (!ret)
-		goto err_free_shader;
+		goto fail;
+
+	ctx->subroutine_ht = util_hash_table_create(integer_hash,
+							pointer_compare);
+	if (!ctx->subroutine_ht) {
+		DBG("failed to create subroutine hash table");
+		goto fail;
+	}
 
 	cf = of_ir_cf_create(ctx->shader);
 	cf_stack_push(&ctx->cf_stack, cf);
@@ -1461,7 +1510,7 @@ compile_init(const struct tgsi_token *tokens)
 	ret = tgsi_parse_init(&ctx->parser, tokens);
 	if (ret != TGSI_PARSE_OK) {
 		DBG("failed to init TGSI parser (%u)", ret);
-		goto err_free_shader;
+		goto fail;
 	}
 
 	ctx->type = ctx->parser.FullHeader.Processor.Processor;
@@ -1478,16 +1527,18 @@ compile_init(const struct tgsi_token *tokens)
 	ret = tgsi_parse_init(&ctx->parser, tokens);
 	if (ret != TGSI_PARSE_OK) {
 		DBG("failed to init TGSI parser second time (%u)", ret);
-		goto err_free_shader;
+		goto fail;
 	}
 
 	return ctx;
 
-err_free_shader:
+fail:
+	if (ctx->subroutine_ht)
+		util_hash_table_destroy(ctx->subroutine_ht);
 	cf_stack_free(&ctx->loop_stack);
 	cf_stack_free(&ctx->cf_stack);
-	of_ir_shader_destroy(ctx->shader);
-err_free_ctx:
+	if (ctx->shader)
+		of_ir_shader_destroy(ctx->shader);
 	FREE(ctx);
 
 	return NULL;
