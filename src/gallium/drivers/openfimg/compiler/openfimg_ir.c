@@ -211,7 +211,7 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 		.num_srcs = 1,
 	},
 	[OF_OP_RET] = {
-		.type = OF_IR_SUB,
+		.type = OF_IR_ALU, /* Not really, but emitted like ALU. */
 		.num_srcs = 0,
 	},
 };
@@ -439,8 +439,8 @@ of_ir_reg_temporary(struct of_ir_shader *shader)
 struct of_ir_register *
 of_ir_reg_predicate(struct of_ir_shader *shader)
 {
-	/* TODO */
-	return NULL;
+	/* TODO: Support for remaining predicate registers. */
+	return of_ir_reg_create(shader, OF_IR_REG_P, 0, "xyzw", 0);
 }
 
 void
@@ -504,6 +504,7 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block,
 
 	list_addtail(&instr->list, list);
 	instr->block = block;
+	++block->num_instrs;
 }
 
 static void
@@ -723,16 +724,10 @@ src_swiz(struct of_ir_register *reg)
 }
 
 static void
-instr_emit_cf(struct of_ir_shader *shader, struct of_ir_cf_block *cf,
-	      uint32_t *dwords)
+instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
+	   uint32_t *buffer, unsigned pc)
 {
-	DBG("TODO");
-}
-
-static void
-instr_emit_alu(struct of_ir_shader *shader, struct of_ir_instruction *instr,
-	       uint32_t *dwords)
-{
+	uint32_t *dwords = buffer + 4 * pc;
 	const struct of_ir_reg_info *reg;
 	struct of_ir_register *src0_reg;
 	struct of_ir_register *src1_reg;
@@ -808,6 +803,18 @@ instr_emit_alu(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 			dwords[2] |= ALU_WORD2_DST_SAT;
 	}
 
+	if (instr->target) {
+		int offset = instr->target->address - pc;
+		bool backwards = offset < 0;
+
+		if (backwards) {
+			dwords[2] |= CF_WORD2_JUMP_BACK;
+			offset = -offset;
+		}
+
+		dwords[2] |= CF_WORD2_JUMP_OFFS(offset);
+	}
+
 	/* TODO: Implement predicate support */
 }
 
@@ -815,13 +822,22 @@ int
 of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 		      struct of_shader_stateobj *so)
 {
-	uint32_t *ptr, *dwords = NULL;
+	uint32_t *dwords = NULL;
 	struct pipe_resource *buffer;
 	struct pipe_transfer *transfer;
 	struct of_ir_cf_block *cf;
-	unsigned idx = 0;
+	unsigned idx;
 
-	assert(shader->num_instrs);
+	if (!shader->num_instrs) {
+		pipe_resource_reference(&so->buffer, NULL);
+		so->num_instrs = 0;
+		return 0;
+	}
+
+	// TODO: Convert to SSA
+	// TODO: Optimize
+	// TODO: Assign registers
+	// TODO: Insert CF instructions
 
 	buffer = pipe_buffer_create(ctx->base.screen,
 					PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
@@ -831,44 +847,35 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 		return -1;
 	}
 
-	ptr = dwords = pipe_buffer_map(&ctx->base, buffer, PIPE_TRANSFER_WRITE,
+	dwords = pipe_buffer_map(&ctx->base, buffer, PIPE_TRANSFER_WRITE,
 					&transfer);
-	if (!ptr) {
+	if (!dwords) {
 		ERROR_MSG("failed to map shader BO");
 		goto fail;
 	}
 
 	/*
 	 * First pass:
-	 * Emit ALU instructions and assign addresses to CF blocks.
+	 * Assign addresses to CF blocks.
 	 */
+	idx = 0;
 	LIST_FOR_EACH_ENTRY(cf, &shader->cf_blocks, list) {
-		struct of_ir_instruction *ins;
-
-		/* Remember start address of the block. */
 		cf->address = idx;
-
-		/* Emit each instruction of the basic block. */
-		LIST_FOR_EACH_ENTRY(ins, &cf->instrs, list) {
-			instr_emit_alu(shader, ins, ptr);
-			ptr += 4;
-			++idx;
-		}
-
-		/*
-		 * Keep one slot for CF instruction that will be emitted
-		 * in second pass.
-		 */
-		ptr += 4;
-		++idx;
+		idx += cf->num_instrs;
 	}
 
 	/*
 	 * Second pass:
-	 * Emit CF instructions, as we know addresses of all basic blocks now.
+	 * Emit instructions.
 	 */
-	LIST_FOR_EACH_ENTRY(cf, &shader->cf_blocks, list)
-		instr_emit_cf(shader, cf, dwords);
+	idx = 0;
+	LIST_FOR_EACH_ENTRY(cf, &shader->cf_blocks, list) {
+		struct of_ir_instruction *ins;
+
+		/* Emit each instruction of the basic block. */
+		LIST_FOR_EACH_ENTRY(ins, &cf->instrs, list)
+			instr_emit(shader, ins, dwords, idx++);
+	}
 
 	if (transfer)
 		pipe_buffer_unmap(&ctx->base, transfer);

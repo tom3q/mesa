@@ -50,13 +50,10 @@ struct of_ir_instruction {
 	unsigned num_srcs;
 	/** Source registers. */
 	struct of_ir_register *srcs[OF_IR_NUM_SRCS];
-
-	union {
-		/** Destination register. */
-		struct of_ir_register *dst;
-		/** Branch target. */
-		struct of_ir_instruction *target;
-	};
+	/** Destination register. */
+	struct of_ir_register *dst;
+	/** Branch target. */
+	struct of_ir_cf_block *target;
 
 	/** Opcode. */
 	enum of_instr_opcode opc;
@@ -73,6 +70,8 @@ struct of_ir_cf_block {
 	struct list_head psis;
 	/** List of instructions in the block. */
 	struct list_head instrs;
+	/** Number of instructions in the block. */
+	unsigned num_instrs;
 
 	/** Number of branch targets. */
 	unsigned num_targets;
