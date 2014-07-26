@@ -37,19 +37,13 @@
  */
 
 enum {
+	OF_IR_NUM_CF_TARGETS = 2,
 	OF_IR_NUM_SRCS = 3,
 };
 
 enum of_ir_shader_type {
 	OF_IR_SHADER_VERTEX,
 	OF_IR_SHADER_PIXEL,
-};
-
-enum of_ir_cf_target {
-	OF_IR_CF_TARGET_FALL,
-	OF_IR_CF_TARGET_JUMP,
-
-	OF_IR_NUM_CF_TARGETS
 };
 
 enum of_ir_reg_type {
@@ -85,6 +79,7 @@ enum of_ir_reg_type {
 
 enum of_ir_instr_type {
 	OF_IR_CF,
+	OF_IR_SUB,
 	OF_IR_ALU,
 };
 
@@ -117,7 +112,7 @@ struct of_ir_instr_template {
 			const char *mask;
 			unsigned flags;
 		} dst;
-		/* CF branch target. */
+		/* Target block of subroutine call. */
 		struct {
 			struct of_ir_cf_block *cf;
 		} target;
@@ -127,6 +122,13 @@ struct of_ir_instr_template {
 		const char *swizzle;
 		unsigned flags;
 	} src[OF_IR_NUM_SRCS];
+};
+
+struct of_ir_instr_cf {
+	struct of_ir_cf_block *target;
+	struct of_ir_register *condition;
+	const char *swizzle;
+	unsigned flags;
 };
 
 extern const struct of_ir_opc_info of_ir_opc_info[];
@@ -165,9 +167,9 @@ void of_ir_instr_insert_templ(struct of_ir_shader *shader,
 			      unsigned num_instrs);
 
 struct of_ir_cf_block *of_ir_cf_create(struct of_ir_shader *shader);
-void of_ir_cf_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block);
-struct of_ir_cf_block *of_ir_cf_push(struct of_ir_shader *shader);
-void of_ir_cf_pop(struct of_ir_shader *shader);
+void of_ir_instr_insert_cf(struct of_ir_shader *shader,
+			   struct of_ir_cf_block *block,
+			   const struct of_ir_instr_cf *cf_instr);
 
 struct of_ir_shader *of_ir_shader_create(enum of_ir_shader_type type);
 void of_ir_shader_destroy(struct of_ir_shader *shader);
