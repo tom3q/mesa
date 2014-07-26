@@ -82,6 +82,8 @@ struct of_ir_cf_block {
 		struct of_ir_cf_block *block;
 		/** List head used to link all sources of target block. */
 		struct list_head list;
+		/** Register that holds test result or NULL if unconditional. */
+		struct of_ir_register *condition;
 	} targets[OF_IR_NUM_CF_TARGETS];
 	struct list_head sources;
 
