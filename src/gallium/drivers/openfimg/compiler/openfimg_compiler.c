@@ -38,6 +38,12 @@
 
 #include "fimg_3dse.xml.h"
 
+struct of_cf_stack {
+	struct of_ir_cf_block **stack;
+	unsigned size;
+	unsigned ptr;
+};
+
 struct of_compile_context {
 	const struct tgsi_token *tokens;
 
@@ -57,6 +63,9 @@ struct of_compile_context {
 
 	/* current shader */
 	struct of_ir_shader *shader;
+
+	struct of_cf_stack cf_stack;
+	struct of_cf_stack loop_stack;
 };
 
 typedef void (*of_tgsi_opcode_handler_t)(struct of_compile_context *,
@@ -268,6 +277,62 @@ get_immediate(struct of_compile_context *ctx, unsigned dim, const float *vals)
 }
 
 /*
+ * CF stack
+ */
+
+static void
+cf_stack_push(struct of_cf_stack *stack, struct of_ir_cf_block *cf)
+{
+	if (++stack->ptr == stack->size) {
+		unsigned new_size = 2 * (stack->size - 1) + 1;
+
+		stack->stack = REALLOC(stack->stack,
+					stack->size * sizeof(*stack->stack),
+					new_size * sizeof(*stack->stack));
+		stack->size = new_size;
+	}
+
+	stack->stack[stack->ptr] = cf;
+}
+
+static struct of_ir_cf_block *
+cf_stack_pop(struct of_cf_stack *stack)
+{
+	return stack->stack[stack->ptr--];
+}
+
+static struct of_ir_cf_block *
+cf_stack_top(struct of_cf_stack *stack)
+{
+	return stack->stack[stack->ptr];
+}
+
+static int
+cf_stack_init(struct of_cf_stack *stack, unsigned start_size)
+{
+	++start_size;
+
+	stack->stack = CALLOC(start_size, sizeof(*stack->stack));
+	if (!stack->stack) {
+		DBG("failed to allocate memory for CF stack");
+		return -1;
+	}
+
+	stack->size = start_size;
+	stack->ptr = 0;
+
+	return 0;
+}
+
+static void
+cf_stack_free(struct of_cf_stack *stack)
+{
+	FREE(stack->stack);
+	stack->size = 0;
+	stack->stack = NULL;
+}
+
+/*
  * Helpers for TGSI instructions that don't map to a single shader instr:
  */
 
@@ -302,7 +367,7 @@ translate_pow(struct of_compile_context *ctx,
 	instrs[2].src[0].reg = of_ir_reg_clone(ctx->shader, instrs[1].dst.reg);
 	instrs[2].src[0].swizzle = "xxxx";
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack), NULL,
 					instrs, ARRAY_SIZE(instrs));
 }
 
@@ -356,7 +421,7 @@ translate_tex(struct of_compile_context *ctx,
 							proj[0].dst.reg);
 		proj[1].src[1].swizzle = "xxxx";
 
-		of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
+		of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack), NULL,
 						proj, ARRAY_SIZE(proj));
 
 		coord = of_ir_reg_clone(ctx->shader, proj[1].dst.reg);
@@ -374,7 +439,8 @@ translate_tex(struct of_compile_context *ctx,
 	instr.src[0].reg = coord;
 	instr.src[1].reg = get_src_reg(ctx, inst, 1);
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, &instr, 1);
 }
 
 /* LRP = (src0 * src1) + ((1 - src0) * src2) */
@@ -401,7 +467,7 @@ translate_lrp(struct of_compile_context *ctx,
 	instrs[1].src[2].reg = of_ir_reg_clone(ctx->shader, instrs[0].dst.reg);
 	instrs[1].src[2].flags = OF_IR_REG_NEGATE;
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack), NULL,
 					instrs, ARRAY_SIZE(instrs));
 }
 
@@ -510,7 +576,8 @@ translate_trig(struct of_compile_context *ctx,
 		instrs[7].src[0].swizzle = "yyyy";
 		instrs[7].src[2].swizzle = "xxxx";
 
-		of_ir_instr_insert_templ(ctx->shader, NULL, NULL, instrs, 8);
+		of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+						NULL, instrs, 8);
 		break;
 
 	case TGSI_OPCODE_COS:
@@ -519,7 +586,8 @@ translate_trig(struct of_compile_context *ctx,
 		instrs[7].src[0].swizzle = "wwww";
 		instrs[7].src[2].swizzle = "zzzz";
 
-		of_ir_instr_insert_templ(ctx->shader, NULL, NULL, instrs, 8);
+		of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+						NULL, instrs, 8);
 		break;
 
 	case TGSI_OPCODE_SCS:
@@ -536,7 +604,8 @@ translate_trig(struct of_compile_context *ctx,
 		instrs[8].src[0].reg = get_immediate(ctx, 2, zero_one);
 		instrs[8].src[0].swizzle = "xxxy";
 
-		of_ir_instr_insert_templ(ctx->shader, NULL, NULL, instrs, 9);
+		of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+						NULL, instrs, 9);
 		break;
 	}
 }
@@ -605,7 +674,7 @@ translate_lit(struct of_compile_context *ctx,
 	instrs[6].src[1].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[6].src[1].swizzle = "xxxx";
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack), NULL,
 					instrs, ARRAY_SIZE(instrs));
 }
 
@@ -623,7 +692,8 @@ translate_sub(struct of_compile_context *ctx,
 	instr.src[1].reg = get_src_reg(ctx, inst, 1);
 	instr.src[1].flags = OF_IR_REG_NEGATE;
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, &instr, 1);
 }
 
 static void
@@ -645,7 +715,7 @@ translate_clamp(struct of_compile_context *ctx,
 	instrs[1].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[1].src[1].reg = get_src_reg(ctx, inst, 2);
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack), NULL,
 					instrs, ARRAY_SIZE(instrs));
 }
 
@@ -683,7 +753,7 @@ translate_round(struct of_compile_context *ctx,
 	instrs[3].src[1].flags = OF_IR_REG_NEGATE;
 	instrs[3].src[2].reg = of_ir_reg_clone(ctx->shader, tmp2);
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack), NULL,
 					instrs, ARRAY_SIZE(instrs));
 }
 
@@ -720,7 +790,7 @@ translate_xpd(struct of_compile_context *ctx,
 	instrs[2].src[0].reg = get_immediate(ctx, 1, &const_one);
 	instrs[2].src[0].swizzle = "xxxx";
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack), NULL,
 					instrs, ARRAY_SIZE(instrs));
 }
 
@@ -737,7 +807,8 @@ translate_abs(struct of_compile_context *ctx,
 	instr.src[0].reg = get_src_reg(ctx, inst, 0);
 	instr.src[0].flags = OF_IR_REG_ABS;
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, &instr, 1);
 }
 
 static void
@@ -764,8 +835,8 @@ translate_ssg(struct of_compile_context *ctx,
 	instrs[1].src[1].swizzle = "yyyy";
 	instrs[1].src[2].reg = of_ir_reg_clone(ctx->shader, tmp);
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
-					instrs, ARRAY_SIZE(instrs));
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, instrs, ARRAY_SIZE(instrs));
 }
 
 static void
@@ -805,8 +876,8 @@ translate_sne_seq(struct of_compile_context *ctx,
 	else /* if (inst->Instruction->Opcode == TGSI_OPCODE_SEQ) */
 		instrs[2].src[1].swizzle = "xxxx";
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
-					instrs, ARRAY_SIZE(instrs));
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, instrs, ARRAY_SIZE(instrs));
 }
 
 static void
@@ -825,7 +896,8 @@ translate_dp2(struct of_compile_context *ctx,
 	instr.src[2].reg = get_immediate(ctx, 1, &const_zero);
 	instr.src[2].swizzle = "xxxx";
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, &instr, 1);
 }
 
 static void
@@ -861,8 +933,8 @@ translate_trunc(struct of_compile_context *ctx,
 	instrs[1].src[1].flags = OF_IR_REG_NEGATE;
 	instrs[1].src[2].reg = of_ir_reg_clone(ctx->shader, tmp);
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
-					instrs, ARRAY_SIZE(instrs));
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, instrs, ARRAY_SIZE(instrs));
 }
 
 static void
@@ -882,8 +954,8 @@ translate_ceil(struct of_compile_context *ctx,
 	instrs[1].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[1].src[0].flags = OF_IR_REG_NEGATE;
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
-					instrs, ARRAY_SIZE(instrs));
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, instrs, ARRAY_SIZE(instrs));
 }
 
 static void
@@ -900,7 +972,8 @@ translate_kill(struct of_compile_context *ctx,
 	instr.src[0].swizzle = "xxxx";
 	instr.src[0].flags = OF_IR_REG_NEGATE;
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, &instr, 1);
 }
 
 /*
@@ -910,47 +983,97 @@ static void
 translate_if(struct of_compile_context *ctx,
 	     struct tgsi_full_instruction *inst, unsigned long data)
 {
-	struct of_ir_instr_template instrs[2];
+	struct of_ir_instr_template instrs[1];
+	struct of_ir_instr_cf cf_instr;
 	const float const_zero = 0.0f;
 	struct of_ir_register *pred;
+	struct of_ir_cf_block *join_target, *target;
 
+	/* Emit condition check. */
 	memset(instrs, 0, sizeof(instrs));
-
 	instrs[0].opc = OF_OP_SETP_EQ;
 	instrs[0].dst.reg = pred = of_ir_reg_predicate(ctx->shader);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[0].swizzle = "xxxx";
 	instrs[0].src[1].reg = get_immediate(ctx, 1, &const_zero);
 	instrs[0].src[1].swizzle = "xxxx";
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, instrs, ARRAY_SIZE(instrs));
 
-	instrs[1].opc = OF_OP_BF;
-	instrs[1].src[0].reg = of_ir_reg_clone(ctx->shader, pred);
-	instrs[1].src[0].swizzle = "xxxx";
+	/* Emit THEN block. */
+	memset(&cf_instr, 0, sizeof(cf_instr));
+	cf_instr.target = target = of_ir_cf_create(ctx->shader);
+	cf_instr.condition = of_ir_reg_clone(ctx->shader, pred);
+	cf_instr.swizzle = "xxxx";
+	of_ir_instr_insert_cf(ctx->shader, cf_stack_top(&ctx->cf_stack), &cf_instr);
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL,
-					instrs, ARRAY_SIZE(instrs));
+	/* Create join target where both branches meet again. */
+	join_target = of_ir_cf_create(ctx->shader);
+	cf_stack_push(&ctx->cf_stack, join_target);
+
+	/* Let's emit instructions to THEN block. */
+	cf_stack_push(&ctx->cf_stack, target);
 }
 
 static void
 translate_else(struct of_compile_context *ctx,
 	       struct tgsi_full_instruction *inst, unsigned long data)
 {
-	struct of_ir_instr_template instr;
+	struct of_ir_instr_cf cf_instr;
+	struct of_ir_cf_block *if_block, *join_target, *target, *parent;
 
-	of_ir_cf_pop(ctx->shader);
+	/* Take THEN block down from the stack. */
+	if_block = cf_stack_pop(&ctx->cf_stack);
+	join_target = cf_stack_top(&ctx->cf_stack);
 
-	memset(&instr, 0, sizeof(instr));
+	/* Make THEN block return back to join target. */
+	memset(&cf_instr, 0, sizeof(cf_instr));
+	cf_instr.target = join_target;
+	of_ir_instr_insert_cf(ctx->shader, if_block, &cf_instr);
 
-	instr.opc = OF_OP_B;
+	/* Take join target from the stack temporarily to access parent. */
+	cf_stack_pop(&ctx->cf_stack);
+	parent = cf_stack_top(&ctx->cf_stack);
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
+	/* Emit ELSE block. */
+	memset(&cf_instr, 0, sizeof(cf_instr));
+	cf_instr.target = target = of_ir_cf_create(ctx->shader);
+	of_ir_instr_insert_cf(ctx->shader, parent, &cf_instr);
+
+	/* Push join target again and then make ELSE block current. */
+	cf_stack_push(&ctx->cf_stack, join_target);
+	cf_stack_push(&ctx->cf_stack, target);
 }
 
 static void
 translate_endif(struct of_compile_context *ctx,
 		struct tgsi_full_instruction *inst, unsigned long data)
 {
-	of_ir_cf_pop(ctx->shader);
+	struct of_ir_instr_cf cf_instr;
+	struct of_ir_cf_block *cond_block, *join_target, *parent;
+
+	/* Pop THEN/ELSE block from the stack. Join target too for now. */
+	cond_block = cf_stack_pop(&ctx->cf_stack);
+	join_target = cf_stack_pop(&ctx->cf_stack);
+	parent = cf_stack_top(&ctx->cf_stack);
+
+	/* Make the last conditional block jump back to join target. */
+	memset(&cf_instr, 0, sizeof(cf_instr));
+	cf_instr.target = join_target;
+	of_ir_instr_insert_cf(ctx->shader, cond_block, &cf_instr);
+
+	/*
+	 * Make sure that parent block always branches to some block.
+	 * NOTE: Branch targets are always evaluated from first to last, so
+	 *       first unconditional branch will always take precedence.
+	 */
+	memset(&cf_instr, 0, sizeof(cf_instr));
+	cf_instr.target = join_target;
+	of_ir_instr_insert_cf(ctx->shader, parent, &cf_instr);
+
+	/* The parent block is complete. Move on to our join target. */
+	cf_stack_pop(&ctx->cf_stack);
+	cf_stack_push(&ctx->cf_stack, join_target);
 }
 
 /*
@@ -976,24 +1099,17 @@ translate_bgnsub(struct of_compile_context *ctx,
 {
 	struct of_ir_cf_block *cf;
 
-	cf = of_ir_cf_push(ctx->shader);
+	cf = of_ir_cf_create(ctx->shader);
 	save_subroutine(ctx, cf);
+
+	cf_stack_push(&ctx->cf_stack, cf);
 }
 
 static void
 translate_endsub(struct of_compile_context *ctx,
 		 struct tgsi_full_instruction *inst, unsigned long data)
 {
-	/* TODO */
-}
-
-static void
-translate_ret(struct of_compile_context *ctx,
-	      struct tgsi_full_instruction *inst, unsigned long data)
-{
-	static const struct of_ir_instr_template instr = { .opc = OF_OP_RET, };
-
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
+	cf_stack_pop(&ctx->cf_stack);
 }
 
 static void
@@ -1007,75 +1123,86 @@ translate_cal(struct of_compile_context *ctx,
 	instr.opc = OF_OP_CALL;
 	instr.target.cf = find_subroutine(ctx, inst->Label.Label);
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, &instr, 1);
 }
 
 /*
  * Loops.
  */
 static void
-push_loop(struct of_compile_context *ctx, struct of_ir_cf_block *cf)
-{
-	/* TODO */
-}
-
-static struct of_ir_cf_block *
-pop_loop(struct of_compile_context *ctx)
-{
-	/* TODO */
-	return NULL;
-}
-
-static void
-save_break(struct of_compile_context *ctx, struct of_ir_instruction *instr)
-{
-	/* TODO */
-}
-
-static void
 translate_bgnloop(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
-	struct of_ir_cf_block *cf;
+	struct of_ir_instr_cf cf_instr;
+	struct of_ir_cf_block *loop, *break_target;
 
-	cf = of_ir_cf_push(ctx->shader);
-	push_loop(ctx, cf);
+	/* Emit loop block. */
+	memset(&cf_instr, 0, sizeof(cf_instr));
+	cf_instr.target = loop = of_ir_cf_create(ctx->shader);
+	of_ir_instr_insert_cf(ctx->shader, cf_stack_top(&ctx->cf_stack), &cf_instr);
+
+	/* We will not return to current block anymore. */
+	cf_stack_pop(&ctx->cf_stack);
+
+	/* Create break target after the loop. */
+	break_target = of_ir_cf_create(ctx->shader);
+	cf_stack_push(&ctx->cf_stack, break_target);
+
+	/* Let's emit instructions to our loop block. */
+	cf_stack_push(&ctx->cf_stack, loop);
+
+	/*
+	 * Push both blocks to loop stack.
+	 * NOTE: The order is always loop start first and then break target.
+	 */
+	cf_stack_push(&ctx->loop_stack, loop);
+	cf_stack_push(&ctx->loop_stack, break_target);
 }
 
 static void
 translate_brk(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
-	struct of_ir_instruction *instr;
+	struct of_ir_instr_cf cf_instr;
+	struct of_ir_cf_block *current, *break_target, *unreachable;
 
-	instr = of_ir_instr_ptr(ctx->shader);
-	save_break(ctx, instr);
+	/* Get current block and break target from CF stacks. */
+	current = cf_stack_top(&ctx->cf_stack);
+	break_target = cf_stack_top(&ctx->loop_stack);
+
+	/* Make current block return back to break target. */
+	memset(&cf_instr, 0, sizeof(cf_instr));
+	cf_instr.target = break_target;
+	of_ir_instr_insert_cf(ctx->shader, current, &cf_instr);
+
+	/* Emit unreachable block (will be optimized out later). */
+	unreachable = of_ir_cf_create(ctx->shader);
+	cf_stack_pop(&ctx->cf_stack);
+	cf_stack_push(&ctx->cf_stack, unreachable);
 }
 
 static void
 translate_endloop(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
-	struct of_ir_instr_template instr;
-	struct of_ir_cf_block *cf;
+	struct of_ir_instr_cf cf_instr;
+	struct of_ir_cf_block *loop_entry;
 
-	cf = pop_loop(ctx);
+	/* Drop current loop from loop stack, since it is fully emitted. */
+	cf_stack_pop(&ctx->loop_stack);
+	loop_entry = cf_stack_pop(&ctx->loop_stack);
 
-	memset(&instr, 0, sizeof(instr));
+	/* Make current block jump back to first block of the loop. */
+	memset(&cf_instr, 0, sizeof(cf_instr));
+	cf_instr.target = loop_entry;
+	of_ir_instr_insert_cf(ctx->shader, cf_stack_top(&ctx->cf_stack), &cf_instr);
 
-	instr.opc = OF_OP_B;
-	instr.target.cf = cf;
-
-	/* Insert branch back to loop start */
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
-	of_ir_cf_pop(ctx->shader);
-
-	/* Insert branch from last basic block into the loop */
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
-	of_ir_cf_pop(ctx->shader);
-
-	/* Iterate over saved break points and insert breaks. */
-	/* TODO */
+	/*
+	 * Drop current block as we will not return to it anymore.
+	 * This will make us emit further instructions to break target.
+	 */
+	cf_stack_pop(&ctx->cf_stack);
 }
 
 /*
@@ -1091,16 +1218,18 @@ translate_direct(struct of_compile_context *ctx,
 	int src;
 
 	assert(inst->Instruction.NumSrcRegs == info->num_srcs);
-	assert(inst->Instruction.NumDstRegs == 1);
+	assert(inst->Instruction.NumDstRegs <= 1);
 
 	memset(&instr, 0, sizeof(instr));
 
 	instr.opc = data;
-	instr.dst.reg = get_dst_reg(ctx, inst);
+	if (inst->Instruction.NumDstRegs)
+		instr.dst.reg = get_dst_reg(ctx, inst);
 	for (src = 0; src < info->num_srcs; ++src)
 		instr.src[src].reg = get_src_reg(ctx, inst, src);
 
-	of_ir_instr_insert_templ(ctx->shader, NULL, NULL, &instr, 1);
+	of_ir_instr_insert_templ(ctx->shader, cf_stack_top(&ctx->cf_stack),
+					NULL, &instr, 1);
 }
 
 /*
@@ -1173,7 +1302,7 @@ static const struct of_tgsi_map_entry translate_table[] = {
 
 	/* Subroutines */
 	IR_EMULATE(TGSI_OPCODE_BGNSUB, translate_bgnsub, 0),
-	IR_EMULATE(TGSI_OPCODE_RET, translate_ret, 0),
+	IR_DIRECT(TGSI_OPCODE_RET, OF_OP_RET),
 	IR_EMULATE(TGSI_OPCODE_ENDSUB, translate_endsub, 0),
 	IR_EMULATE(TGSI_OPCODE_CAL, translate_cal, 0),
 
@@ -1292,6 +1421,7 @@ static struct of_compile_context *
 compile_init(const struct tgsi_token *tokens)
 {
 	struct of_compile_context *ctx;
+	struct of_ir_cf_block *cf;
 	unsigned ret;
 
 	ctx = CALLOC_STRUCT(of_compile_context);
@@ -1316,6 +1446,17 @@ compile_init(const struct tgsi_token *tokens)
 		DBG("failed to create IR shader");
 		goto err_free_ctx;
 	}
+
+	ret = cf_stack_init(&ctx->cf_stack, 16);
+	if (!ret)
+		goto err_free_shader;
+
+	ret = cf_stack_init(&ctx->loop_stack, 4);
+	if (!ret)
+		goto err_free_shader;
+
+	cf = of_ir_cf_create(ctx->shader);
+	cf_stack_push(&ctx->cf_stack, cf);
 
 	ret = tgsi_parse_init(&ctx->parser, tokens);
 	if (ret != TGSI_PARSE_OK) {
@@ -1343,6 +1484,8 @@ compile_init(const struct tgsi_token *tokens)
 	return ctx;
 
 err_free_shader:
+	cf_stack_free(&ctx->loop_stack);
+	cf_stack_free(&ctx->cf_stack);
 	of_ir_shader_destroy(ctx->shader);
 err_free_ctx:
 	FREE(ctx);
@@ -1353,6 +1496,8 @@ err_free_ctx:
 static void
 compile_free(struct of_compile_context *ctx)
 {
+	cf_stack_free(&ctx->loop_stack);
+	cf_stack_free(&ctx->cf_stack);
 	tgsi_parse_free(&ctx->parser);
 	FREE(ctx);
 }
