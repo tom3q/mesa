@@ -140,6 +140,16 @@ STATIC_TARGET_LIB_DEPS += \
 
 endif
 
+if HAVE_GALLIUM_OPENFIMG
+MEGADRIVERS += exynos
+STATIC_TARGET_CPPFLAGS += -DGALLIUM_OPENFIMG
+STATIC_TARGET_LIB_DEPS += \
+	$(top_builddir)/src/gallium/winsys/openfimg/drm/libopenfimgdrm.la \
+	$(top_builddir)/src/gallium/drivers/openfimg/libopenfimg.la \
+	$(OPENFIMG_LIBS)
+
+endif
+
 if HAVE_GALLIUM_SOFTPIPE
 MEGADRIVERS += swrast
 STATIC_TARGET_CPPFLAGS += -DGALLIUM_SOFTPIPE

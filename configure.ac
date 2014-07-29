@@ -1982,8 +1982,7 @@ if test -n "$with_gallium_drivers"; then
 	    PKG_CHECK_MODULES([OPENFIMG], [libdrm_freedreno >= $LIBDRM_FREEDRENO_REQUIRED])
             gallium_require_drm_loader
             GALLIUM_DRIVERS_DIRS="$GALLIUM_DRIVERS_DIRS openfimg"
-            gallium_check_st "openfimg/drm" "dri-openfimg" "" "" ""
-	    DRICOMMON_NEED_LIBDRM=yes
+            gallium_check_st "openfimg/drm" "dri/openfimg" "xa/openfimg" "" ""
             ;;
         xswrast)
             HAVE_GALLIUM_SOFTPIPE=yes
@@ -2211,7 +2210,6 @@ AC_CONFIG_FILES([Makefile
 		src/gallium/state_trackers/xvmc/Makefile
 		src/gallium/targets/Makefile
 		src/gallium/targets/dri/Makefile
-		src/gallium/targets/dri-openfimg/Makefile
 		src/gallium/targets/egl-static/Makefile
 		src/gallium/targets/gbm/Makefile
 		src/gallium/targets/libgl-xlib/Makefile

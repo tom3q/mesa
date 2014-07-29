@@ -49,6 +49,10 @@
 #include "freedreno/drm/freedreno_drm_public.h"
 #endif
 
+#if GALLIUM_OPENFIMG
+#include "openfimg/drm/openfimg_drm_public.h"
+#endif
+
 static char* driver_name = NULL;
 
 /* XXX: We need to teardown the winsys if *screen_create() fails. */
@@ -252,6 +256,28 @@ pipe_freedreno_create_screen(int fd)
 }
 #endif
 
+#if defined(GALLIUM_OPENFIMG)
+#if defined(DRI_TARGET)
+
+const __DRIextension **__driDriverGetExtensions_exynos(void);
+
+PUBLIC const __DRIextension **__driDriverGetExtensions_exynos(void)
+{
+   globalDriverAPI = &galliumdrm_driver_api;
+   return galliumdrm_driver_extensions;
+}
+#endif
+
+static struct pipe_screen *
+pipe_openfimg_create_screen(int fd)
+{
+   struct pipe_screen *screen;
+
+   screen = of_drm_screen_create(fd);
+   return screen ? debug_screen_wrap(screen) : NULL;
+}
+#endif
+
 inline struct pipe_screen *
 dd_create_screen(int fd)
 {
@@ -297,6 +323,11 @@ dd_create_screen(int fd)
 #if defined(GALLIUM_FREEDRENO)
    if ((strcmp(driver_name, "kgsl") == 0) || (strcmp(driver_name, "msm") == 0))
       return pipe_freedreno_create_screen(fd);
+   else
+#endif
+#if defined(GALLIUM_OPENFIMG)
+   if ((strcmp(driver_name, "exynos") == 0))
+      return pipe_openfimg_create_screen(fd);
    else
 #endif
       return NULL;
@@ -375,6 +406,11 @@ dd_configuration(enum drm_conf conf)
 #endif
 #if defined(GALLIUM_FREEDRENO)
    if ((strcmp(driver_name, "kgsl") == 0) || (strcmp(driver_name, "msm") == 0))
+      return NULL;
+   else
+#endif
+#if defined(GALLIUM_OPENFIMG)
+   if (strcmp(driver_name, "exynos") == 0)
       return NULL;
    else
 #endif

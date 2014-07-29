@@ -46,12 +46,6 @@ if HAVE_GALLIUM_GBM
 SUBDIRS += gbm
 endif
 
-if HAVE_GALLIUM_OPENFIMG
-if HAVE_DRI
-SUBDIRS += dri-openfimg
-endif
-endif
-
 if HAVE_ST_VDPAU
 SUBDIRS += vdpau
 endif

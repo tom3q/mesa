@@ -18,4 +18,4 @@ create_screen(int fd)
 }
 
 PUBLIC
-DRM_DRIVER_DESCRIPTOR("exynos", "exynos", create_screen, NULL)
+DRM_DRIVER_DESCRIPTOR("exynos", "openfimg", create_screen, NULL)
