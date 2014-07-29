@@ -227,7 +227,7 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_CUBE_MAP_ARRAY:
 	case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
-        case PIPE_CAP_TGSI_VS_LAYER:
+        case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
 	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
 	case PIPE_CAP_TEXTURE_GATHER_SM5:
         case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
@@ -349,10 +349,10 @@ of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		return 32; /* Max native temporaries. */
 	case PIPE_SHADER_CAP_MAX_ADDRS:
 		return 4; /* Max native address registers */
-	case PIPE_SHADER_CAP_MAX_CONSTS:
-		return 256;
+	case PIPE_SHADER_CAP_MAX_CONST_BUFFER_SIZE:
+		return 256 * sizeof(float[4]);
 	case PIPE_SHADER_CAP_MAX_CONST_BUFFERS:
-		return 0;
+		return 1;
 	case PIPE_SHADER_CAP_MAX_PREDS:
 		return 7; /* nothing uses this */
 	case PIPE_SHADER_CAP_MAX_TEXTURE_SAMPLERS:
