@@ -141,7 +141,7 @@ STATIC_TARGET_LIB_DEPS += \
 endif
 
 if HAVE_GALLIUM_OPENFIMG
-MEGADRIVERS += exynos
+MEGADRIVERS += openfimg
 STATIC_TARGET_CPPFLAGS += -DGALLIUM_OPENFIMG
 STATIC_TARGET_LIB_DEPS += \
 	$(top_builddir)/src/gallium/winsys/openfimg/drm/libopenfimgdrm.la \
