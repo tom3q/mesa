@@ -198,6 +198,7 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_USER_CONSTANT_BUFFERS:
 	case PIPE_CAP_USER_INDEX_BUFFERS:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
+	case PIPE_CAP_FAKE_SW_MSAA:
 		return 1;
 
 	/* Unsupported features. */
@@ -227,12 +228,14 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_VERTEX_ELEMENT_SRC_OFFSET_4BYTE_ALIGNED_ONLY:
 	case PIPE_CAP_CUBE_MAP_ARRAY:
 	case PIPE_CAP_TEXTURE_BUFFER_OBJECTS:
-        case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
+	case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+	case PIPE_CAP_TGSI_VS_LAYER_VIEWPORT:
 	case PIPE_CAP_MAX_TEXTURE_GATHER_COMPONENTS:
 	case PIPE_CAP_TEXTURE_GATHER_SM5:
-        case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
-	case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
+	case PIPE_CAP_BUFFER_MAP_PERSISTENT_COHERENT:
 	case PIPE_CAP_TGSI_TEXCOORD:
+	case PIPE_CAP_SAMPLE_SHADING:
+	case PIPE_CAP_DRAW_INDIRECT:
 		return 0;
 
 	case PIPE_CAP_CONSTANT_BUFFER_OFFSET_ALIGNMENT:
@@ -251,6 +254,7 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	/* Geometry shader output, unsupported. */
 	case PIPE_CAP_MAX_GEOMETRY_OUTPUT_VERTICES:
 	case PIPE_CAP_MAX_GEOMETRY_TOTAL_OUTPUT_COMPONENTS:
+	case PIPE_CAP_MAX_VERTEX_STREAMS:
 		return 0;
 
 	/* Texturing. */
@@ -274,6 +278,10 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
 	case PIPE_CAP_MIN_TEXEL_OFFSET:
 	case PIPE_CAP_MAX_TEXEL_OFFSET:
+	case PIPE_CAP_TEXTURE_QUERY_LOD:
+	case PIPE_CAP_MIN_TEXTURE_GATHER_OFFSET:
+	case PIPE_CAP_MAX_TEXTURE_GATHER_OFFSET:
+	case PIPE_CAP_TEXTURE_GATHER_OFFSETS:
 		return 0;
 
 	case PIPE_CAP_ENDIANNESS:
