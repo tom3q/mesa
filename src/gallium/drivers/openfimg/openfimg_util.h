@@ -57,7 +57,7 @@ extern int of_mesa_debug;
 
 #define DBG_PRINT(mask, fmt, ...) \
 		do { if (of_mesa_debug & mask) \
-			debug_printf("%s%s:%d: "fmt "\n", \
+			debug_printf("%s:%d: "fmt "\n", \
 				__FUNCTION__, __LINE__, __VA_ARGS__); } while (0)
 
 #define DBG(...)	DBG_PRINT(OF_DBG_MSGS, __VA_ARGS__, "")
