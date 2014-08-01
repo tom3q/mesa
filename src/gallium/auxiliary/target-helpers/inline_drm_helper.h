@@ -259,9 +259,9 @@ pipe_freedreno_create_screen(int fd)
 #if defined(GALLIUM_OPENFIMG)
 #if defined(DRI_TARGET)
 
-const __DRIextension **__driDriverGetExtensions_openfimg(void);
+const __DRIextension **__driDriverGetExtensions_exynos(void);
 
-PUBLIC const __DRIextension **__driDriverGetExtensions_openfimg(void)
+PUBLIC const __DRIextension **__driDriverGetExtensions_exynos(void)
 {
    globalDriverAPI = &galliumdrm_driver_api;
    return galliumdrm_driver_extensions;
