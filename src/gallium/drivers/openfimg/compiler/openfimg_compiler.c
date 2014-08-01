@@ -1490,11 +1490,11 @@ compile_init(const struct tgsi_token *tokens)
 	}
 
 	ret = cf_stack_init(&ctx->cf_stack, 16);
-	if (!ret)
+	if (ret)
 		goto fail;
 
 	ret = cf_stack_init(&ctx->loop_stack, 4);
-	if (!ret)
+	if (ret)
 		goto fail;
 
 	ctx->subroutine_ht = util_hash_table_create(integer_hash,
