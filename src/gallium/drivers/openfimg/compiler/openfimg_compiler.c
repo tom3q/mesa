@@ -1449,7 +1449,7 @@ init_handle_immediate(struct of_compile_context *ctx)
 {
 	struct tgsi_full_immediate *imm = &ctx->parser.FullToken.FullImmediate;
 
-	compile_assert(ctx, imm->Immediate.Type == TGSI_IMM_FLOAT32);
+	compile_assert(ctx, imm->Immediate.DataType == TGSI_IMM_FLOAT32);
 	memcpy(&ctx->immediates[ctx->num_immediates], imm->u, 16);
 	ctx->num_immediates += 4;
 }
