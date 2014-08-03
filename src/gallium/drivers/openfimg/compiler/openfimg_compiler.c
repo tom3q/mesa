@@ -120,13 +120,13 @@ static const float cos_constants[4] = {
 static unsigned
 integer_hash(void *key)
 {
-	return (unsigned)key;
+	return (unsigned long)key;
 }
 
 static int
 pointer_compare(void *key1, void *key2)
 {
-	return (unsigned)key1 - (unsigned)key2;
+	return key1 != key2;
 }
 
 static void
