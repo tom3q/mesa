@@ -818,6 +818,27 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 	/* TODO: Implement predicate support */
 }
 
+static int
+of_ir_optimize(struct of_ir_shader *shader)
+{
+	/* TODO */
+	return -1;
+}
+
+static int
+of_ir_assign_registers(struct of_ir_shader *shader)
+{
+	/* TODO */
+	return -1;
+}
+
+static int
+of_ir_insert_cf(struct of_ir_shader *shader)
+{
+	/* TODO */
+	return -1;
+}
+
 int
 of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 		      struct of_shader_stateobj *so)
@@ -827,6 +848,7 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 	struct pipe_transfer *transfer;
 	struct of_ir_cf_block *cf;
 	unsigned idx;
+	int ret;
 
 	if (!shader->num_instrs) {
 		pipe_resource_reference(&so->buffer, NULL);
@@ -834,10 +856,29 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 		return 0;
 	}
 
-	// TODO: Convert to SSA
-	// TODO: Optimize
-	// TODO: Assign registers
-	// TODO: Insert CF instructions
+	ret = of_ir_to_ssa(shader);
+	if (ret) {
+		ERROR_MSG("failed to create SSA form");
+		return -1;
+	}
+
+	ret = of_ir_optimize(shader);
+	if (ret) {
+		ERROR_MSG("failed to optimize shader");
+		return -1;
+	}
+
+	ret = of_ir_assign_registers(shader);
+	if (ret) {
+		ERROR_MSG("failed to create executable form");
+		return -1;
+	}
+
+	ret = of_ir_insert_cf(shader);
+	if (ret) {
+		ERROR_MSG("failed to insert CF instructions");
+		return -1;
+	}
 
 	buffer = pipe_buffer_create(ctx->base.screen,
 					PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
