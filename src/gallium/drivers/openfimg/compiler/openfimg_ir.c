@@ -484,6 +484,123 @@ of_ir_shader_destroy(struct of_ir_shader *shader)
 }
 
 /*
+ * AST dumper
+ */
+
+static void
+format_src_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
+	       struct of_ir_register *reg)
+{
+	const struct of_ir_reg_info *info;
+
+	info = of_ir_get_reg_info(shader, reg->type);
+
+	snprintf(buf, maxlen, "%s%s%s%d.%.4s%s",
+			reg->flags & OF_IR_REG_NEGATE ? "-" : "",
+			reg->flags & OF_IR_REG_ABS ? "|" : "",
+			info->name, reg->num, reg->swizzle,
+			reg->flags & OF_IR_REG_ABS ? "|" : "");
+}
+
+static void
+format_dst_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
+	       struct of_ir_register *reg)
+{
+	const struct of_ir_reg_info *info;
+
+	info = of_ir_get_reg_info(shader, reg->type);
+
+	snprintf(buf, maxlen, "%s%d.%.4s", info->name, reg->num, reg->swizzle);
+}
+
+static void
+dump_instruction(struct of_ir_shader *shader, struct of_ir_instruction *ins,
+		 unsigned level)
+{
+	const struct of_ir_opc_info *opc_info;
+	struct of_ir_register *dst, *src[3];
+	char dst_str[16], src_str[3][16];
+	unsigned reg;
+
+	opc_info = of_ir_get_opc_info(ins->opc);
+
+	dst = ins->dst;
+	if (dst)
+		format_dst_reg(shader, dst_str, sizeof(dst_str), ins->dst);
+	for (reg = 0; reg < 3; ++reg) {
+		src[reg] = ins->srcs[reg];
+		if (src[reg])
+			format_src_reg(shader, src_str[reg],
+					sizeof(src_str[reg]), src[reg]);
+	}
+
+	_debug_printf("%*s%s%s " "%s%s" "%s" "%s%s" "%s%s\n",
+			level, "", opc_info->name,
+			(dst && dst->flags & OF_IR_REG_SAT) ? "_sat" : "",
+			dst ? dst_str : "", dst ? ", " : "",
+			src[0] ? src_str[0] : "",
+			src[1] ? ", " : "", src[1] ? src_str[1] : "",
+			src[2] ? ", " : "", src[2] ? src_str[2] : "");
+}
+
+static void
+dump_list(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+	  unsigned level)
+{
+	struct of_ir_instruction *ins;
+
+	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list)
+		dump_instruction(shader, ins, level);
+}
+
+static void
+dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+	  unsigned level)
+{
+	struct of_ir_ast_node *child;
+
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		_debug_printf("%*sregion %p {\n", level, "", node);
+		break;
+	case OF_IR_NODE_DEPART:
+		_debug_printf("%*sdepart %p after {\n",
+				level, "", node->depart.region);
+		break;
+	case OF_IR_NODE_IF_THEN: {
+		char condition[16];
+
+		format_src_reg(shader, condition, sizeof(condition),
+				node->if_then.reg);
+		_debug_printf("%*sif %s then {\n", level, "", condition);
+		break; }
+	case OF_IR_NODE_REPEAT:
+		_debug_printf("%*srepeat %p after {\n",
+				level, "", node->repeat.region);
+		break;
+	case OF_IR_NODE_LIST:
+		dump_list(shader, node, level);
+		return;
+	default:
+		assert(0);
+	}
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		dump_node(shader, child, level + 4);
+
+	_debug_printf("%*s}\n", level, "");
+}
+
+static void
+dump_ast(struct of_ir_shader *shader)
+{
+	struct of_ir_ast_node *node;
+
+	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list)
+		dump_node(shader, node, 0);
+}
+
+/*
  * Assembler.
  */
 #if 0
@@ -664,10 +781,13 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 	int ret;
 
 	if (!shader->num_instrs) {
+		DBG("got empty shader");
 		pipe_resource_reference(&so->buffer, NULL);
 		so->num_instrs = 0;
 		return 0;
 	}
+
+	dump_ast(shader);
 
 	ret = of_ir_to_ssa(shader);
 	if (ret) {
