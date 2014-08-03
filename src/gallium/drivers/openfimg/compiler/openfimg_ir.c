@@ -526,10 +526,10 @@ merge_swizzle(struct of_ir_register *reg, const char *swizzle)
 
 	for (comp = 0; comp < ARRAY_SIZE(reg->swizzle); ++comp) {
 		switch (swizzle[comp]) {
-		case 'x': result[comp] = reg->swizzle[0];
-		case 'y': result[comp] = reg->swizzle[1];
-		case 'z': result[comp] = reg->swizzle[2];
-		case 'w': result[comp] = reg->swizzle[3];
+		case 'x': result[comp] = reg->swizzle[0]; break;
+		case 'y': result[comp] = reg->swizzle[1]; break;
+		case 'z': result[comp] = reg->swizzle[2]; break;
+		case 'w': result[comp] = reg->swizzle[3]; break;
 		default:
 			ERROR_MSG("invalid vector src swizzle: %s",
 					reg->swizzle);
