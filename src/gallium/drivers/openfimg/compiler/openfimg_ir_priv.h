@@ -99,8 +99,6 @@ struct of_ir_ast_node {
 
 	/** Shader to which the AST node belongs. */
 	struct of_ir_shader *shader;
-	/** List head used to link all AST nodes of the shader. */
-	struct list_head shader_list;
 
 	/* Address assigned by assembler. */
 	unsigned address;
@@ -113,10 +111,8 @@ struct of_ir_ast_node {
 struct of_ir_shader {
 	/** Total number of generated instructions. */
 	unsigned num_instrs;
-	/** Number of AST nodes. */
-	unsigned num_ast_nodes;
-	/** List of AST nodes in the program. */
-	struct list_head ast_nodes;
+	/** List of root AST nodes in the program. */
+	struct list_head root_nodes;
 
 	/** Heap to allocate IR data from. */
 	uint32_t heap[100 * 4096];

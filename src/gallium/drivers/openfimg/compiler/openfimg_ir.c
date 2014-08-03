@@ -378,8 +378,7 @@ of_ir_node_region(struct of_ir_shader *shader)
 	LIST_INITHEAD(&node->end_phis);
 	LIST_INITHEAD(&node->nodes);
 
-	list_addtail(&node->shader_list, &shader->ast_nodes);
-	++shader->num_ast_nodes;
+	list_addtail(&node->parent_list, &shader->root_nodes);
 
 	return node;
 }
@@ -434,6 +433,7 @@ of_ir_node_list(struct of_ir_shader *shader)
 void
 of_ir_node_insert(struct of_ir_ast_node *where, struct of_ir_ast_node *node)
 {
+	list_del(&node->parent_list);
 	list_addtail(&node->parent_list, &where->nodes);
 	node->parent = where;
 	++where->num_nodes;
@@ -464,7 +464,7 @@ of_ir_shader_create(enum of_ir_shader_type type)
 	if (!shader)
 		return NULL;
 
-	LIST_INITHEAD(&shader->ast_nodes);
+	LIST_INITHEAD(&shader->root_nodes);
 
 	if (type == OF_IR_SHADER_VERTEX)
 		shader->reg_info = vs_reg_info;
