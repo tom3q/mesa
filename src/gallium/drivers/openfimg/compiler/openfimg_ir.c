@@ -33,353 +33,121 @@
 
 #include "fimg_3dse.xml.h"
 
+#define OF_IR_OPC(_opc, _type, _num_srcs)	\
+	[OF_OP_ ## _opc] = {			\
+		.name = #_opc,			\
+		.type = OF_IR_ ## _type,	\
+		.num_srcs = _num_srcs,		\
+	}
+
 const struct of_ir_opc_info of_ir_opc_info[] = {
-	[OF_OP_NOP] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 0,
-	},
-	[OF_OP_MOV] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_MOVA] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_MOVC] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_ADD] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_MUL] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_MUL_LIT] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_DP3] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_DP4] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_DPH] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_DST] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_EXP] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_EXP_LIT] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_LOG] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_LOG_LIT] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_RCP] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_RSQ] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_DP2ADD] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 3,
-	},
-	[OF_OP_MAX] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_MIN] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_SGE] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_SLT] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_SETP_EQ] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_SETP_GE] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_SETP_GT] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_SETP_NE] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_CMP] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 3,
-	},
-	[OF_OP_MAD] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 3,
-	},
-	[OF_OP_FRC] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_FLR] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_TEXLD] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_CUBEDIR] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_MAXCOMP] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_TEXLDC] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 3,
-	},
-	[OF_OP_TEXKILL] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_MOVIPS] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 1,
-	},
-	[OF_OP_ADDI] = {
-		.type = OF_IR_ALU,
-		.num_srcs = 2,
-	},
-	[OF_OP_B] = {
-		.type = OF_IR_CF,
-		.num_srcs = 0,
-	},
-	[OF_OP_BF] = {
-		.type = OF_IR_CF,
-		.num_srcs = 1,
-	},
-	[OF_OP_BP] = {
-		.type = OF_IR_CF,
-		.num_srcs = 0,
-	},
-	[OF_OP_BFP] = {
-		.type = OF_IR_CF,
-		.num_srcs = 1,
-	},
-	[OF_OP_BZP] = {
-		.type = OF_IR_CF,
-		.num_srcs = 1,
-	},
-	[OF_OP_CALL] = {
-		.type = OF_IR_SUB,
-		.num_srcs = 0,
-	},
-	[OF_OP_CALLNZ] = {
-		.type = OF_IR_SUB,
-		.num_srcs = 1,
-	},
-	[OF_OP_RET] = {
-		.type = OF_IR_ALU, /* Not really, but emitted like ALU. */
-		.num_srcs = 0,
-	},
+	OF_IR_OPC(NOP, ALU, 0),
+	OF_IR_OPC(MOV, ALU, 1),
+	OF_IR_OPC(MOVA, ALU, 1),
+	OF_IR_OPC(MOVC, ALU, 2),
+	OF_IR_OPC(ADD, ALU, 2),
+	OF_IR_OPC(MUL, ALU, 2),
+	OF_IR_OPC(MUL_LIT, ALU, 2),
+	OF_IR_OPC(DP3, ALU, 2),
+	OF_IR_OPC(DP4, ALU, 2),
+	OF_IR_OPC(DPH, ALU, 2),
+	OF_IR_OPC(DST, ALU, 2),
+	OF_IR_OPC(EXP, ALU, 1),
+	OF_IR_OPC(EXP_LIT, ALU, 1),
+	OF_IR_OPC(LOG, ALU, 1),
+	OF_IR_OPC(LOG_LIT, ALU, 1),
+	OF_IR_OPC(RCP, ALU, 1),
+	OF_IR_OPC(RSQ, ALU, 1),
+	OF_IR_OPC(DP2ADD, ALU, 3),
+	OF_IR_OPC(MAX, ALU, 2),
+	OF_IR_OPC(MIN, ALU, 2),
+	OF_IR_OPC(SGE, ALU, 2),
+	OF_IR_OPC(SLT, ALU, 2),
+	OF_IR_OPC(SETP_EQ, ALU, 2),
+	OF_IR_OPC(SETP_GE, ALU, 2),
+	OF_IR_OPC(SETP_GT, ALU, 2),
+	OF_IR_OPC(SETP_NE, ALU, 2),
+	OF_IR_OPC(CMP, ALU, 3),
+	OF_IR_OPC(MAD, ALU, 3),
+	OF_IR_OPC(FRC, ALU, 1),
+	OF_IR_OPC(FLR, ALU, 1),
+	OF_IR_OPC(TEXLD, ALU, 2),
+	OF_IR_OPC(CUBEDIR, ALU, 1),
+	OF_IR_OPC(MAXCOMP, ALU, 1),
+	OF_IR_OPC(TEXLDC, ALU, 3),
+	OF_IR_OPC(TEXKILL, ALU, 1),
+	OF_IR_OPC(MOVIPS, ALU, 1),
+	OF_IR_OPC(ADDI, ALU, 2),
+	OF_IR_OPC(B, CF, 0),
+	OF_IR_OPC(BF, CF, 1),
+	OF_IR_OPC(BP, CF, 0),
+	OF_IR_OPC(BFP, CF, 1),
+	OF_IR_OPC(BZP, CF, 1),
+	OF_IR_OPC(CALL, SUB, 0),
+	OF_IR_OPC(CALLNZ, SUB, 1),
+	OF_IR_OPC(RET, ALU, 0), /* Not really ALU, but emitted the same way. */
 };
 
+#define OF_IR_REG_RW(_reg, _num_regs, _a0_addr, _al_addr, _num_reads)	\
+	[OF_IR_REG_ ## _reg] = {					\
+		.name = #_reg,						\
+		.src_type = OF_SRC_ ## _reg,				\
+		.dst_type = OF_DST_ ## _reg,				\
+		.a0_addr = _a0_addr,					\
+		.al_addr = _al_addr,					\
+		.num_reads = _num_reads,				\
+		.writable = true,					\
+		.readable = true,					\
+	}
+
+#define OF_IR_REG_R(_reg, _num_regs, _a0_addr, _al_addr, _num_reads)	\
+	[OF_IR_REG_ ## _reg] = {					\
+		.name = #_reg,						\
+		.src_type = OF_SRC_ ## _reg,				\
+		.a0_addr = _a0_addr,					\
+		.al_addr = _al_addr,					\
+		.num_reads = _num_reads,				\
+		.readable = true,					\
+	}
+
+#define OF_IR_REG_W(_reg, _num_regs, _a0_addr, _al_addr)		\
+	[OF_IR_REG_ ## _reg] = {					\
+		.name = #_reg,						\
+		.dst_type = OF_DST_ ## _reg,				\
+		.a0_addr = _a0_addr,					\
+		.al_addr = _al_addr,					\
+		.writable = true,					\
+	}
+
 static const struct of_ir_reg_info vs_reg_info[OF_IR_NUM_REG_TYPES] = {
-	[OF_IR_REG_R] = {
-		.src_type = OF_SRC_R,
-		.dst_type = OF_DST_R,
-		.num_reads = 2,
-		.num_regs = 32,
-		.writable = true,
-		.readable = true,
-		.al_addr = true,
-	},
-	[OF_IR_REG_V] = {
-		.src_type = OF_SRC_V,
-		.num_reads = 1,
-		.num_regs = 10,
-		.readable = true,
-		.al_addr = true,
-	},
-	[OF_IR_REG_C] = {
-		.src_type = OF_SRC_C,
-		.num_reads = 1,
-		.num_regs = 256,
-		.readable = true,
-		.a0_addr = true,
-		.al_addr = true,
-	},
-	[OF_IR_REG_I] = {
-		.src_type = OF_SRC_I,
-		.num_reads = 1,
-		.num_regs = 16,
-		.readable = true,
-	},
-	[OF_IR_REG_AL] = {
-		.src_type = OF_SRC_AL,
-		.dst_type = OF_DST_AL,
-		.num_reads = 1,
-		.num_regs = 4,
-		.writable = true,
-		.readable = true,
-	},
-	[OF_IR_REG_B] = {
-		.src_type = OF_SRC_B,
-		.num_reads = 1,
-		.num_regs = 16,
-		.readable = true,
-		.scalar = true,
-	},
-	[OF_IR_REG_P] = {
-		.src_type = OF_SRC_P,
-		.dst_type = OF_DST_P,
-		.num_reads = 1,
-		.num_regs = 7,
-		.writable = true,
-		.readable = true,
-	},
-	[OF_IR_REG_S] = {
-		.src_type = OF_SRC_S,
-		.num_reads = 1,
-		.num_regs = 4,
-		.readable = true,
-	},
-	[OF_IR_REG_O] = {
-		.dst_type = OF_DST_O,
-		.num_regs = 10,
-		.writable = true,
-		.al_addr = true,
-	},
-	[OF_IR_REG_A0] = {
-		.dst_type = OF_DST_A0,
-		.num_regs = 1,
-		.writable = true,
-	},
+	/* (reg, num_regs, a0_addr, al_addr[, num_reads]) */
+	OF_IR_REG_RW(R,   32, false, true,  2),
+	OF_IR_REG_R( V,   10, false, true,  1),
+	OF_IR_REG_R( C,  256, true,  true,  1),
+	OF_IR_REG_R( I,   16, false, false, 1),
+	OF_IR_REG_RW(AL,   4, false, false, 1),
+	OF_IR_REG_R( B,   16, false, false, 1),
+	OF_IR_REG_RW(P,    7, false, false, 1),
+	OF_IR_REG_R( S,    4, false, false, 1),
+	OF_IR_REG_W( O,   10, false, true),
+	OF_IR_REG_W(A0,    1, false, false),
 };
 
 static const struct of_ir_reg_info ps_reg_info[OF_IR_NUM_REG_TYPES] = {
-	[OF_IR_REG_R] = {
-		.src_type = OF_SRC_R,
-		.dst_type = OF_DST_R,
-		.num_reads = 2,
-		.num_regs = 32,
-		.writable = true,
-		.readable = true,
-		.al_addr = true,
-	},
-	[OF_IR_REG_V] = {
-		.src_type = OF_SRC_V,
-		.num_reads = 1,
-		.num_regs = 8,
-		.readable = true,
-		.al_addr = true,
-	},
-	[OF_IR_REG_C] = {
-		.src_type = OF_SRC_C,
-		.num_reads = 1,
-		.num_regs = 256,
-		.readable = true,
-		.a0_addr = true,
-		.al_addr = true,
-	},
-	[OF_IR_REG_I] = {
-		.src_type = OF_SRC_I,
-		.num_reads = 1,
-		.num_regs = 16,
-		.readable = true,
-	},
-	[OF_IR_REG_AL] = {
-		.src_type = OF_SRC_AL,
-		.dst_type = OF_DST_AL,
-		.num_reads = 1,
-		.num_regs = 4,
-		.writable = true,
-		.readable = true,
-	},
-	[OF_IR_REG_B] = {
-		.src_type = OF_SRC_B,
-		.num_reads = 1,
-		.num_regs = 16,
-		.readable = true,
-		.scalar = true,
-	},
-	[OF_IR_REG_P] = {
-		.src_type = OF_SRC_P,
-		.dst_type = OF_DST_P,
-		.num_reads = 1,
-		.num_regs = 7,
-		.writable = true,
-		.readable = true,
-	},
-	[OF_IR_REG_S] = {
-		.src_type = OF_SRC_S,
-		.num_reads = 1,
-		.num_regs = 8,
-		.readable = true,
-	},
-	[OF_IR_REG_D] = {
-		.src_type = OF_SRC_D,
-		.num_reads = 1,
-		.num_regs = 8,
-		.readable = true,
-	},
-	[OF_IR_REG_VFACE] = {
-		.src_type = OF_SRC_VFACE,
-		.num_reads = 1,
-		.num_regs = 1,
-		.readable = true,
-		.scalar = true,
-	},
-	[OF_IR_REG_VPOS] = {
-		.src_type = OF_SRC_VPOS,
-		.num_reads = 1,
-		.num_regs = 1,
-		.readable = true,
-		.scalar = true,
-	},
-	[OF_IR_REG_O] = {
-		.dst_type = OF_DST_O,
-		.num_regs = 1,
-		.writable = true,
-		.al_addr = true,
-	},
-	[OF_IR_REG_A0] = {
-		.dst_type = OF_DST_A0,
-		.num_regs = 1,
-		.writable = true,
-	},
+	/* (reg, num_regs, a0_addr, al_addr[, num_reads]) */
+	OF_IR_REG_RW(R,    32, false, true,  2),
+	OF_IR_REG_R( V,     8, false, true,  1),
+	OF_IR_REG_R( C,   256, true,  true,  1),
+	OF_IR_REG_R( I,    16, false, false, 1),
+	OF_IR_REG_RW(AL,    4, false, false, 1),
+	OF_IR_REG_R( B,    16, false, false, 1),
+	OF_IR_REG_RW(P,     7, false, false, 1),
+	OF_IR_REG_R( S,     8, false, false, 1),
+	OF_IR_REG_R( D,     8, false, false, 1),
+	OF_IR_REG_R( VFACE, 4, false, false, 1),
+	OF_IR_REG_R( VPOS,  4, false, false, 1),
+	OF_IR_REG_W( O,     1, false, true),
+	OF_IR_REG_W(A0,     1, false, false),
 };
 
 /*
