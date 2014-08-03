@@ -29,7 +29,6 @@
 #include <util/u_double_list.h>
 
 #include "openfimg_ir_priv.h"
-#include "openfimg_ssa.h"
 #include "openfimg_util.h"
 
 /*
@@ -381,7 +380,7 @@ dtree_free(struct dtree *dtree)
  */
 
 int
-of_ssa_ir_to_ssa(struct of_ir_shader *shader)
+of_ir_to_ssa(struct of_ir_shader *shader)
 {
 	struct dtree dtree;
 	int ret;
@@ -397,11 +396,4 @@ of_ssa_ir_to_ssa(struct of_ir_shader *shader)
 	dtree_free(&dtree);
 
 	return 0;
-}
-
-int
-of_ssa_ssa_to_ir(struct of_ir_shader *shader)
-{
-	// TODO
-	return -1;
 }
