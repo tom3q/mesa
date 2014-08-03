@@ -480,7 +480,7 @@ of_ir_instr_add_src(struct of_ir_instruction *instr, struct of_ir_register *reg)
 }
 
 void
-of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block,
+of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 		   struct of_ir_instruction *where,
 		   struct of_ir_instruction *instr)
 {
@@ -489,22 +489,23 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_cf_block *block,
 
 	assert(instr->num_srcs == info->num_srcs);
 	assert(info->type != OF_IR_CF);
-	assert(block || where);
+	assert(node || where);
 
 	++shader->num_instrs;
 
 	if (where) {
 		/* Explicitly specified instruction to prepend. */
-		block = where->block;
+		node = where->node;
 		list = &where->list;
 	} else {
-		/* Append to basic block. */
-		list = &block->instrs;
+		/* Explicitly specified list node. */
+		assert(node->type == OF_IR_NODE_LIST);
+		list = &node->list.instrs;
 	}
 
 	list_addtail(&instr->list, list);
-	instr->block = block;
-	++block->num_instrs;
+	instr->node = node;
+	++node->list.num_instrs;
 }
 
 static void
@@ -551,7 +552,7 @@ merge_flags(struct of_ir_register *reg, enum of_ir_reg_flags flags)
 
 void
 of_ir_instr_insert_templ(struct of_ir_shader *shader,
-			 struct of_ir_cf_block *block,
+			 struct of_ir_ast_node *node,
 			 struct of_ir_instruction *where,
 			 const struct of_ir_instr_template *instrs,
 			 unsigned num_instrs)
@@ -583,55 +584,96 @@ of_ir_instr_insert_templ(struct of_ir_shader *shader,
 			of_ir_instr_add_src(instr, instrs->src[src].reg);
 		}
 
-		of_ir_instr_insert(shader, block, where, instr);
+		of_ir_instr_insert(shader, node, where, instr);
 		++instrs;
 	}
 }
 
-void
-of_ir_instr_insert_cf(struct of_ir_shader *shader, struct of_ir_cf_block *block,
-		      const struct of_ir_instr_cf *cf_instr)
-{
-	unsigned target = block->num_targets;
-
-	if (target == OF_IR_NUM_CF_TARGETS)
-		return;
-
-	block->targets[target].block = cf_instr->target;
-	list_addtail(&block->targets[target].list, &cf_instr->target->sources);
-
-	if (cf_instr->condition) {
-		merge_swizzle(cf_instr->condition, cf_instr->swizzle);
-		merge_flags(cf_instr->condition, cf_instr->flags);
-		block->targets[target].condition = cf_instr->condition;
-	}
-
-	++block->num_targets;
-}
-
 /*
- * Basic block-level operations.
+ * AST node-level operations.
  */
 
-struct of_ir_cf_block *
-of_ir_cf_create(struct of_ir_shader *shader)
+struct of_ir_ast_node *
+of_ir_node_region(struct of_ir_shader *shader)
 {
-	struct of_ir_cf_block *cf = of_ir_alloc(shader, sizeof(*cf));
-	int i;
+	struct of_ir_ast_node *node = of_ir_alloc(shader, sizeof(*node));
 
-	cf->shader = shader;
+	node->shader = shader;
 
-	LIST_INITHEAD(&cf->list);
-	LIST_INITHEAD(&cf->psis);
-	LIST_INITHEAD(&cf->instrs);
+	LIST_INITHEAD(&node->start_phis);
+	LIST_INITHEAD(&node->end_phis);
+	LIST_INITHEAD(&node->nodes);
 
-	for (i = 0; i < OF_IR_NUM_CF_TARGETS; ++i)
-		LIST_INITHEAD(&cf->targets[i].list);
+	list_addtail(&node->shader_list, &shader->ast_nodes);
+	++shader->num_ast_nodes;
 
-	list_addtail(&cf->list, &shader->cf_blocks);
-	++shader->num_cf_blocks;
+	return node;
+}
 
-	return cf;
+struct of_ir_ast_node *
+of_ir_node_if_then(struct of_ir_shader *shader, struct of_ir_register *reg,
+		 const char *swizzle, unsigned flags)
+{
+	struct of_ir_ast_node *node = of_ir_node_region(shader);
+
+	node->type = OF_IR_NODE_IF_THEN;
+	node->if_then.reg = reg;
+	merge_swizzle(reg, swizzle);
+	merge_flags(reg, flags);
+
+	return node;
+}
+
+struct of_ir_ast_node *
+of_ir_node_depart(struct of_ir_shader *shader, struct of_ir_ast_node *region)
+{
+	struct of_ir_ast_node *node = of_ir_node_region(shader);
+
+	node->type = OF_IR_NODE_DEPART;
+	node->depart.region = region;
+
+	return node;
+}
+
+struct of_ir_ast_node *
+of_ir_node_repeat(struct of_ir_shader *shader, struct of_ir_ast_node *region)
+{
+	struct of_ir_ast_node *node = of_ir_node_region(shader);
+
+	node->type = OF_IR_NODE_REPEAT;
+	node->repeat.region = region;
+
+	return node;
+}
+
+struct of_ir_ast_node *
+of_ir_node_list(struct of_ir_shader *shader)
+{
+	struct of_ir_ast_node *node = of_ir_node_region(shader);
+
+	node->type = OF_IR_NODE_LIST;
+	LIST_INITHEAD(&node->list.instrs);
+
+	return node;
+}
+
+void
+of_ir_node_insert(struct of_ir_ast_node *where, struct of_ir_ast_node *node)
+{
+	list_addtail(&node->parent_list, &where->nodes);
+	node->parent = where;
+	++where->num_nodes;
+}
+
+enum of_ir_node_type of_ir_node_get_type(struct of_ir_ast_node *node)
+{
+	return node->type;
+}
+
+struct of_ir_ast_node *
+of_ir_node_get_parent(struct of_ir_ast_node *node)
+{
+	return node->parent;
 }
 
 /*
@@ -648,8 +690,7 @@ of_ir_shader_create(enum of_ir_shader_type type)
 	if (!shader)
 		return NULL;
 
-	LIST_INITHEAD(&shader->cf_blocks);
-	LIST_INITHEAD(&shader->cf_stack);
+	LIST_INITHEAD(&shader->ast_nodes);
 
 	if (type == OF_IR_SHADER_VERTEX)
 		shader->reg_info = vs_reg_info;
@@ -671,7 +712,7 @@ of_ir_shader_destroy(struct of_ir_shader *shader)
 /*
  * Assembler.
  */
-
+#if 0
 static uint32_t
 dst_mask(struct of_ir_register *reg)
 {
@@ -817,7 +858,7 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 
 	/* TODO: Implement predicate support */
 }
-
+#endif
 static int
 of_ir_optimize(struct of_ir_shader *shader)
 {
@@ -846,8 +887,6 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 	uint32_t *dwords = NULL;
 	struct pipe_resource *buffer;
 	struct pipe_transfer *transfer;
-	struct of_ir_cf_block *cf;
-	unsigned idx;
 	int ret;
 
 	if (!shader->num_instrs) {
@@ -896,27 +935,8 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 	}
 
 	/*
-	 * First pass:
-	 * Assign addresses to CF blocks.
+	 * TODO: Emit instructions.
 	 */
-	idx = 0;
-	LIST_FOR_EACH_ENTRY(cf, &shader->cf_blocks, list) {
-		cf->address = idx;
-		idx += cf->num_instrs;
-	}
-
-	/*
-	 * Second pass:
-	 * Emit instructions.
-	 */
-	idx = 0;
-	LIST_FOR_EACH_ENTRY(cf, &shader->cf_blocks, list) {
-		struct of_ir_instruction *ins;
-
-		/* Emit each instruction of the basic block. */
-		LIST_FOR_EACH_ENTRY(ins, &cf->instrs, list)
-			instr_emit(shader, ins, dwords, idx++);
-	}
 
 	if (transfer)
 		pipe_buffer_unmap(&ctx->base, transfer);
