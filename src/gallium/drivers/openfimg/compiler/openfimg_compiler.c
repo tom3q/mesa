@@ -1032,6 +1032,7 @@ translate_if(struct of_compile_context *ctx,
 	memset(instrs, 0, sizeof(instrs));
 	instrs[0].opc = OF_OP_SETP_EQ;
 	instrs[0].dst.reg = pred = of_ir_reg_predicate(ctx->shader);
+	instrs[0].dst.mask = "x___";
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[0].swizzle = "xxxx";
 	instrs[0].src[1].reg = get_immediate(ctx, 1, &const_zero);
