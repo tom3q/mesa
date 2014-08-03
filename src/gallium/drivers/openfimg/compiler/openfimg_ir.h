@@ -95,7 +95,7 @@ enum of_ir_instr_flags {
 
 struct of_ir_register;
 struct of_ir_instruction;
-struct of_ir_cf_block;
+struct of_ir_ast_node;
 struct of_ir_shader;
 
 struct of_ir_opc_info {
@@ -114,7 +114,7 @@ struct of_ir_instr_template {
 		} dst;
 		/* Target block of subroutine call. */
 		struct {
-			struct of_ir_cf_block *cf;
+			struct of_ir_ast_node *node;
 		} target;
 	};
 	struct {
@@ -124,11 +124,14 @@ struct of_ir_instr_template {
 	} src[OF_IR_NUM_SRCS];
 };
 
-struct of_ir_instr_cf {
-	struct of_ir_cf_block *target;
-	struct of_ir_register *condition;
-	const char *swizzle;
-	unsigned flags;
+enum of_ir_node_type {
+	OF_IR_NODE_REGION,
+	OF_IR_NODE_IF_THEN,
+	OF_IR_NODE_DEPART,
+	OF_IR_NODE_REPEAT,
+	OF_IR_NODE_LIST,
+
+	OF_IR_NUM_CF_TYPES
 };
 
 extern const struct of_ir_opc_info of_ir_opc_info[];
@@ -155,21 +158,30 @@ void of_ir_instr_add_dst(struct of_ir_instruction *instr,
 void of_ir_instr_add_src(struct of_ir_instruction *instr,
 			 struct of_ir_register *reg);
 void of_ir_instr_insert(struct of_ir_shader *shader,
-			struct of_ir_cf_block *block,
+			struct of_ir_ast_node *block,
 			struct of_ir_instruction *where,
 			struct of_ir_instruction *instr);
 struct of_ir_instruction *of_ir_instr_ptr(struct of_ir_shader *shader);
 
 void of_ir_instr_insert_templ(struct of_ir_shader *shader,
-			      struct of_ir_cf_block *block,
+			      struct of_ir_ast_node *block,
 			      struct of_ir_instruction *where,
 			      const struct of_ir_instr_template *instrs,
 			      unsigned num_instrs);
 
-struct of_ir_cf_block *of_ir_cf_create(struct of_ir_shader *shader);
-void of_ir_instr_insert_cf(struct of_ir_shader *shader,
-			   struct of_ir_cf_block *block,
-			   const struct of_ir_instr_cf *cf_instr);
+struct of_ir_ast_node *of_ir_node_region(struct of_ir_shader *shader);
+struct of_ir_ast_node *of_ir_node_if_then(struct of_ir_shader *shader,
+					  struct of_ir_register *reg,
+					  const char *swizzle, unsigned flags);
+struct of_ir_ast_node *of_ir_node_depart(struct of_ir_shader *shader,
+					 struct of_ir_ast_node *region);
+struct of_ir_ast_node *of_ir_node_repeat(struct of_ir_shader *shader,
+					 struct of_ir_ast_node *region);
+struct of_ir_ast_node *of_ir_node_list(struct of_ir_shader *shader);
+void of_ir_node_insert(struct of_ir_ast_node *where,
+		       struct of_ir_ast_node *node);
+enum of_ir_node_type of_ir_node_get_type(struct of_ir_ast_node *node);
+struct of_ir_ast_node *of_ir_node_get_parent(struct of_ir_ast_node *node);
 
 struct of_ir_shader *of_ir_shader_create(enum of_ir_shader_type type);
 void of_ir_shader_destroy(struct of_ir_shader *shader);
