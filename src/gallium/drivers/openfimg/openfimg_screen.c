@@ -199,6 +199,12 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_USER_INDEX_BUFFERS:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
 	case PIPE_CAP_FAKE_SW_MSAA:
+	/*
+	 * TODO: Not sure if we can really support them, but they are
+	 * needed for OpenGL 2.1, so enable them for now even if unimplemented.
+	 */
+	case PIPE_CAP_TEXTURE_SHADOW_MAP:
+	case PIPE_CAP_OCCLUSION_QUERY:
 		return 1;
 
 	/* Unsupported features. */
@@ -211,7 +217,6 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_SHADER_STENCIL_EXPORT:
 	case PIPE_CAP_START_INSTANCE:
 	case PIPE_CAP_TEXTURE_MULTISAMPLE:
-	case PIPE_CAP_TEXTURE_SHADOW_MAP:
 	case PIPE_CAP_INDEP_BLEND_ENABLE:
 	case PIPE_CAP_INDEP_BLEND_FUNC:
 	case PIPE_CAP_DEPTH_CLIP_DISABLE:
@@ -272,7 +277,6 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 
 	/* Timer queries. */
 	case PIPE_CAP_QUERY_TIME_ELAPSED:
-	case PIPE_CAP_OCCLUSION_QUERY:
 	case PIPE_CAP_QUERY_TIMESTAMP:
 		return 0;
 
