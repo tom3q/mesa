@@ -99,6 +99,7 @@ struct of_context {
 	/* optional state used for hardware clear */
 	struct of_shader_stateobj *solid_vp, *solid_fp; // TODO move to screen?
 	struct of_vertex_info *clear_vertex_info;
+	struct pipe_resource *dummy_shader;
 
 	/* optional state used for hardware blitting */
 	struct of_shader_stateobj *blit_vp, *blit_fp; // TODO move to screen?

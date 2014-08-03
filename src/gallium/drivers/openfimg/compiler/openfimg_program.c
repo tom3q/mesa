@@ -231,7 +231,8 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 		ret = assemble(ctx, so);
 		if (ret) {
 			DBG("failed to assemble shader, using dummy!");
-			emit_dummy_shader(ctx, so);
+			so->num_instrs = 0;
+			pipe_resource_reference(&so->buffer, ctx->dummy_shader);
 			return;
 		}
 	}
@@ -387,6 +388,8 @@ of_prog_init_blit(struct of_context *ctx)
 void
 of_prog_init(struct pipe_context *pctx)
 {
+	struct of_context *ctx = of_context(pctx);
+
 	pctx->create_fs_state = of_fp_state_create;
 	pctx->bind_fs_state = of_fp_state_bind;
 	pctx->delete_fs_state = of_prog_state_delete;
@@ -394,6 +397,12 @@ of_prog_init(struct pipe_context *pctx)
 	pctx->create_vs_state = of_vp_state_create;
 	pctx->bind_vs_state = of_vp_state_bind;
 	pctx->delete_vs_state = of_prog_state_delete;
+
+	ctx->dummy_shader = pipe_buffer_create(ctx->base.screen,
+						PIPE_BIND_CUSTOM,
+						PIPE_USAGE_IMMUTABLE, 4096);
+	if (!ctx->dummy_shader)
+		DBG("shader BO allocation failed");
 }
 
 void
@@ -410,4 +419,6 @@ of_prog_fini(struct pipe_context *pctx)
 		pctx->delete_vs_state(pctx, ctx->blit_vp);
 	if (ctx->blit_fp)
 		pctx->delete_fs_state(pctx, ctx->blit_fp);
+
+	pipe_resource_reference(&ctx->dummy_shader, NULL);
 }
