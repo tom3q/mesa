@@ -53,45 +53,54 @@ struct of_ir_instruction {
 	/** Destination register. */
 	struct of_ir_register *dst;
 	/** Branch target. */
-	struct of_ir_cf_block *target;
+	struct of_ir_ast_node *target;
 
 	/** Opcode. */
 	enum of_instr_opcode opc;
 
 	/** Basic block to which the instruction belongs. */
-	struct of_ir_cf_block *block;
+	struct of_ir_ast_node *node;
 	/** List head to link all instructions of the block. */
 	struct list_head list;
 };
 
-/** Representation of a basic block (without CF inside). */
-struct of_ir_cf_block {
-	/** List of PSI() operators at the beginning of the block. */
-	struct list_head psis;
-	/** List of instructions in the block. */
-	struct list_head instrs;
+/** Representation of AST node. */
+struct of_ir_ast_node {
+	/** List of PHI() operators at the beginning of the block. */
+	struct list_head start_phis;
+	/** List of PHI() operators at the end of the block. */
+	struct list_head end_phis;
+
+	/** List of subnodes of the block. */
+	struct list_head nodes;
 	/** Number of instructions in the block. */
-	unsigned num_instrs;
+	unsigned num_nodes;
+	/** Parent of this node. */
+	struct of_ir_ast_node *parent;
+	/** List head used to link with the parent. */
+	struct list_head parent_list;
 
-	/** Number of branch targets. */
-	unsigned num_targets;
-	/** Branch targets. */
-	struct {
-		/** Basic block which is the target. */
-		struct of_ir_cf_block *block;
-		/** List head used to link all sources of target block. */
-		struct list_head list;
-		/** Register that holds test result or NULL if unconditional. */
-		struct of_ir_register *condition;
-	} targets[OF_IR_NUM_CF_TARGETS];
-	struct list_head sources;
+	enum of_ir_node_type type;
+	union {
+		struct {
+			struct of_ir_register *reg;
+		} if_then;
+		struct {
+			struct of_ir_ast_node *region;
+		} depart;
+		struct {
+			struct of_ir_ast_node *region;
+		} repeat;
+		struct {
+			unsigned num_instrs;
+			struct list_head instrs;
+		} list;
+	};
 
-	/** Shader to which the basic block belongs. */
+	/** Shader to which the AST node belongs. */
 	struct of_ir_shader *shader;
-	/** List head used to link all basic blocks of the shader. */
-	struct list_head list;
-	/** List head used by basic block stack. */
-	struct list_head cf_stack_list;
+	/** List head used to link all AST nodes of the shader. */
+	struct list_head shader_list;
 
 	/* Address assigned by assembler. */
 	unsigned address;
@@ -104,12 +113,10 @@ struct of_ir_cf_block {
 struct of_ir_shader {
 	/** Total number of generated instructions. */
 	unsigned num_instrs;
-	/** Number of basic blocks. */
-	unsigned num_cf_blocks;
-	/** List of basic blocks in the program. */
-	struct list_head cf_blocks;
-	/** Stack of basic blocks */
-	struct list_head cf_stack;
+	/** Number of AST nodes. */
+	unsigned num_ast_nodes;
+	/** List of AST nodes in the program. */
+	struct list_head ast_nodes;
 
 	/** Heap to allocate IR data from. */
 	uint32_t heap[100 * 4096];
