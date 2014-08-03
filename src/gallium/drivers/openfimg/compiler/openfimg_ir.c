@@ -564,8 +564,12 @@ dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 		_debug_printf("%*sregion %p {\n", level, "", node);
 		break;
 	case OF_IR_NODE_DEPART:
-		_debug_printf("%*sdepart %p after {\n",
-				level, "", node->depart.region);
+		if (LIST_IS_EMPTY(&node->nodes))
+			_debug_printf("%*sdepart %p\n",
+					level, "", node->depart.region);
+		else
+			_debug_printf("%*sdepart %p after {\n",
+					level, "", node->depart.region);
 		break;
 	case OF_IR_NODE_IF_THEN: {
 		char condition[16];
@@ -575,8 +579,12 @@ dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 		_debug_printf("%*sif %s then {\n", level, "", condition);
 		break; }
 	case OF_IR_NODE_REPEAT:
-		_debug_printf("%*srepeat %p after {\n",
-				level, "", node->repeat.region);
+		if (LIST_IS_EMPTY(&node->nodes))
+			_debug_printf("%*srepeat %p\n",
+					level, "", node->repeat.region);
+		else
+			_debug_printf("%*srepeat %p after {\n",
+					level, "", node->repeat.region);
 		break;
 	case OF_IR_NODE_LIST:
 		dump_list(shader, node, level);
@@ -588,7 +596,8 @@ dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
 		dump_node(shader, child, level + 4);
 
-	_debug_printf("%*s}\n", level, "");
+	if (!LIST_IS_EMPTY(&node->nodes))
+		_debug_printf("%*s}\n", level, "");
 }
 
 static void
