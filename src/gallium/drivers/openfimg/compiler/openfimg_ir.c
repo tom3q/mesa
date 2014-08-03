@@ -863,21 +863,21 @@ static int
 of_ir_optimize(struct of_ir_shader *shader)
 {
 	/* TODO */
-	return -1;
+	return 0;
 }
 
 static int
 of_ir_assign_registers(struct of_ir_shader *shader)
 {
 	/* TODO */
-	return -1;
+	return 0;
 }
 
 static int
 of_ir_insert_cf(struct of_ir_shader *shader)
 {
 	/* TODO */
-	return -1;
+	return 0;
 }
 
 int
