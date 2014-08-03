@@ -135,6 +135,22 @@ enum of_ir_node_type {
 	OF_IR_NUM_CF_TYPES
 };
 
+struct of_ir_reg_info {
+	const char *name;
+
+	enum of_instr_src src_type;
+	enum of_instr_dst dst_type;
+
+	unsigned num_reads;
+	unsigned num_regs;
+
+	bool writable :1;
+	bool readable :1;
+	bool scalar :1;
+	bool al_addr :1;
+	bool a0_addr :1;
+};
+
 extern const struct of_ir_opc_info of_ir_opc_info[];
 
 static inline const struct of_ir_opc_info *
@@ -143,6 +159,8 @@ of_ir_get_opc_info(enum of_instr_opcode opc)
 	return &of_ir_opc_info[opc];
 }
 
+const struct of_ir_reg_info *of_ir_get_reg_info(struct of_ir_shader *shader,
+						enum of_ir_reg_type reg);
 struct of_ir_register *of_ir_reg_create(struct of_ir_shader *shader,
 					enum of_ir_reg_type type, unsigned num,
 					const char *swizzle, unsigned flags);
