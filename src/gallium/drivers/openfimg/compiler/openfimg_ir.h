@@ -99,6 +99,7 @@ struct of_ir_ast_node;
 struct of_ir_shader;
 
 struct of_ir_opc_info {
+	const char *name;
 	enum of_ir_instr_type type;
 	unsigned num_srcs;
 };

@@ -128,6 +128,8 @@ struct of_ir_shader {
 };
 
 struct of_ir_reg_info {
+	const char *name;
+
 	enum of_instr_src src_type;
 	enum of_instr_dst dst_type;
 
