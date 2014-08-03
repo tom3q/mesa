@@ -127,22 +127,6 @@ struct of_ir_shader {
 	const struct of_ir_reg_info *reg_info;
 };
 
-struct of_ir_reg_info {
-	const char *name;
-
-	enum of_instr_src src_type;
-	enum of_instr_dst dst_type;
-
-	unsigned num_reads;
-	unsigned num_regs;
-
-	bool writable :1;
-	bool readable :1;
-	bool scalar :1;
-	bool al_addr :1;
-	bool a0_addr :1;
-};
-
 int of_ir_to_ssa(struct of_ir_shader *shader);
 
 #endif /* OF_IR_PRIV_H_ */
