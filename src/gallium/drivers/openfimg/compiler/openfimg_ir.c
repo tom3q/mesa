@@ -150,6 +150,12 @@ static const struct of_ir_reg_info ps_reg_info[OF_IR_NUM_REG_TYPES] = {
 	OF_IR_REG_W(A0,     1, false, false),
 };
 
+const struct of_ir_reg_info *
+of_ir_get_reg_info(struct of_ir_shader *shader, enum of_ir_reg_type reg)
+{
+	return &shader->reg_info[reg];
+}
+
 /*
  * Utility functions.
  */
