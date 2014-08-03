@@ -134,4 +134,6 @@ struct of_ir_reg_info {
 	bool a0_addr :1;
 };
 
+int of_ir_to_ssa(struct of_ir_shader *shader);
+
 #endif /* OF_IR_PRIV_H_ */
