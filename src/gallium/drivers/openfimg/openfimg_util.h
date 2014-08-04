@@ -200,6 +200,60 @@ void of_heap_destroy(struct of_heap *heap);
 void *of_heap_alloc(struct of_heap *heap, int sz);
 
 /*
+ * Bitmap helpers
+ */
+
+#define OF_BITMAP_BITS_PER_WORD		(8 * sizeof(uint32_t))
+#define OF_BITMAP_WORDS_FOR_BITS(bits)	\
+	(((bits) + OF_BITMAP_BITS_PER_WORD + 1) / OF_BITMAP_BITS_PER_WORD)
+
+unsigned of_bitmap_find_next_set(uint32_t *words, unsigned size,
+				 unsigned index);
+
+static INLINE unsigned of_bitmap_find_first_set(uint32_t *words, unsigned size)
+{
+	return of_bitmap_find_next_set(words, size, 0);
+}
+
+#define OF_BITMAP_FOR_EACH_SET_BIT(bit, words, size)			\
+	for (bit = of_bitmap_find_first_set(words, size);		\
+	     bit != -1U;						\
+	     bit = of_bitmap_find_next_set(words, size, bit + 1))
+
+static INLINE unsigned of_bitmap_get(const uint32_t *words, unsigned index)
+{
+	unsigned word = index / OF_BITMAP_BITS_PER_WORD;
+	unsigned bit  = index % OF_BITMAP_BITS_PER_WORD;
+
+	return (words[word] >> bit) & 1;
+}
+
+static INLINE void of_bitmap_set(uint32_t *words, unsigned index)
+{
+	unsigned word = index / OF_BITMAP_BITS_PER_WORD;
+	unsigned bit  = index % OF_BITMAP_BITS_PER_WORD;
+
+	words[word] |= (1 << bit);
+}
+
+static INLINE void of_bitmap_clear(uint32_t *words, unsigned index)
+{
+	unsigned word = index / OF_BITMAP_BITS_PER_WORD;
+	unsigned bit  = index % OF_BITMAP_BITS_PER_WORD;
+
+	words[word] &= ~(1 << bit);
+}
+
+static INLINE void of_bitmap_or(uint32_t *dst, const uint32_t *src1,
+				const uint32_t *src2, unsigned size)
+{
+	unsigned num_words = OF_BITMAP_WORDS_FOR_BITS(size);
+
+	while (num_words--)
+		*(dst++) = *(src1++) | *(src2++);
+}
+
+/*
  * List helpers
  */
 

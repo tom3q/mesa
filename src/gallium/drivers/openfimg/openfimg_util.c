@@ -505,3 +505,30 @@ of_heap_destroy(struct of_heap *heap)
 	FREE(heap->slices);
 	FREE(heap);
 }
+
+/*
+ * Bitmap helpers
+ */
+
+unsigned
+of_bitmap_find_next_set(uint32_t *words, unsigned size, unsigned index)
+{
+	unsigned word = index / OF_BITMAP_BITS_PER_WORD;
+	unsigned bit  = index % OF_BITMAP_BITS_PER_WORD;
+	unsigned offset = word * OF_BITMAP_BITS_PER_WORD;
+	uint32_t wordval;
+
+	if (index >= size)
+		return -1U;
+
+	wordval = words[word] & ~((1U << bit) - 1);
+	while (offset < size) {
+		if (wordval)
+			return offset + ffs(wordval) - 1;
+		++word;
+		offset += OF_BITMAP_BITS_PER_WORD;
+		wordval = words[word];
+	}
+
+	return -1U;
+}
