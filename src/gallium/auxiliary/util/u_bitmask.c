@@ -276,7 +276,9 @@ util_bitmask_get_next_index(struct util_bitmask *bm,
 {
    unsigned word = index / UTIL_BITMASK_BITS_PER_WORD;
    unsigned bit  = index % UTIL_BITMASK_BITS_PER_WORD;
+   unsigned offset = word * UTIL_BITMASK_BITS_PER_WORD;
    util_bitmask_word mask = 1 << bit;
+   util_bitmask_word wordval;
 
    if(index < bm->filled) {
       assert(bm->words[word] & mask);
@@ -287,23 +289,16 @@ util_bitmask_get_next_index(struct util_bitmask *bm,
       return UTIL_BITMASK_INVALID_INDEX;
    }
 
+   wordval = bm->words[word];
+   wordval &= ~(mask - 1);
+
    /* Do a linear search */
    while(word < bm->size / UTIL_BITMASK_BITS_PER_WORD) {
-      while(bit < UTIL_BITMASK_BITS_PER_WORD) {
-         if(bm->words[word] & mask) {
-            if(index == bm->filled) {
-               ++bm->filled;
-               assert(bm->filled <= bm->size);
-            }
-            return index;
-         }
-         ++index;
-         ++bit;
-         mask <<= 1;
-      }
+      if (wordval)
+         return offset + ffs(wordval) - 1;
       ++word;
-      bit = 0;
-      mask = 1;
+      offset += UTIL_BITMASK_BITS_PER_WORD;
+      wordval = bm->words[word];
    }
    
    return UTIL_BITMASK_INVALID_INDEX;
