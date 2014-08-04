@@ -100,9 +100,56 @@ dep_rep_count(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 		node->ssa.repeat_number =
 				node->depart_repeat.region->ssa.repeat_count++;
 		break;
+	case OF_IR_NODE_IF_THEN:
+		node->ssa.depart_count = 2; /* To make PHI insertion easier. */
+		break;
 	default:
 		break;
 	}
+}
+
+struct of_ir_phi {
+	struct list_head list;
+	unsigned dst;
+	unsigned src[];
+};
+
+static void
+make_trivials(struct of_ir_ssa *ssa, struct list_head *list, uint32_t *vars,
+	      unsigned count)
+{
+	struct of_ir_phi *phi;
+	unsigned bit;
+	unsigned i;
+
+	OF_BITMAP_FOR_EACH_SET_BIT(bit, vars, ssa->vars_bitmap_bits) {
+		phi = of_heap_alloc(ssa->heap, sizeof(*phi)
+					+ count * sizeof(*phi->src));
+		phi->dst = bit;
+		for (i = 0; i < count; ++i)
+			phi->src[i] = bit;
+		list_addtail(&phi->list, list);
+	}
+}
+
+static void
+insert_phi(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child;
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		insert_phi(ssa, child);
+
+	/* Handles if_then and region nodes. */
+	if (node->ssa.depart_count > 1)
+		make_trivials(ssa, &node->ssa.phis,
+				node->ssa.vars_defined, node->ssa.depart_count);
+
+	/* Handles region nodes with repeat subnodes. */
+	if (node->ssa.repeat_count)
+		make_trivials(ssa, &node->ssa.loop_phis,
+				node->ssa.vars_defined,
+				node->ssa.repeat_count + 1);
 }
 
 static void
@@ -173,6 +220,7 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 		init_nodes(ssa, node);
 		variables_defined(ssa, node);
 		dep_rep_count(ssa, node);
+		insert_phi(ssa, node);
 	}
 
 	of_ir_dump_ast(shader, dump_ssa_data, ssa);
