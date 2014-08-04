@@ -98,6 +98,13 @@ struct of_ir_ast_node {
 		} list;
 	};
 
+	union {
+		struct {
+			uint32_t *vars_defined;
+		} ssa;
+		/* Data private to single stage of processing. */
+	};
+
 	/** Shader to which the AST node belongs. */
 	struct of_ir_shader *shader;
 
