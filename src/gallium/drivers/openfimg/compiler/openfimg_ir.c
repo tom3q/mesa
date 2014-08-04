@@ -598,7 +598,7 @@ dump_list(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 
 static void
 dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
-	  unsigned level)
+	  unsigned level, dump_ast_callback_t extra, void *extra_data)
 {
 	struct of_ir_ast_node *child;
 
@@ -636,20 +636,24 @@ dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 		assert(0);
 	}
 
+	if (extra)
+		extra(shader, node, level, extra_data);
+
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		dump_node(shader, child, level + 4);
+		dump_node(shader, child, level + 4, extra, extra_data);
 
 	if (!LIST_IS_EMPTY(&node->nodes))
 		_debug_printf("%*s}\n", level, "");
 }
 
-static void
-dump_ast(struct of_ir_shader *shader)
+void
+of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
+	       void *extra_data)
 {
 	struct of_ir_ast_node *node;
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list)
-		dump_node(shader, node, 0);
+		dump_node(shader, node, 0, extra, extra_data);
 }
 
 /*
@@ -840,12 +844,12 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 	}
 
 	DBG("AST (pre-clean)");
-	dump_ast(shader);
+	of_ir_dump_ast(shader, NULL, NULL);
 
 	clean_ast(shader);
 
 	DBG("AST (post-clean/pre-ssa)");
-	dump_ast(shader);
+	of_ir_dump_ast(shader, NULL, NULL);
 
 	ret = of_ir_to_ssa(shader);
 	if (ret) {
