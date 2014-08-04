@@ -157,24 +157,6 @@ of_ir_get_reg_info(struct of_ir_shader *shader, enum of_ir_reg_type reg)
 }
 
 /*
- * Utility functions.
- */
-
-/*
- * Simple allocator to carve allocations out of an up-front allocated heap,
- * so that we can free everything easily in one shot.
- */
-static void *
-of_ir_alloc(struct of_ir_shader *shader, int sz)
-{
-	void *ptr = &shader->heap[shader->heap_idx];
-
-	shader->heap_idx += align(sz, 4) / 4;
-
-	return ptr;
-}
-
-/*
  * Register-level operations.
  */
 
@@ -182,7 +164,7 @@ struct of_ir_register *
 of_ir_reg_create(struct of_ir_shader *shader, enum of_ir_reg_type type,
 		 unsigned num, const char *swizzle, unsigned flags)
 {
-	struct of_ir_register *reg = of_ir_alloc(shader, sizeof(*reg));
+	struct of_ir_register *reg = of_heap_alloc(shader->heap, sizeof(*reg));
 
 	DEBUG_MSG("%x, %d, %s", flags, num, swizzle);
 	reg->flags = flags;
@@ -196,7 +178,7 @@ of_ir_reg_create(struct of_ir_shader *shader, enum of_ir_reg_type type,
 struct of_ir_register *
 of_ir_reg_clone(struct of_ir_shader *shader, struct of_ir_register *src)
 {
-	struct of_ir_register *reg = of_ir_alloc(shader, sizeof(*reg));
+	struct of_ir_register *reg = of_heap_alloc(shader->heap, sizeof(*reg));
 
 	memcpy(reg, src, sizeof(*reg));
 
@@ -210,7 +192,9 @@ of_ir_reg_clone(struct of_ir_shader *shader, struct of_ir_register *src)
 struct of_ir_instruction *
 of_ir_instr_create(struct of_ir_shader *shader, enum of_instr_opcode opc)
 {
-	struct of_ir_instruction *instr = of_ir_alloc(shader, sizeof(*instr));
+	struct of_ir_instruction *instr;
+
+	instr = of_heap_alloc(shader->heap, sizeof(*instr));
 
 	DEBUG_MSG("%d", opc);
 	instr->opc = opc;
@@ -350,8 +334,9 @@ of_ir_instr_insert_templ(struct of_ir_shader *shader,
 struct of_ir_ast_node *
 of_ir_node_region(struct of_ir_shader *shader)
 {
-	struct of_ir_ast_node *node = of_ir_alloc(shader, sizeof(*node));
+	struct of_ir_ast_node *node;
 
+	node = of_heap_alloc(shader->heap, sizeof(*node));
 	node->shader = shader;
 
 	LIST_INITHEAD(&node->start_phis);
@@ -444,6 +429,8 @@ of_ir_shader_create(enum of_ir_shader_type type)
 	if (!shader)
 		return NULL;
 
+	shader->heap = of_heap_create();
+
 	LIST_INITHEAD(&shader->root_nodes);
 
 	if (type == OF_IR_SHADER_VERTEX)
@@ -459,7 +446,11 @@ of_ir_shader_create(enum of_ir_shader_type type)
 void
 of_ir_shader_destroy(struct of_ir_shader *shader)
 {
+	if (!shader)
+		return;
+
 	DEBUG_MSG("");
+	of_heap_destroy(shader->heap);
 	FREE(shader);
 }
 
