@@ -32,7 +32,8 @@
 #define ERROR_MSG(...)  DBG("ERROR: "__VA_ARGS__)
 
 typedef void (*dump_ast_callback_t)(struct of_ir_shader *,
-				    struct of_ir_ast_node *, unsigned, void *);
+				    struct of_ir_ast_node *, unsigned, bool,
+				    void *);
 
 /** Representation of single register usage. */
 struct of_ir_register {
