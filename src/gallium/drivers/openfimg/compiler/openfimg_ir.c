@@ -529,6 +529,11 @@ dump_list(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 {
 	struct of_ir_instruction *ins;
 
+	if (LIST_IS_EMPTY(&node->list.instrs)) {
+		_debug_printf("%*sNothing\n", level, "");
+		return;
+	}
+
 	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list)
 		dump_instruction(shader, ins, level);
 }
