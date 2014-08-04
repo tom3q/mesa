@@ -83,7 +83,30 @@ variables_defined(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 			vars_defined, ssa->vars_bitmap_bits);
 }
 
+static void
+dep_rep_count(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child;
 
+	if (node->type == OF_IR_NODE_REGION)
+		node->ssa.depart_count = node->ssa.repeat_count = 0;
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		dep_rep_count(ssa, child);
+
+	switch (node->type) {
+	case OF_IR_NODE_DEPART:
+		node->ssa.depart_number =
+				node->depart_repeat.region->ssa.depart_count++;
+		break;
+	case OF_IR_NODE_REPEAT:
+		node->ssa.repeat_number =
+				node->depart_repeat.region->ssa.repeat_count++;
+		break;
+	default:
+		break;
+	}
+}
 
 static void
 dump_ssa_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
@@ -101,6 +124,23 @@ dump_ssa_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 		_debug_printf(" R%d", bit);
 	}
 	_debug_printf("\n");
+
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		_debug_printf("%*s# depart_count: %d\n",
+				level, "", node->ssa.depart_count);
+		_debug_printf("%*s# repeat_count: %d\n",
+				level, "", node->ssa.repeat_count);
+		break;
+	case OF_IR_NODE_DEPART:
+		_debug_printf("%*s# depart_number: %d\n",
+				level, "", node->ssa.depart_number);
+		break;
+	case OF_IR_NODE_REPEAT:
+		_debug_printf("%*s# repeat_number: %d\n",
+				level, "", node->ssa.repeat_number);
+		break;
+	}
 }
 
 int
@@ -118,8 +158,10 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 	ssa->vars_bitmap_size = OF_BITMAP_WORDS_FOR_BITS(ssa->vars_bitmap_bits)
 				* sizeof(uint32_t);
 
-	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list)
+	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
 		variables_defined(ssa, node);
+		dep_rep_count(ssa, node);
+	}
 
 	of_ir_dump_ast(shader, dump_ssa_data, ssa);
 

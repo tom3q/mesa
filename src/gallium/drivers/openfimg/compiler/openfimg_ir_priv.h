@@ -101,6 +101,10 @@ struct of_ir_ast_node {
 	union {
 		struct {
 			uint32_t *vars_defined;
+			unsigned depart_count;
+			unsigned depart_number;
+			unsigned repeat_count;
+			unsigned repeat_number;
 		} ssa;
 		/* Data private to single stage of processing. */
 	};
