@@ -118,7 +118,10 @@ struct of_ir_shader {
 	/** Heap to allocate IR data from. */
 	struct of_heap *heap;
 
-	unsigned num_temporaries;
+	struct {
+		unsigned num_vars;
+	} stats;
+
 	const struct of_ir_reg_info *reg_info;
 };
 
