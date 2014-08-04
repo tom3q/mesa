@@ -167,8 +167,23 @@ init_nodes(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 }
 
 static void
-dump_ssa_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
-	      unsigned level, void *data)
+dump_phis(struct list_head *list, unsigned count, unsigned level)
+{
+	struct of_ir_phi *phi;
+	unsigned i;
+
+	LIST_FOR_EACH_ENTRY(phi, list, list) {
+		_debug_printf("%*sR%d = PHI(R%d",
+				level, "", phi->dst, phi->src[0]);
+		for (i = 1; i < count; ++i)
+			_debug_printf(", R%d", phi->src[i]);
+		_debug_printf(")\n");
+	}
+}
+
+static void
+dump_ssa_data_pre(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+		  unsigned level, void *data)
 {
 	struct of_ir_ssa *ssa = data;
 	unsigned bit;
@@ -183,22 +198,44 @@ dump_ssa_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	}
 	_debug_printf("\n");
 
-	switch (node->type) {
-	case OF_IR_NODE_REGION:
+	if (node->ssa.depart_count)
 		_debug_printf("%*s# depart_count: %d\n",
 				level, "", node->ssa.depart_count);
+	if (node->ssa.repeat_count)
 		_debug_printf("%*s# repeat_count: %d\n",
 				level, "", node->ssa.repeat_count);
-		break;
-	case OF_IR_NODE_DEPART:
+	if (node->type == OF_IR_NODE_DEPART)
 		_debug_printf("%*s# depart_number: %d\n",
 				level, "", node->ssa.depart_number);
-		break;
-	case OF_IR_NODE_REPEAT:
+	if (node->type == OF_IR_NODE_REPEAT)
 		_debug_printf("%*s# repeat_number: %d\n",
 				level, "", node->ssa.repeat_number);
-		break;
+	if (!LIST_IS_EMPTY(&node->ssa.loop_phis)) {
+		_debug_printf("%*s# loop_phis:\n", level + 4, "");
+		dump_phis(&node->ssa.loop_phis, node->ssa.repeat_count + 1,
+				level + 4);
 	}
+}
+
+static void
+dump_ssa_data_post(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+		   unsigned level, void *data)
+{
+	if (!LIST_IS_EMPTY(&node->ssa.phis)) {
+		_debug_printf("%*s# phis:\n", level + 4, "");
+		dump_phis(&node->ssa.phis, node->ssa.depart_count,
+				level + 4);
+	}
+}
+
+static void
+dump_ssa_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+	      unsigned level, bool post, void *data)
+{
+	if (post)
+		dump_ssa_data_post(shader, node, level, data);
+	else
+		dump_ssa_data_pre(shader, node, level, data);
 }
 
 int

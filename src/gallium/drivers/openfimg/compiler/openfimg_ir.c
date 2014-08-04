@@ -639,10 +639,13 @@ dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	}
 
 	if (extra)
-		extra(shader, node, level, extra_data);
+		extra(shader, node, level, false, extra_data);
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
 		dump_node(shader, child, level + 4, extra, extra_data);
+
+	if (extra)
+		extra(shader, node, level, true, extra_data);
 
 	if (!LIST_IS_EMPTY(&node->nodes))
 		_debug_printf("%*s}\n", level, "");
