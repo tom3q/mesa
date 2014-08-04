@@ -203,12 +203,6 @@ of_ir_reg_clone(struct of_ir_shader *shader, struct of_ir_register *src)
 	return reg;
 }
 
-void
-of_ir_reg_set_swizzle(struct of_ir_register *reg, const char *swizzle)
-{
-	memcpy(reg->swizzle, swizzle, sizeof(reg->swizzle));
-}
-
 /*
  * instruction-level operations.
  */
