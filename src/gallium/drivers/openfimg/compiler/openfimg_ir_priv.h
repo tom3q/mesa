@@ -70,11 +70,6 @@ struct of_ir_instruction {
 
 /** Representation of AST node. */
 struct of_ir_ast_node {
-	/** List of PHI() operators at the beginning of the block. */
-	struct list_head start_phis;
-	/** List of PHI() operators at the end of the block. */
-	struct list_head end_phis;
-
 	/** List of subnodes of the block. */
 	struct list_head nodes;
 	/** Number of instructions in the block. */
@@ -105,6 +100,10 @@ struct of_ir_ast_node {
 			unsigned depart_number;
 			unsigned repeat_count;
 			unsigned repeat_number;
+			/** PHI() operators at the end of the block. */
+			struct list_head phis;
+			/** PHI() operators at the beginning of the block. */
+			struct list_head loop_phis;
 		} ssa;
 		/* Data private to single stage of processing. */
 	};
