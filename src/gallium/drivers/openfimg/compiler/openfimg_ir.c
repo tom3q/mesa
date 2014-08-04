@@ -343,8 +343,6 @@ of_ir_node_region(struct of_ir_shader *shader)
 	node = of_heap_alloc(shader->heap, sizeof(*node));
 	node->shader = shader;
 
-	LIST_INITHEAD(&node->start_phis);
-	LIST_INITHEAD(&node->end_phis);
 	LIST_INITHEAD(&node->nodes);
 
 	list_addtail(&node->parent_list, &shader->root_nodes);
