@@ -88,10 +88,7 @@ struct of_ir_ast_node {
 		} if_then;
 		struct {
 			struct of_ir_ast_node *region;
-		} depart;
-		struct {
-			struct of_ir_ast_node *region;
-		} repeat;
+		} depart_repeat;
 		struct {
 			unsigned num_instrs;
 			struct list_head instrs;
