@@ -368,7 +368,7 @@ of_ir_node_depart(struct of_ir_shader *shader, struct of_ir_ast_node *region)
 	struct of_ir_ast_node *node = of_ir_node_region(shader);
 
 	node->type = OF_IR_NODE_DEPART;
-	node->depart.region = region;
+	node->depart_repeat.region = region;
 
 	return node;
 }
@@ -379,7 +379,7 @@ of_ir_node_repeat(struct of_ir_shader *shader, struct of_ir_ast_node *region)
 	struct of_ir_ast_node *node = of_ir_node_region(shader);
 
 	node->type = OF_IR_NODE_REPEAT;
-	node->repeat.region = region;
+	node->depart_repeat.region = region;
 
 	return node;
 }
@@ -609,10 +609,10 @@ dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	case OF_IR_NODE_DEPART:
 		if (LIST_IS_EMPTY(&node->nodes))
 			_debug_printf("%*sdepart %p\n",
-					level, "", node->depart.region);
+					level, "", node->depart_repeat.region);
 		else
 			_debug_printf("%*sdepart %p after {\n",
-					level, "", node->depart.region);
+					level, "", node->depart_repeat.region);
 		break;
 	case OF_IR_NODE_IF_THEN: {
 		char condition[16];
@@ -624,10 +624,10 @@ dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	case OF_IR_NODE_REPEAT:
 		if (LIST_IS_EMPTY(&node->nodes))
 			_debug_printf("%*srepeat %p\n",
-					level, "", node->repeat.region);
+					level, "", node->depart_repeat.region);
 		else
 			_debug_printf("%*srepeat %p after {\n",
-					level, "", node->repeat.region);
+					level, "", node->depart_repeat.region);
 		break;
 	case OF_IR_NODE_LIST:
 		dump_list(shader, node, level);
