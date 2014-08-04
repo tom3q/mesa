@@ -31,6 +31,9 @@
 #define WARN_MSG(...)   DBG("WARN:  "__VA_ARGS__)
 #define ERROR_MSG(...)  DBG("ERROR: "__VA_ARGS__)
 
+typedef void (*dump_ast_callback_t)(struct of_ir_shader *,
+				    struct of_ir_ast_node *, unsigned, void *);
+
 /** Representation of single register usage. */
 struct of_ir_register {
 	/** Register modifiers. */
@@ -118,6 +121,9 @@ struct of_ir_shader {
 	unsigned num_temporaries;
 	const struct of_ir_reg_info *reg_info;
 };
+
+void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
+		    void *extra_data);
 
 int of_ir_to_ssa(struct of_ir_shader *shader);
 
