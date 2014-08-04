@@ -229,6 +229,10 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	assert(info->type != OF_IR_CF);
 	assert(node || where);
 
+	if (instr->dst && instr->dst->type == OF_IR_REG_R)
+		shader->stats.num_vars = max(shader->stats.num_vars,
+						instr->dst->num);
+
 	++shader->num_instrs;
 
 	if (where) {
