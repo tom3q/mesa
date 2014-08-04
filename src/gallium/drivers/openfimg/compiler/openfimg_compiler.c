@@ -1194,7 +1194,7 @@ static void
 translate_bgnloop(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
-	struct of_ir_ast_node *parent, *region, *list;
+	struct of_ir_ast_node *parent, *region, *repeat, *list;
 
 	parent = of_ir_node_get_parent(ctx->current_node);
 
@@ -1203,9 +1203,13 @@ translate_bgnloop(struct of_compile_context *ctx,
 	of_ir_node_insert(parent, region);
 	node_stack_push(&ctx->loop_stack, region);
 
+	/* Insert repeat node to jump again to entry point of loop region. */
+	repeat = of_ir_node_repeat(ctx->shader, region);
+	of_ir_node_insert(region, repeat);
+
 	/* Create instruction list node. */
 	list = of_ir_node_list(ctx->shader);
-	of_ir_node_insert(region, list);
+	of_ir_node_insert(repeat, list);
 	ctx->current_node = list;
 }
 
@@ -1215,7 +1219,8 @@ translate_brk(struct of_compile_context *ctx,
 {
 	struct of_ir_ast_node *parent, *region, *depart, *list;
 
-	parent = of_ir_node_get_parent(ctx->current_node);
+	list = ctx->current_node;
+	parent = of_ir_node_get_parent(list);
 
 	/* Get the region node of last loop. */
 	region = node_stack_top(&ctx->loop_stack);
@@ -1223,6 +1228,7 @@ translate_brk(struct of_compile_context *ctx,
 	/* Insert depart node to jump to exit point of loop region. */
 	depart = of_ir_node_depart(ctx->shader, region);
 	of_ir_node_insert(parent, depart);
+	of_ir_node_insert(depart, list);
 
 	/*
 	 * Create instruction list node for unreachable instructions.
@@ -1242,18 +1248,15 @@ translate_endloop(struct of_compile_context *ctx,
 {
 	struct of_ir_ast_node *parent, *region, *repeat, *list;
 
-	region = of_ir_node_get_parent(ctx->current_node);
+	repeat = of_ir_node_get_parent(ctx->current_node);
+	region = of_ir_node_get_parent(repeat);
+	parent = of_ir_node_get_parent(region);
 
-	/* Insert repeat node to jump again to entry point of loop region. */
-	repeat = of_ir_node_repeat(ctx->shader, region);
-	of_ir_node_insert(region, repeat);
-
-	/* Drop loop region from both stacks. */
+	/* Drop loop region from the stack. */
 	node_stack_pop(&ctx->loop_stack);
 
 	/* Create instruction list node. */
 	list = of_ir_node_list(ctx->shader);
-	parent = of_ir_node_get_parent(region);
 	of_ir_node_insert(parent, list);
 	ctx->current_node = list;
 }
