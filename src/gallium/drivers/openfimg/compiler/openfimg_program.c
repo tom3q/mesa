@@ -195,30 +195,6 @@ overridden:
 	return 0;
 }
 
-static void
-emit_dummy_shader(struct of_context *ctx, struct of_shader_stateobj *so)
-{
-	struct fd_ringbuffer *ring = ctx->ring;
-	unsigned num_attribs;
-	uint32_t *pkt;
-
-	if (so->type == SHADER_FRAGMENT) {
-		/* Workaround for HW bug. */
-		num_attribs = 8;
-	} else {
-		num_attribs = so->num_inputs;
-	}
-
-	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM);
-	OUT_RING(ring, (so->type << 8) | num_attribs);
-	OUT_RING(ring, 4 * (so->first_immediate + so->num_immediates));
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	END_PKT(ring, pkt);
-}
-
 void
 of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 {
