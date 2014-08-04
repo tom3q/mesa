@@ -25,6 +25,7 @@
 #define OF_IR_PRIV_H_
 
 #include "openfimg_ir.h"
+#include "openfimg_util.h"
 
 #define DEBUG_MSG(...)  do { if (0) DBG(__VA_ARGS__); } while (0)
 #define WARN_MSG(...)   DBG("WARN:  "__VA_ARGS__)
@@ -115,9 +116,7 @@ struct of_ir_shader {
 	struct list_head root_nodes;
 
 	/** Heap to allocate IR data from. */
-	uint32_t heap[100 * 4096];
-	/** Index of first unused dword on the heap. */
-	unsigned heap_idx;
+	struct of_heap *heap;
 
 	unsigned num_temporaries;
 	const struct of_ir_reg_info *reg_info;

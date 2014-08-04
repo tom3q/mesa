@@ -190,6 +190,16 @@ pipe_surface_format(struct pipe_surface *psurf)
 }
 
 /*
+ * Private memory heap
+ */
+
+struct of_heap;
+
+struct of_heap *of_heap_create(void);
+void of_heap_destroy(struct of_heap *heap);
+void *of_heap_alloc(struct of_heap *heap, int sz);
+
+/*
  * List helpers
  */
 
