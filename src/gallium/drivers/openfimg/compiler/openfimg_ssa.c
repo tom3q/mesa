@@ -88,9 +88,6 @@ dep_rep_count(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child;
 
-	if (node->type == OF_IR_NODE_REGION)
-		node->ssa.depart_count = node->ssa.repeat_count = 0;
-
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
 		dep_rep_count(ssa, child);
 
@@ -106,6 +103,20 @@ dep_rep_count(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 	default:
 		break;
 	}
+}
+
+static void
+init_nodes(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child;
+
+	memset(&node->ssa, 0, sizeof(node->ssa));
+
+	LIST_INITHEAD(&node->ssa.phis);
+	LIST_INITHEAD(&node->ssa.loop_phis);
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		init_nodes(ssa, child);
 }
 
 static void
@@ -159,6 +170,7 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 				* sizeof(uint32_t);
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
+		init_nodes(ssa, node);
 		variables_defined(ssa, node);
 		dep_rep_count(ssa, node);
 	}
