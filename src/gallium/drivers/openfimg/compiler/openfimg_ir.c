@@ -203,20 +203,6 @@ of_ir_reg_clone(struct of_ir_shader *shader, struct of_ir_register *src)
 	return reg;
 }
 
-struct of_ir_register *
-of_ir_reg_temporary(struct of_ir_shader *shader)
-{
-	return of_ir_reg_create(shader, OF_IR_REG_R,
-				32 + shader->num_temporaries++, "xyzw", 0);
-}
-
-struct of_ir_register *
-of_ir_reg_predicate(struct of_ir_shader *shader)
-{
-	/* TODO: Support for remaining predicate registers. */
-	return of_ir_reg_create(shader, OF_IR_REG_P, 0, "xyzw", 0);
-}
-
 void
 of_ir_reg_set_swizzle(struct of_ir_register *reg, const char *swizzle)
 {

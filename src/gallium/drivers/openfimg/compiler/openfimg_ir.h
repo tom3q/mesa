@@ -166,8 +166,6 @@ struct of_ir_register *of_ir_reg_create(struct of_ir_shader *shader,
 					const char *swizzle, unsigned flags);
 struct of_ir_register *of_ir_reg_clone(struct of_ir_shader *shader,
 				       struct of_ir_register *reg);
-struct of_ir_register *of_ir_reg_temporary(struct of_ir_shader *shader);
-struct of_ir_register *of_ir_reg_predicate(struct of_ir_shader *shader);
 void of_ir_reg_set_swizzle(struct of_ir_register *reg, const char *swizzle);
 
 struct of_ir_instruction *of_ir_instr_create(struct of_ir_shader *shader,

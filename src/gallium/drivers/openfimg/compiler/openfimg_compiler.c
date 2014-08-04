@@ -287,6 +287,21 @@ get_src_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst,
 	return of_ir_reg_create(ctx->shader, type, num, swiz, flags);
 }
 
+static struct of_ir_register *
+get_temporary(struct of_compile_context *ctx)
+{
+	return of_ir_reg_create(ctx->shader, OF_IR_REG_R,
+				ctx->num_regs[TGSI_FILE_TEMPORARY]++,
+				"xyzw", 0);
+}
+
+static struct of_ir_register *
+get_predicate(struct of_compile_context *ctx)
+{
+	/* TODO: Support for remaining predicate registers. */
+	return of_ir_reg_create(ctx->shader, OF_IR_REG_P, 0, "xyzw", 0);
+}
+
 /* TODO: Implement immediate coalescing. */
 static struct of_ir_register *
 get_immediate(struct of_compile_context *ctx, unsigned dim, const float *vals)
@@ -445,7 +460,7 @@ translate_tex(struct of_compile_context *ctx,
 
 		/* tmp.x___ = 1 / src0.wwww */
 		proj[0].opc = OF_OP_RCP;
-		proj[0].dst.reg = of_ir_reg_temporary(ctx->shader);
+		proj[0].dst.reg = get_temporary(ctx);
 		proj[0].dst.mask = "x___";
 		proj[0].src[0].reg = get_src_reg(ctx, inst, 0);
 		proj[0].src[0].swizzle = "wwww";
@@ -494,7 +509,7 @@ translate_lrp(struct of_compile_context *ctx,
 
 	/* tmp = -((1 - src0) * src2) = -src2 + src0 * src2 */
 	instrs[0].opc = OF_OP_MAD;
-	instrs[0].dst.reg = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 2);
 	instrs[0].src[1].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[2].reg = get_src_reg(ctx, inst, 2);
@@ -526,7 +541,7 @@ translate_trig(struct of_compile_context *ctx,
 
 	/* tmp.xz = src0.xx * consts1.zz + consts0.zw */
 	instrs[0].opc = OF_OP_MAD;
-	instrs[0].dst.reg = tmp = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].dst.mask = "x_z_";
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[0].swizzle = "xxxx";
@@ -659,7 +674,7 @@ translate_lit(struct of_compile_context *ctx,
 	struct of_ir_register *tmp, *consts1;
 
 	instrs[0].opc = OF_OP_MAX;
-	instrs[0].dst.reg = tmp = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].dst.mask = "xy_w";
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[0].swizzle = "xyyw";
@@ -746,7 +761,7 @@ translate_clamp(struct of_compile_context *ctx,
 	memset(instrs, 0, sizeof(instrs));
 
 	instrs[0].opc = OF_OP_MAX;
-	instrs[0].dst.reg = tmp = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[1].reg = get_src_reg(ctx, inst, 1);
 
@@ -770,14 +785,14 @@ translate_round(struct of_compile_context *ctx,
 	memset(instrs, 0, sizeof(instrs));
 
 	instrs[0].opc = OF_OP_ADD;
-	instrs[0].dst.reg = tmp1 = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = tmp1 = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[0].flags = OF_IR_REG_ABS;
 	instrs[0].src[1].reg = get_immediate(ctx, 1, &const_half);
 	instrs[0].src[1].swizzle = "xxxx";
 
 	instrs[1].opc = OF_OP_FRC;
-	instrs[1].dst.reg = tmp2 = of_ir_reg_temporary(ctx->shader);
+	instrs[1].dst.reg = tmp2 = get_temporary(ctx);
 	instrs[1].src[0].reg = of_ir_reg_clone(ctx->shader, tmp1);
 
 	instrs[2].opc = OF_OP_ADD;
@@ -806,7 +821,7 @@ translate_xpd(struct of_compile_context *ctx,
 	struct of_ir_register *tmp;
 
 	instrs[0].opc = OF_OP_MUL;
-	instrs[0].dst.reg = tmp = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].dst.mask = "xyz_";
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 1);
 	instrs[0].src[0].swizzle = "yzxx";
@@ -859,7 +874,7 @@ translate_ssg(struct of_compile_context *ctx,
 	struct of_ir_register *tmp, *const0;
 
 	instrs[0].opc = OF_OP_CMP;
-	instrs[0].dst.reg = tmp = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[1].reg = const0 = get_immediate(ctx, 2, zero_one);
 	instrs[0].src[1].swizzle = "yyyy";
@@ -887,7 +902,7 @@ translate_sne_seq(struct of_compile_context *ctx,
 	struct of_ir_register *tmp, *const0;
 
 	instrs[0].opc = OF_OP_ADD;
-	instrs[0].dst.reg = tmp = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[1].reg = get_src_reg(ctx, inst, 1);
 	instrs[0].src[1].flags = OF_IR_REG_NEGATE;
@@ -962,7 +977,7 @@ translate_trunc(struct of_compile_context *ctx,
 	struct of_ir_register *tmp;
 
 	instrs[0].opc = OF_OP_FLR;
-	instrs[0].dst.reg = tmp = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[0].flags = OF_IR_REG_ABS;
 
@@ -985,7 +1000,7 @@ translate_ceil(struct of_compile_context *ctx,
 	struct of_ir_register *tmp;
 
 	instrs[0].opc = OF_OP_FLR;
-	instrs[0].dst.reg = tmp = of_ir_reg_temporary(ctx->shader);
+	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[0].flags = OF_IR_REG_NEGATE;
 
@@ -1031,7 +1046,7 @@ translate_if(struct of_compile_context *ctx,
 	/* Emit condition check. */
 	memset(instrs, 0, sizeof(instrs));
 	instrs[0].opc = OF_OP_SETP_EQ;
-	instrs[0].dst.reg = pred = of_ir_reg_predicate(ctx->shader);
+	instrs[0].dst.reg = pred = get_predicate(ctx);
 	instrs[0].dst.mask = "x___";
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[0].swizzle = "xxxx";
