@@ -27,6 +27,7 @@
 
 #include "pipe/p_defines.h"
 #include "util/u_format.h"
+#include "util/u_memory.h"
 
 #include "openfimg_util.h"
 
@@ -418,4 +419,89 @@ of_hash_finish(uint32_t hash)
 	hash += (hash << 15);
 
 	return hash;
+}
+
+/*
+ * Simple heap allocator than can be freed in one go, to simplify freeing
+ * of objects. Can allocate up to 4KiB per object, but efficient only for
+ * very small ones.
+ */
+
+#define OF_HEAP_SLICE_WORDS		1024
+#define OF_HEAP_INIT_SLICES		16
+
+struct of_heap {
+	uint32_t **slices;
+	unsigned slices_ptr;
+	unsigned num_slices;
+
+	uint32_t *cur;
+	unsigned cur_ptr;
+	unsigned cur_free;
+};
+
+static void
+of_heap_grow(struct of_heap *heap)
+{
+	uint32_t *slice;
+
+	if (heap->slices_ptr == heap->num_slices) {
+		unsigned old_size = heap->num_slices;
+		unsigned new_size = 2 * old_size;
+
+		if (!new_size)
+			new_size = OF_HEAP_INIT_SLICES;
+
+		heap->slices = REALLOC(heap->slices,
+					old_size * sizeof(*heap->slices),
+					new_size * sizeof(*heap->slices));
+		assert(heap->slices);
+		heap->num_slices = new_size;
+	}
+
+	slice = calloc(OF_HEAP_SLICE_WORDS, sizeof(*slice));
+	assert(slice);
+
+	heap->cur = slice;
+	heap->cur_ptr = 0;
+	heap->cur_free = OF_HEAP_SLICE_WORDS * sizeof(*slice);
+	heap->slices[heap->slices_ptr++] = slice;
+}
+
+void *
+of_heap_alloc(struct of_heap *heap, int sz)
+{
+	void *ptr;
+
+	sz = align(sz, sizeof(*heap->cur));
+
+	if (heap->cur_free < sz)
+		of_heap_grow(heap);
+
+	ptr = &heap->cur[heap->cur_ptr];
+	heap->cur_ptr += sz / sizeof(*heap->cur);
+	heap->cur_free -= sz;
+
+	return ptr;
+}
+
+struct of_heap *
+of_heap_create(void)
+{
+	struct of_heap *heap = CALLOC_STRUCT(of_heap);
+
+	assert(heap);
+	return heap;
+}
+
+void
+of_heap_destroy(struct of_heap *heap)
+{
+	unsigned s;
+
+	for (s = 0; s < heap->slices_ptr; ++s)
+		FREE(heap->slices[s]);
+
+	FREE(heap->slices);
+	FREE(heap);
 }
