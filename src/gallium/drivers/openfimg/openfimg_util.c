@@ -532,3 +532,40 @@ of_bitmap_find_next_set(uint32_t *words, unsigned size, unsigned index)
 
 	return -1U;
 }
+
+/*
+ * Simple growing stack
+ */
+
+void
+of_stack_grow(struct of_stack *stack)
+{
+	unsigned old_size = stack->size;
+	unsigned new_size = 2 * old_size;
+
+	if (!new_size)
+		new_size = stack->initial_size;
+
+	stack->buffer = REALLOC(stack->buffer, old_size, new_size);
+	stack->size = new_size;
+}
+
+struct of_stack *
+of_stack_create(unsigned element_size, unsigned initial_size)
+{
+	struct of_stack *stack = CALLOC_STRUCT(of_stack);
+
+	if (!stack)
+		return NULL;
+
+	stack->initial_size = initial_size * element_size;
+	stack->element_size = element_size;
+	return stack;
+}
+
+void
+of_stack_destroy(struct of_stack *stack)
+{
+	FREE(stack->buffer);
+	FREE(stack);
+}

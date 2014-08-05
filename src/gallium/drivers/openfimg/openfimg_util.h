@@ -254,6 +254,45 @@ static INLINE void of_bitmap_or(uint32_t *dst, const uint32_t *src1,
 }
 
 /*
+ * Simple growing stack
+ */
+
+struct of_stack {
+	void *buffer;
+	unsigned element_size;
+	unsigned initial_size;
+	unsigned size;
+	unsigned ptr;
+};
+
+void of_stack_grow(struct of_stack *stack);
+struct of_stack *of_stack_create(unsigned element_size, unsigned initial_size);
+void of_stack_destroy(struct of_stack *stack);
+
+static INLINE void *
+of_stack_push(struct of_stack *stack)
+{
+	stack->ptr += stack->element_size;
+	if (stack->ptr > stack->size)
+		of_stack_grow(stack);
+
+	return stack->buffer + stack->ptr;
+}
+
+static INLINE void *
+of_stack_pop(struct of_stack *stack)
+{
+	stack->ptr -= stack->element_size;
+	return stack->buffer + stack->ptr;
+}
+
+static INLINE void *
+of_stack_top(struct of_stack *stack)
+{
+	return stack->buffer + stack->ptr;
+}
+
+/*
  * List helpers
  */
 
