@@ -532,13 +532,17 @@ format_src_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 	       struct of_ir_register *reg)
 {
 	const struct of_ir_reg_info *info;
+	char ver_str[16] = "";
 
 	info = of_ir_get_reg_info(shader, reg->type);
 
-	snprintf(buf, maxlen, "%s%s%s%d.%.4s%s",
+	if (reg->ver)
+		snprintf(ver_str, sizeof(ver_str), ".%d", reg->ver);
+
+	snprintf(buf, maxlen, "%s%s%s%d%s.%.4s%s",
 			reg->flags & OF_IR_REG_NEGATE ? "-" : "",
 			reg->flags & OF_IR_REG_ABS ? "|" : "",
-			info->name, reg->num, reg->swizzle,
+			info->name, reg->num, ver_str, reg->swizzle,
 			reg->flags & OF_IR_REG_ABS ? "|" : "");
 }
 
@@ -547,10 +551,15 @@ format_dst_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 	       struct of_ir_register *reg)
 {
 	const struct of_ir_reg_info *info;
+	char ver_str[16] = "";
 
 	info = of_ir_get_reg_info(shader, reg->type);
 
-	snprintf(buf, maxlen, "%s%d.%.4s", info->name, reg->num, reg->swizzle);
+	if (reg->ver)
+		snprintf(ver_str, sizeof(ver_str), ".%d", reg->ver);
+
+	snprintf(buf, maxlen, "%s%d%s.%.4s", info->name, reg->num,
+			ver_str, reg->swizzle);
 }
 
 static void
@@ -559,7 +568,7 @@ dump_instruction(struct of_ir_shader *shader, struct of_ir_instruction *ins,
 {
 	const struct of_ir_opc_info *opc_info;
 	struct of_ir_register *dst, *src[3];
-	char dst_str[16], src_str[3][16];
+	char dst_str[32], src_str[3][32];
 	unsigned reg;
 
 	opc_info = of_ir_get_opc_info(ins->opc);
