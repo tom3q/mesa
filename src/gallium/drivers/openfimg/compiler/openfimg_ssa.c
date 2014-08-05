@@ -65,22 +65,25 @@ variables_defined(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
 		variables_defined(ssa, child);
 
-	if (node->type == OF_IR_NODE_DEPART || node->type == OF_IR_NODE_REPEAT)
-		return;
+	switch (node->type) {
+	case OF_IR_NODE_DEPART:
+	case OF_IR_NODE_REPEAT:
+		parent = node->depart_repeat.region;
+		LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+			of_bitmap_or(parent->ssa.vars_defined,
+					parent->ssa.vars_defined,
+					child->ssa.vars_defined, ssa->num_vars);
+		break;
 
-	if (node->type == OF_IR_NODE_LIST)
+	case OF_IR_NODE_LIST:
 		variables_defined_list(ssa, node);
+		break;
 
-	parent = node->parent;
-	if (!parent)
-		return;
-
-	if (parent->type == OF_IR_NODE_DEPART
-	    || parent->type == OF_IR_NODE_REPEAT)
-		parent = parent->depart_repeat.region;
-
-	of_bitmap_or(parent->ssa.vars_defined, parent->ssa.vars_defined,
-			vars_defined, ssa->vars_bitmap_bits);
+	default:
+		LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+			of_bitmap_or(vars_defined, vars_defined,
+					child->ssa.vars_defined, ssa->num_vars);
+	}
 }
 
 static void
