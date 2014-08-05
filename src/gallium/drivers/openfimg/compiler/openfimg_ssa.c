@@ -109,7 +109,7 @@ dep_rep_count(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 		break;
 	case OF_IR_NODE_REPEAT:
 		node->ssa.repeat_number =
-				node->depart_repeat.region->ssa.repeat_count++;
+				++node->depart_repeat.region->ssa.repeat_count;
 		break;
 	case OF_IR_NODE_IF_THEN:
 		node->ssa.depart_count = 2; /* To make PHI insertion easier. */
