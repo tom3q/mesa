@@ -45,6 +45,8 @@ struct of_ir_register {
 	char swizzle[4];
 	/* Register type. */
 	enum of_ir_reg_type type;
+	/** Variable version (temporaries only; used in SSA form) */
+	unsigned ver;
 };
 
 /** Representation of single instruction. */
