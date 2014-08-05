@@ -231,7 +231,7 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 
 	if (instr->dst && instr->dst->type == OF_IR_REG_R)
 		shader->stats.num_vars = max(shader->stats.num_vars,
-						instr->dst->num);
+						instr->dst->num + 1);
 
 	++shader->num_instrs;
 
