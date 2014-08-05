@@ -39,12 +39,6 @@
 
 #include "fimg_3dse.xml.h"
 
-struct of_node_stack {
-	struct of_ir_ast_node **stack;
-	unsigned size;
-	unsigned ptr;
-};
-
 struct of_compile_context {
 	const struct tgsi_token *tokens;
 
@@ -65,7 +59,7 @@ struct of_compile_context {
 	/* current shader */
 	struct of_ir_shader *shader;
 
-	struct of_node_stack loop_stack;
+	struct of_stack *loop_stack;
 	struct of_ir_ast_node *current_node;
 
 	/* for subroutines */
@@ -335,56 +329,28 @@ get_immediate(struct of_compile_context *ctx, unsigned dim, const float *vals)
  * Node stack
  */
 
-static void
-node_stack_push(struct of_node_stack *stack, struct of_ir_ast_node *node)
+static INLINE void
+node_stack_push(struct of_stack *stack, struct of_ir_ast_node *node)
 {
-	if (++stack->ptr == stack->size) {
-		unsigned new_size = 2 * (stack->size - 1) + 1;
+	struct of_ir_ast_node **ptr = of_stack_push(stack);
 
-		stack->stack = REALLOC(stack->stack,
-					stack->size * sizeof(*stack->stack),
-					new_size * sizeof(*stack->stack));
-		stack->size = new_size;
-	}
-
-	stack->stack[stack->ptr] = node;
+	*ptr = node;
 }
 
-static struct of_ir_ast_node *
-node_stack_pop(struct of_node_stack *stack)
+static INLINE struct of_ir_ast_node *
+node_stack_pop(struct of_stack *stack)
 {
-	return stack->stack[stack->ptr--];
+	struct of_ir_ast_node **ptr = of_stack_pop(stack);
+
+	return *ptr;
 }
 
-static struct of_ir_ast_node *
-node_stack_top(struct of_node_stack *stack)
+static INLINE struct of_ir_ast_node *
+node_stack_top(struct of_stack *stack)
 {
-	return stack->stack[stack->ptr];
-}
+	struct of_ir_ast_node **ptr = of_stack_top(stack);
 
-static int
-node_stack_init(struct of_node_stack *stack, unsigned start_size)
-{
-	++start_size;
-
-	stack->stack = CALLOC(start_size, sizeof(*stack->stack));
-	if (!stack->stack) {
-		DBG("failed to allocate memory for CF stack");
-		return -1;
-	}
-
-	stack->size = start_size;
-	stack->ptr = 0;
-
-	return 0;
-}
-
-static void
-node_stack_free(struct of_node_stack *stack)
-{
-	FREE(stack->stack);
-	stack->size = 0;
-	stack->stack = NULL;
+	return *ptr;
 }
 
 /*
@@ -1201,7 +1167,7 @@ translate_bgnloop(struct of_compile_context *ctx,
 	/* Create loop region and push it both to CF and loop stack. */
 	region = of_ir_node_region(ctx->shader);
 	of_ir_node_insert(parent, region);
-	node_stack_push(&ctx->loop_stack, region);
+	node_stack_push(ctx->loop_stack, region);
 
 	/* Insert repeat node to jump again to entry point of loop region. */
 	repeat = of_ir_node_repeat(ctx->shader, region);
@@ -1223,7 +1189,7 @@ translate_brk(struct of_compile_context *ctx,
 	parent = of_ir_node_get_parent(list);
 
 	/* Get the region node of last loop. */
-	region = node_stack_top(&ctx->loop_stack);
+	region = node_stack_top(ctx->loop_stack);
 
 	/* Insert depart node to jump to exit point of loop region. */
 	depart = of_ir_node_depart(ctx->shader, region);
@@ -1253,7 +1219,7 @@ translate_endloop(struct of_compile_context *ctx,
 	parent = of_ir_node_get_parent(region);
 
 	/* Drop loop region from the stack. */
-	node_stack_pop(&ctx->loop_stack);
+	node_stack_pop(ctx->loop_stack);
 
 	/* Create instruction list node. */
 	list = of_ir_node_list(ctx->shader);
@@ -1503,8 +1469,8 @@ compile_init(const struct tgsi_token *tokens)
 		goto fail;
 	}
 
-	ret = node_stack_init(&ctx->loop_stack, 4);
-	if (ret)
+	ctx->loop_stack = of_stack_create(sizeof(struct of_ir_ast_node *), 4);
+	if (!ctx->loop_stack)
 		goto fail;
 
 	ctx->subroutine_ht = util_hash_table_create(integer_hash,
@@ -1547,7 +1513,8 @@ compile_init(const struct tgsi_token *tokens)
 fail:
 	if (ctx->subroutine_ht)
 		util_hash_table_destroy(ctx->subroutine_ht);
-	node_stack_free(&ctx->loop_stack);
+	if (ctx->loop_stack)
+		of_stack_destroy(ctx->loop_stack);
 	if (ctx->shader)
 		of_ir_shader_destroy(ctx->shader);
 	FREE(ctx);
@@ -1558,7 +1525,7 @@ fail:
 static void
 compile_free(struct of_compile_context *ctx)
 {
-	node_stack_free(&ctx->loop_stack);
+	of_stack_destroy(ctx->loop_stack);
 	tgsi_parse_free(&ctx->parser);
 	FREE(ctx);
 }
