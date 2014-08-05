@@ -38,6 +38,13 @@ struct of_ir_ssa {
 	struct of_heap *heap;
 };
 
+struct of_ir_phi {
+	struct list_head list;
+	unsigned reg;
+	unsigned dst;
+	unsigned src[];
+};
+
 static void
 variables_defined_list(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 {
@@ -119,26 +126,17 @@ dep_rep_count(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 	}
 }
 
-struct of_ir_phi {
-	struct list_head list;
-	unsigned dst;
-	unsigned src[];
-};
-
 static void
 make_trivials(struct of_ir_ssa *ssa, struct list_head *list, uint32_t *vars,
 	      unsigned count)
 {
 	struct of_ir_phi *phi;
 	unsigned bit;
-	unsigned i;
 
 	OF_BITMAP_FOR_EACH_SET_BIT(bit, vars, ssa->num_vars) {
 		phi = of_heap_alloc(ssa->heap, sizeof(*phi)
 					+ count * sizeof(*phi->src));
-		phi->dst = bit;
-		for (i = 0; i < count; ++i)
-			phi->src[i] = bit;
+		phi->reg = bit;
 		list_addtail(&phi->list, list);
 	}
 }
@@ -184,10 +182,17 @@ dump_phis(struct list_head *list, unsigned count, unsigned level)
 	unsigned i;
 
 	LIST_FOR_EACH_ENTRY(phi, list, list) {
-		_debug_printf("%*sR%d = PHI(R%d",
-				level, "", phi->dst, phi->src[0]);
-		for (i = 1; i < count; ++i)
-			_debug_printf(", R%d", phi->src[i]);
+		_debug_printf("%*sR%d", level, "", phi->reg);
+		if (phi->dst)
+			_debug_printf(".%d", phi->dst);
+		_debug_printf(" = PHI(R%d", phi->reg);
+		if (phi->src[0])
+			_debug_printf(".%d", phi->src[0]);
+		for (i = 1; i < count; ++i) {
+			_debug_printf(", R%d", phi->reg);
+			if (phi->src[i])
+				_debug_printf(".%d", phi->src[i]);
+		}
 		_debug_printf(")\n");
 	}
 }
