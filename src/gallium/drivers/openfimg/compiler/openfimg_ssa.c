@@ -34,7 +34,7 @@
 struct of_ir_ssa {
 	struct of_ir_shader *shader;
 	unsigned vars_bitmap_size;
-	unsigned vars_bitmap_bits;
+	unsigned num_vars;
 	struct of_heap *heap;
 };
 
@@ -133,7 +133,7 @@ make_trivials(struct of_ir_ssa *ssa, struct list_head *list, uint32_t *vars,
 	unsigned bit;
 	unsigned i;
 
-	OF_BITMAP_FOR_EACH_SET_BIT(bit, vars, ssa->vars_bitmap_bits) {
+	OF_BITMAP_FOR_EACH_SET_BIT(bit, vars, ssa->num_vars) {
 		phi = of_heap_alloc(ssa->heap, sizeof(*phi)
 					+ count * sizeof(*phi->src));
 		phi->dst = bit;
@@ -204,7 +204,7 @@ dump_ssa_data_pre(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 
 	_debug_printf("%*s# vars_defined:", level, "");
 	OF_BITMAP_FOR_EACH_SET_BIT(bit, node->ssa.vars_defined,
-				   ssa->vars_bitmap_bits) {
+				   ssa->num_vars) {
 		_debug_printf(" R%d", bit);
 	}
 	_debug_printf("\n");
@@ -260,8 +260,8 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 	ssa = of_heap_alloc(heap, sizeof(*ssa));
 	ssa->heap = heap;
 	ssa->shader = shader;
-	ssa->vars_bitmap_bits = shader->stats.num_vars;
-	ssa->vars_bitmap_size = OF_BITMAP_WORDS_FOR_BITS(ssa->vars_bitmap_bits)
+	ssa->num_vars = shader->stats.num_vars;
+	ssa->vars_bitmap_size = OF_BITMAP_WORDS_FOR_BITS(ssa->num_vars)
 				* sizeof(uint32_t);
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
