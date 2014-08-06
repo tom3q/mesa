@@ -35,18 +35,25 @@ typedef void (*dump_ast_callback_t)(struct of_ir_shader *,
 				    struct of_ir_ast_node *, unsigned, bool,
 				    void *);
 
+struct of_ir_phi {
+	struct list_head list;
+	uint16_t reg;
+	uint16_t dst;
+	uint16_t src[];
+};
+
 /** Representation of single register usage. */
 struct of_ir_register {
 	/** Register modifiers. */
 	enum of_ir_reg_flags flags;
 	/* Register number. */
-	unsigned num;
+	uint16_t num;
 	/* Register channel swizzle(map)/mask. */
 	char swizzle[4];
 	/* Register type. */
 	enum of_ir_reg_type type;
 	/** Variable version (temporaries only; used in SSA form) */
-	unsigned ver;
+	uint16_t ver;
 };
 
 /** Representation of single instruction. */
@@ -142,5 +149,6 @@ void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 		    void *extra_data);
 
 int of_ir_to_ssa(struct of_ir_shader *shader);
+int of_ir_optimize(struct of_ir_shader *shader);
 
 #endif /* OF_IR_PRIV_H_ */
