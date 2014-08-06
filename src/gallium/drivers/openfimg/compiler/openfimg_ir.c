@@ -273,8 +273,8 @@ merge_swizzle(struct of_ir_register *reg, const char *swizzle)
 		case 'z': result[comp] = reg->swizzle[2]; break;
 		case 'w': result[comp] = reg->swizzle[3]; break;
 		default:
-			ERROR_MSG("invalid vector src swizzle: %s",
-					reg->swizzle);
+			ERROR_MSG("invalid vector src swizzle: %s", swizzle);
+			assert(0);
 		}
 	}
 
