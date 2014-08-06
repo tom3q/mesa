@@ -399,6 +399,7 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 	DBG("AST (post-ssa/pre-optimize)");
 	of_ir_dump_ast(shader, dump_ssa_data, ssa);
 
+	of_stack_destroy(ssa->renames_stack);
 	of_heap_destroy(heap);
 
 	return 0;
