@@ -130,9 +130,7 @@ enum of_ir_node_type {
 	OF_IR_NODE_IF_THEN,
 	OF_IR_NODE_DEPART,
 	OF_IR_NODE_REPEAT,
-	OF_IR_NODE_LIST,
-
-	OF_IR_NUM_CF_TYPES
+	OF_IR_NODE_LIST
 };
 
 struct of_ir_reg_info {
