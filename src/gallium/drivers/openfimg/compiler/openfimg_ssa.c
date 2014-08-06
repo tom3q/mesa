@@ -218,15 +218,13 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 	case OF_IR_NODE_DEPART:
 		old_renames = ssa->renames;
 		ssa->renames = of_stack_push(ssa->renames_stack);
-		memset(ssa->renames, 0, ssa->num_vars * sizeof(*ssa->renames));
-
-		region = node->depart_repeat.region;
-		LIST_FOR_EACH_ENTRY(phi, &region->ssa.phis, list)
-			ssa->renames[phi->reg] = old_renames[phi->reg];
+		memcpy(ssa->renames, old_renames,
+			ssa->num_vars * sizeof(*ssa->renames));
 
 		LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
 			make_ssa(ssa, child);
 
+		region = node->depart_repeat.region;
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.phis, list)
 			rename_phi_operand(ssa, node->ssa.depart_number, phi,
 						ssa->renames);
