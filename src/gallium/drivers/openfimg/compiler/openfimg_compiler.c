@@ -639,6 +639,8 @@ translate_lit(struct of_compile_context *ctx,
 	struct of_ir_instr_template instrs[7];
 	struct of_ir_register *tmp, *consts1;
 
+	memset(instrs, 0, sizeof(instrs));
+
 	instrs[0].opc = OF_OP_MAX;
 	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].dst.mask = "xy_w";
@@ -786,6 +788,8 @@ translate_xpd(struct of_compile_context *ctx,
 	struct of_ir_instr_template instrs[3];
 	struct of_ir_register *tmp;
 
+	memset(instrs, 0, sizeof(instrs));
+
 	instrs[0].opc = OF_OP_MUL;
 	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].dst.mask = "xyz_";
@@ -839,6 +843,8 @@ translate_ssg(struct of_compile_context *ctx,
 	struct of_ir_instr_template instrs[2];
 	struct of_ir_register *tmp, *const0;
 
+	memset(instrs, 0, sizeof(instrs));
+
 	instrs[0].opc = OF_OP_CMP;
 	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
@@ -866,6 +872,8 @@ translate_sne_seq(struct of_compile_context *ctx,
 {
 	struct of_ir_instr_template instrs[3];
 	struct of_ir_register *tmp, *const0;
+
+	memset(instrs, 0, sizeof(instrs));
 
 	instrs[0].opc = OF_OP_ADD;
 	instrs[0].dst.reg = tmp = get_temporary(ctx);
@@ -942,6 +950,8 @@ translate_trunc(struct of_compile_context *ctx,
 	struct of_ir_instr_template instrs[2];
 	struct of_ir_register *tmp;
 
+	memset(instrs, 0, sizeof(instrs));
+
 	instrs[0].opc = OF_OP_FLR;
 	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
@@ -964,6 +974,8 @@ translate_ceil(struct of_compile_context *ctx,
 {
 	struct of_ir_instr_template instrs[2];
 	struct of_ir_register *tmp;
+
+	memset(instrs, 0, sizeof(instrs));
 
 	instrs[0].opc = OF_OP_FLR;
 	instrs[0].dst.reg = tmp = get_temporary(ctx);
