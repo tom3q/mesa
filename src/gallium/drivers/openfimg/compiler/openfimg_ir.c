@@ -820,12 +820,6 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 	/* TODO: Implement predicate support */
 }
 #endif
-static int
-of_ir_optimize(struct of_ir_shader *shader)
-{
-	/* TODO */
-	return 0;
-}
 
 static int
 of_ir_assign_registers(struct of_ir_shader *shader)

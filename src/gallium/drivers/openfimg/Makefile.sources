@@ -15,5 +15,6 @@ COMPILER_SOURCES := \
 	compiler/openfimg_compiler.c \
 	compiler/openfimg_disasm.c \
 	compiler/openfimg_ir.c \
+	compiler/openfimg_optimize.c \
 	compiler/openfimg_program.c \
 	compiler/openfimg_ssa.c

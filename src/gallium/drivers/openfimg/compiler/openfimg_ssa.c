@@ -36,16 +36,10 @@ struct of_ir_ssa {
 	unsigned vars_bitmap_size;
 	unsigned num_vars;
 	struct of_heap *heap;
+	struct of_heap *shader_heap;
 	struct of_stack *renames_stack;
-	unsigned *renames;
-	unsigned *def_count;
-};
-
-struct of_ir_phi {
-	struct list_head list;
-	unsigned reg;
-	unsigned dst;
-	unsigned src[];
+	uint16_t *renames;
+	uint16_t *def_count;
 };
 
 static void
@@ -137,7 +131,7 @@ make_trivials(struct of_ir_ssa *ssa, struct list_head *list, uint32_t *vars,
 	unsigned bit;
 
 	OF_BITMAP_FOR_EACH_SET_BIT(bit, vars, ssa->num_vars) {
-		phi = of_heap_alloc(ssa->heap, sizeof(*phi)
+		phi = of_heap_alloc(ssa->shader_heap, sizeof(*phi)
 					+ count * sizeof(*phi->src));
 		phi->reg = bit;
 		list_addtail(&phi->list, list);
@@ -166,13 +160,13 @@ insert_phi(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 
 static void
 rename_phi_operand(struct of_ir_ssa *ssa, unsigned num, struct of_ir_phi *phi,
-		   unsigned *renames)
+		   uint16_t *renames)
 {
 	phi->src[num] = renames[phi->reg];
 }
 
 static void
-rename_lhs(struct of_ir_ssa *ssa, struct of_ir_phi *phi, unsigned *renames)
+rename_lhs(struct of_ir_ssa *ssa, struct of_ir_phi *phi, uint16_t *renames)
 {
 	phi->dst = ++ssa->def_count[phi->reg];
 	ssa->renames[phi->reg] = phi->dst;
@@ -206,7 +200,7 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *region;
 	struct of_ir_ast_node *child;
-	unsigned *old_renames;
+	uint16_t *old_renames;
 	struct of_ir_phi *phi;
 
 	switch (node->type) {
@@ -387,6 +381,7 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 	memset(ssa->renames, 0, ssa->num_vars * sizeof(*ssa->renames));
 	ssa->def_count = of_heap_alloc(ssa->heap, ssa->num_vars
 					* sizeof(*ssa->def_count));
+	ssa->shader_heap = shader->heap;
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
 		init_nodes(ssa, node);
