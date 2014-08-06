@@ -233,6 +233,11 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 		break;
 
 	case OF_IR_NODE_REPEAT:
+		old_renames = ssa->renames;
+		ssa->renames = of_stack_push(ssa->renames_stack);
+		memcpy(ssa->renames, old_renames,
+			ssa->num_vars * sizeof(*ssa->renames));
+
 		LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
 			make_ssa(ssa, child);
 
@@ -240,6 +245,8 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.loop_phis, list)
 			rename_phi_operand(ssa, node->ssa.repeat_number, phi,
 						ssa->renames);
+
+		ssa->renames = of_stack_pop(ssa->renames_stack);
 		break;
 
 	case OF_IR_NODE_LIST:
