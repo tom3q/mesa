@@ -179,14 +179,35 @@ rename_lhs(struct of_ir_ssa *ssa, struct of_ir_phi *phi, unsigned *renames)
 }
 
 static void
-make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+rename_operands(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
+
+	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
+		struct of_ir_register *dst = ins->dst;
+		unsigned i;
+
+		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
+			struct of_ir_register *src = ins->srcs[i];
+
+			if (src->type == OF_IR_REG_R)
+				src->ver = ssa->renames[src->num];
+		}
+
+		if (dst && dst->type == OF_IR_REG_R) {
+			dst->ver = ++ssa->def_count[dst->num];
+			ssa->renames[dst->num] = dst->ver;
+		}
+	}
+}
+
+static void
+make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+{
 	struct of_ir_ast_node *region;
 	struct of_ir_ast_node *child;
 	unsigned *old_renames;
 	struct of_ir_phi *phi;
-	unsigned i;
 
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
@@ -194,21 +215,36 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 			rename_phi_operand(ssa, 0, phi, ssa->renames);
 			rename_lhs(ssa, phi, ssa->renames);
 		}
-
-		LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-			make_ssa(ssa, child);
-
-		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			rename_lhs(ssa, phi, ssa->renames);
 		break;
 
 	case OF_IR_NODE_IF_THEN:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
 			rename_phi_operand(ssa, 0, phi, ssa->renames);
+		break;
 
-		LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-			make_ssa(ssa, child);
+	case OF_IR_NODE_DEPART:
+	case OF_IR_NODE_REPEAT:
+		old_renames = ssa->renames;
+		ssa->renames = of_stack_push(ssa->renames_stack);
+		memcpy(ssa->renames, old_renames,
+			ssa->num_vars * sizeof(*ssa->renames));
+		break;
 
+	case OF_IR_NODE_LIST:
+		rename_operands(ssa, node);
+		return;
+	}
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		make_ssa(ssa, child);
+
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
+			rename_lhs(ssa, phi, ssa->renames);
+		break;
+
+	case OF_IR_NODE_IF_THEN:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list) {
 			rename_phi_operand(ssa, 1, phi, ssa->renames);
 			rename_lhs(ssa, phi, ssa->renames);
@@ -216,14 +252,6 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 		break;
 
 	case OF_IR_NODE_DEPART:
-		old_renames = ssa->renames;
-		ssa->renames = of_stack_push(ssa->renames_stack);
-		memcpy(ssa->renames, old_renames,
-			ssa->num_vars * sizeof(*ssa->renames));
-
-		LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-			make_ssa(ssa, child);
-
 		region = node->depart_repeat.region;
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.phis, list)
 			rename_phi_operand(ssa, node->ssa.depart_number, phi,
@@ -233,43 +261,12 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 		break;
 
 	case OF_IR_NODE_REPEAT:
-		old_renames = ssa->renames;
-		ssa->renames = of_stack_push(ssa->renames_stack);
-		memcpy(ssa->renames, old_renames,
-			ssa->num_vars * sizeof(*ssa->renames));
-
-		LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-			make_ssa(ssa, child);
-
 		region = node->depart_repeat.region;
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.loop_phis, list)
 			rename_phi_operand(ssa, node->ssa.repeat_number, phi,
 						ssa->renames);
 
 		ssa->renames = of_stack_pop(ssa->renames_stack);
-		break;
-
-	case OF_IR_NODE_LIST:
-		LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
-			struct of_ir_register *dst = ins->dst;
-
-			for (i = 0; i < OF_IR_NUM_SRCS; ++i) {
-				struct of_ir_register *src = ins->srcs[i];
-
-				if (!src)
-					break;
-
-				if (src->type != OF_IR_REG_R)
-					continue;
-
-				src->ver = ssa->renames[src->num];
-			}
-
-			if (dst && dst->type == OF_IR_REG_R) {
-				dst->ver = ++ssa->def_count[dst->num];
-				ssa->renames[dst->num] = dst->ver;
-			}
-		}
 		break;
 
 	default:
