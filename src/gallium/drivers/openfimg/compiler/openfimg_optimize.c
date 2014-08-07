@@ -51,11 +51,6 @@ compare_variable(void *key1, void *key2)
 	return var1 - var2;
 }
 
-static inline uint32_t make_var(uint16_t reg, uint16_t ver)
-{
-	return (reg << 16) | ver;
-}
-
 static void
 eval_liveness_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 {
@@ -66,17 +61,23 @@ eval_liveness_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 
 		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
-			unsigned long ref_cnt;
-			unsigned long var;
+			unsigned comp;
 
-			if (src->type != OF_IR_REG_R)
+			if (src->type != OF_IR_REG_VAR)
 				continue;
 
-			var = make_var(src->num, src->ver);
-			ref_cnt = (unsigned long)util_hash_table_get(
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				unsigned long var = src->var[comp];
+				unsigned long ref_cnt;
+
+				if (!(src->mask & (1 << comp)))
+					continue;
+
+				ref_cnt = (unsigned long)util_hash_table_get(
 						opt->ref_ht, (void *)var);
-			util_hash_table_set(opt->ref_ht, (void *)var,
+				util_hash_table_set(opt->ref_ht, (void *)var,
 						(void *)(ref_cnt + 1));
+			}
 		}
 	}
 }
@@ -91,7 +92,7 @@ eval_liveness_phi(struct of_ir_optimize *opt, struct list_head *phis,
 		unsigned i;
 
 		for (i = 0; i < count; ++i) {
-			unsigned long var = make_var(phi->reg, phi->src[i]);
+			unsigned long var = phi->src[i];
 			unsigned long ref_cnt;
 
 			ref_cnt = (unsigned long)util_hash_table_get(
@@ -128,29 +129,46 @@ eliminate_dead_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
-		unsigned long dst_var;
+		bool referenced = false;
+		unsigned comp;
 		unsigned i;
 
-		if (!dst || dst->type != OF_IR_REG_R)
+		if (!dst || dst->type != OF_IR_REG_VAR)
 			continue;
 
-		dst_var = make_var(dst->num, dst->ver);
-		if (util_hash_table_get(opt->ref_ht, (void *)dst_var))
+		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+			unsigned long var = dst->var[comp];
+
+			if (!(dst->mask & (1 << comp)))
+				continue;
+
+			if (util_hash_table_get(opt->ref_ht, (void *)var)) {
+				referenced = true;
+				break;
+			}
+		}
+
+		if (referenced)
 			continue;
 
 		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
-			unsigned long ref_cnt;
-			unsigned long var;
 
-			if (src->type != OF_IR_REG_R)
+			if (src->type != OF_IR_REG_VAR)
 				continue;
 
-			var = make_var(src->num, src->ver);
-			ref_cnt = (unsigned long)util_hash_table_get(
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				unsigned long ref_cnt;
+				unsigned long var = src->var[comp];
+
+				if (!(src->mask & (1 << comp)))
+					continue;
+
+				ref_cnt = (unsigned long)util_hash_table_get(
 						opt->ref_ht, (void *)var);
-			util_hash_table_set(opt->ref_ht, (void *)var,
+				util_hash_table_set(opt->ref_ht, (void *)var,
 						(void *)(ref_cnt - 1));
+			}
 		}
 
 		ret = 1;
@@ -168,14 +186,14 @@ eliminate_dead_phi(struct of_ir_optimize *opt, struct list_head *phis,
 	int ret = 0;
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
-		unsigned long dst_var = make_var(phi->reg, phi->dst);
+		unsigned long dst_var = phi->dst;
 		unsigned i;
 
 		if (util_hash_table_get(opt->ref_ht, (void *)dst_var))
 			continue;
 
 		for (i = 0; i < count; ++i) {
-			unsigned long var = make_var(phi->reg, phi->src[i]);
+			unsigned long var = phi->src[i];
 			unsigned long ref_cnt;
 
 			ref_cnt = (unsigned long)util_hash_table_get(

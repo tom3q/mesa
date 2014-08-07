@@ -39,7 +39,7 @@ struct of_ir_ssa {
 	struct of_heap *shader_heap;
 	struct of_stack *renames_stack;
 	uint16_t *renames;
-	uint16_t *def_count;
+	uint16_t last_var;
 };
 
 static void
@@ -49,11 +49,17 @@ variables_defined_list(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
+		unsigned comp;
 
-		if (!dst || dst->type != OF_IR_REG_R)
+		if (!dst || dst->type != OF_IR_REG_VAR)
 			continue;
 
-		of_bitmap_set(node->ssa.vars_defined, dst->num);
+		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+			if (!(dst->mask & (1 << comp)))
+				continue;
+
+			of_bitmap_set(node->ssa.vars_defined, dst->var[comp]);
+		}
 	}
 }
 
@@ -129,11 +135,15 @@ make_trivials(struct of_ir_ssa *ssa, struct list_head *list, uint32_t *vars,
 {
 	struct of_ir_phi *phi;
 	unsigned bit;
+	unsigned src;
 
 	OF_BITMAP_FOR_EACH_SET_BIT(bit, vars, ssa->num_vars) {
 		phi = of_heap_alloc(ssa->shader_heap, sizeof(*phi)
 					+ count * sizeof(*phi->src));
 		phi->reg = bit;
+		phi->dst = bit;
+		for (src = 0; src < count; ++src)
+			phi->src[src] = bit;
 		list_addtail(&phi->list, list);
 	}
 }
@@ -168,7 +178,7 @@ rename_phi_operand(struct of_ir_ssa *ssa, unsigned num, struct of_ir_phi *phi,
 static void
 rename_lhs(struct of_ir_ssa *ssa, struct of_ir_phi *phi, uint16_t *renames)
 {
-	phi->dst = ++ssa->def_count[phi->reg];
+	phi->dst = ssa->last_var++;
 	ssa->renames[phi->reg] = phi->dst;
 }
 
@@ -179,18 +189,33 @@ rename_operands(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
+		unsigned comp;
 		unsigned i;
 
 		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
 
-			if (src->type == OF_IR_REG_R)
-				src->ver = ssa->renames[src->num];
+			if (src->type != OF_IR_REG_VAR)
+				continue;
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				if (!(src->mask & (1 << comp)))
+					continue;
+				src->var[comp] = ssa->renames[src->var[comp]];
+			}
 		}
 
-		if (dst && dst->type == OF_IR_REG_R) {
-			dst->ver = ++ssa->def_count[dst->num];
-			ssa->renames[dst->num] = dst->ver;
+		if (!dst || dst->type != OF_IR_REG_VAR)
+			continue;
+
+		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+			uint16_t var = dst->var[comp];
+
+			if (!(dst->mask & (1 << comp)))
+				continue;
+
+			dst->var[comp] = ssa->last_var++;
+			ssa->renames[var] = dst->var[comp];
 		}
 	}
 }
@@ -289,17 +314,10 @@ dump_phis(struct list_head *list, unsigned count, unsigned level)
 	unsigned i;
 
 	LIST_FOR_EACH_ENTRY(phi, list, list) {
-		_debug_printf("%*sR%d", level, "", phi->reg);
-		if (phi->dst)
-			_debug_printf(".%d", phi->dst);
-		_debug_printf(" = PHI(R%d", phi->reg);
-		if (phi->src[0])
-			_debug_printf(".%d", phi->src[0]);
-		for (i = 1; i < count; ++i) {
-			_debug_printf(", R%d", phi->reg);
-			if (phi->src[i])
-				_debug_printf(".%d", phi->src[i]);
-		}
+		_debug_printf("%*s@%d", level, "", phi->dst);
+		_debug_printf(" = PHI(@%d", phi->src[0]);
+		for (i = 1; i < count; ++i)
+			_debug_printf(", @%d", phi->src[i]);
 		_debug_printf(")\n");
 	}
 }
@@ -317,7 +335,7 @@ dump_ssa_data_pre(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	_debug_printf("%*s# vars_defined:", level, "");
 	OF_BITMAP_FOR_EACH_SET_BIT(bit, node->ssa.vars_defined,
 				   ssa->num_vars) {
-		_debug_printf(" R%d", bit);
+		_debug_printf(" @%d", bit);
 	}
 	_debug_printf("\n");
 
@@ -379,8 +397,6 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 						* sizeof(*ssa->renames), 16);
 	ssa->renames = of_stack_push(ssa->renames_stack);
 	memset(ssa->renames, 0, ssa->num_vars * sizeof(*ssa->renames));
-	ssa->def_count = of_heap_alloc(ssa->heap, ssa->num_vars
-					* sizeof(*ssa->def_count));
 	ssa->shader_heap = shader->heap;
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
