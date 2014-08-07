@@ -157,6 +157,69 @@ eliminate_dead(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 	} while (ret);
 }
 
+
+static void
+dump_phis(struct list_head *list, unsigned count, unsigned level)
+{
+	struct of_ir_phi *phi;
+	unsigned i;
+
+	LIST_FOR_EACH_ENTRY(phi, list, list) {
+		_debug_printf("%*s@%d", level, "", phi->dst);
+		_debug_printf(" = PHI(@%d", phi->src[0]);
+		for (i = 1; i < count; ++i)
+			_debug_printf(", @%d", phi->src[i]);
+		_debug_printf(")\n");
+	}
+}
+
+static void
+dump_opt_data_pre(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+		  unsigned level, void *data)
+{
+	if (node->type == OF_IR_NODE_LIST)
+		return;
+
+	if (node->ssa.depart_count)
+		_debug_printf("%*s# depart_count: %d\n",
+				level, "", node->ssa.depart_count);
+	if (node->ssa.repeat_count)
+		_debug_printf("%*s# repeat_count: %d\n",
+				level, "", node->ssa.repeat_count);
+	if (node->type == OF_IR_NODE_DEPART)
+		_debug_printf("%*s# depart_number: %d\n",
+				level, "", node->ssa.depart_number);
+	if (node->type == OF_IR_NODE_REPEAT)
+		_debug_printf("%*s# repeat_number: %d\n",
+				level, "", node->ssa.repeat_number);
+	if (!LIST_IS_EMPTY(&node->ssa.loop_phis)) {
+		_debug_printf("%*s# loop_phis:\n", level + 4, "");
+		dump_phis(&node->ssa.loop_phis, node->ssa.repeat_count + 1,
+				level + 4);
+	}
+}
+
+static void
+dump_opt_data_post(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+		   unsigned level, void *data)
+{
+	if (!LIST_IS_EMPTY(&node->ssa.phis)) {
+		_debug_printf("%*s# phis:\n", level + 4, "");
+		dump_phis(&node->ssa.phis, node->ssa.depart_count,
+				level + 4);
+	}
+}
+
+static void
+dump_opt_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+	      unsigned level, bool post, void *data)
+{
+	if (post)
+		dump_opt_data_post(shader, node, level, data);
+	else
+		dump_opt_data_pre(shader, node, level, data);
+}
+
 int
 of_ir_optimize(struct of_ir_shader *shader)
 {
@@ -175,7 +238,7 @@ of_ir_optimize(struct of_ir_shader *shader)
 	}
 
 	DBG("AST (post-optimize/pre-register-assignment)");
-	of_ir_dump_ast(shader, NULL, NULL);
+	of_ir_dump_ast(shader, dump_opt_data, NULL);
 
 	of_heap_destroy(heap);
 
