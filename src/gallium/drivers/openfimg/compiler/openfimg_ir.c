@@ -119,6 +119,13 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 		.writable = true,					\
 	}
 
+#define OF_IR_REG_VAR_INFO						\
+	[OF_IR_REG_VAR] = {						\
+		.name = "@",						\
+		.writable = true,					\
+		.readable = true,					\
+	}
+
 static const struct of_ir_reg_info vs_reg_info[OF_IR_NUM_REG_TYPES] = {
 	/* (reg, num_regs, a0_addr, al_addr[, num_reads]) */
 	OF_IR_REG_RW(R,   32, false, true,  2),
@@ -131,6 +138,7 @@ static const struct of_ir_reg_info vs_reg_info[OF_IR_NUM_REG_TYPES] = {
 	OF_IR_REG_R( S,    4, false, false, 1),
 	OF_IR_REG_W( O,   10, false, true),
 	OF_IR_REG_W(A0,    1, false, false),
+	OF_IR_REG_VAR_INFO, /* Virtual variable */
 };
 
 static const struct of_ir_reg_info ps_reg_info[OF_IR_NUM_REG_TYPES] = {
@@ -148,6 +156,7 @@ static const struct of_ir_reg_info ps_reg_info[OF_IR_NUM_REG_TYPES] = {
 	OF_IR_REG_R( VPOS,  4, false, false, 1),
 	OF_IR_REG_W( O,     1, false, true),
 	OF_IR_REG_W(A0,     1, false, false),
+	OF_IR_REG_VAR_INFO, /* Virtual variable */
 };
 
 const struct of_ir_reg_info *
@@ -206,15 +215,45 @@ of_ir_instr_create(struct of_ir_shader *shader, enum of_instr_opcode opc)
 void
 of_ir_instr_add_dst(struct of_ir_instruction *instr, struct of_ir_register *reg)
 {
+	unsigned comp;
+
 	assert(!instr->dst);
 	instr->dst = reg;
+
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp)
+		if (reg->swizzle[comp] == "xyzw"[comp]) {
+			reg->mask |= (1 << comp);
+			if (reg->type == OF_IR_REG_VAR)
+				reg->var[comp] = OF_IR_VEC_SIZE * reg->num
+									+ comp;
+		}
 }
 
 void
 of_ir_instr_add_src(struct of_ir_instruction *instr, struct of_ir_register *reg)
 {
+	unsigned comp;
+
 	assert(instr->num_srcs < ARRAY_SIZE(instr->srcs));
 	instr->srcs[instr->num_srcs++] = reg;
+
+	reg->mask = (1 << OF_IR_VEC_SIZE) - 1;
+
+	if (reg->type != OF_IR_REG_VAR)
+		return;
+
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		switch (reg->swizzle[comp]) {
+		case 'x': reg->var[comp] = OF_IR_VEC_SIZE * reg->num + 0; break;
+		case 'y': reg->var[comp] = OF_IR_VEC_SIZE * reg->num + 1; break;
+		case 'z': reg->var[comp] = OF_IR_VEC_SIZE * reg->num + 2; break;
+		case 'w': reg->var[comp] = OF_IR_VEC_SIZE * reg->num + 3; break;
+		default:
+			ERROR_MSG("invalid vector src swizzle: %s",
+					reg->swizzle);
+			assert(0);
+		}
+	}
 }
 
 void
@@ -229,9 +268,18 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	assert(info->type != OF_IR_CF);
 	assert(node || where);
 
-	if (instr->dst && instr->dst->type == OF_IR_REG_R)
-		shader->stats.num_vars = max(shader->stats.num_vars,
-						instr->dst->num + 1);
+	if (instr->dst && instr->dst->type == OF_IR_REG_VAR) {
+		unsigned comp;
+
+		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+			if (!(instr->dst->mask & (1 << comp)))
+				continue;
+
+			shader->stats.num_vars =
+					max(shader->stats.num_vars,
+						instr->dst->var[comp] + 1);
+		}
+	}
 
 	++shader->num_instrs;
 
@@ -532,18 +580,37 @@ format_src_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 	       struct of_ir_register *reg)
 {
 	const struct of_ir_reg_info *info;
-	char ver_str[16] = "";
+	char comp_str[16];
+	unsigned comp;
 
 	info = of_ir_get_reg_info(shader, reg->type);
 
-	if (reg->ver)
-		snprintf(ver_str, sizeof(ver_str), ".%d", reg->ver);
-
-	snprintf(buf, maxlen, "%s%s%s%d%s.%.4s%s",
-			reg->flags & OF_IR_REG_NEGATE ? "-" : "",
-			reg->flags & OF_IR_REG_ABS ? "|" : "",
-			info->name, reg->num, ver_str, reg->swizzle,
-			reg->flags & OF_IR_REG_ABS ? "|" : "");
+	comp = 0;
+	buf[0] = '\0';
+	strncat(buf, "[", maxlen);
+	do {
+		if (!(reg->mask & (1 << comp))) {
+			strncat(buf, "-", maxlen);
+		} else if (reg->type == OF_IR_REG_VAR) {
+			snprintf(comp_str, sizeof(comp_str), "%s%s%s%d%s",
+				reg->flags & OF_IR_REG_NEGATE ? "-" : "",
+				reg->flags & OF_IR_REG_ABS ? "|" : "",
+				info->name, reg->var[comp],
+				reg->flags & OF_IR_REG_ABS ? "|" : "");
+			strncat(buf, comp_str, maxlen);
+		} else {
+			snprintf(comp_str, sizeof(comp_str), "%s%s%s%d.%c%s",
+				reg->flags & OF_IR_REG_NEGATE ? "-" : "",
+				reg->flags & OF_IR_REG_ABS ? "|" : "",
+				info->name, reg->num, reg->swizzle[comp],
+				reg->flags & OF_IR_REG_ABS ? "|" : "");
+			strncat(buf, comp_str, maxlen);
+		}
+		if (++comp == OF_IR_VEC_SIZE)
+			break;
+		strncat(buf, ", ", maxlen);
+	} while (1);
+	strncat(buf, "]", maxlen);
 }
 
 static void
@@ -551,15 +618,32 @@ format_dst_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 	       struct of_ir_register *reg)
 {
 	const struct of_ir_reg_info *info;
-	char ver_str[16] = "";
+	char comp_str[16];
+	unsigned comp;
 
 	info = of_ir_get_reg_info(shader, reg->type);
 
-	if (reg->ver)
-		snprintf(ver_str, sizeof(ver_str), ".%d", reg->ver);
-
-	snprintf(buf, maxlen, "%s%d%s.%.4s", info->name, reg->num,
-			ver_str, reg->swizzle);
+	comp = 0;
+	buf[0] = '\0';
+	strncat(buf, "[", maxlen);
+	do {
+		if (!(reg->mask & (1 << comp))) {
+			strncat(buf, "-", maxlen);
+		} else if (reg->type == OF_IR_REG_VAR) {
+			snprintf(comp_str, sizeof(comp_str), "%s%d",
+					info->name, reg->var[comp]);
+			strncat(buf, comp_str, maxlen);
+		} else {
+			snprintf(comp_str, sizeof(comp_str), "%s%d.%c",
+					info->name, reg->num,
+					reg->swizzle[comp]);
+			strncat(buf, comp_str, maxlen);
+		}
+		if (++comp == OF_IR_VEC_SIZE)
+			break;
+		strncat(buf, ", ", maxlen);
+	} while (1);
+	strncat(buf, "]", maxlen);
 }
 
 static void
@@ -568,7 +652,7 @@ dump_instruction(struct of_ir_shader *shader, struct of_ir_instruction *ins,
 {
 	const struct of_ir_opc_info *opc_info;
 	struct of_ir_register *dst, *src[3];
-	char dst_str[32], src_str[3][32];
+	char dst_str[64], src_str[3][64];
 	unsigned reg;
 
 	opc_info = of_ir_get_opc_info(ins->opc);

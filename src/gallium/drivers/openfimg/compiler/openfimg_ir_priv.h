@@ -35,6 +35,10 @@ typedef void (*dump_ast_callback_t)(struct of_ir_shader *,
 				    struct of_ir_ast_node *, unsigned, bool,
 				    void *);
 
+enum {
+	OF_IR_VEC_SIZE = 4,
+};
+
 struct of_ir_phi {
 	struct list_head list;
 	uint16_t reg;
@@ -48,12 +52,14 @@ struct of_ir_register {
 	enum of_ir_reg_flags flags;
 	/* Register number. */
 	uint16_t num;
+	/* Variable number. */
+	uint16_t var[OF_IR_VEC_SIZE];
+	/* Component mask. */
+	uint8_t mask;
 	/* Register channel swizzle(map)/mask. */
 	char swizzle[4];
 	/* Register type. */
 	enum of_ir_reg_type type;
-	/** Variable version (temporaries only; used in SSA form) */
-	uint16_t ver;
 };
 
 /** Representation of single instruction. */
