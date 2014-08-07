@@ -407,6 +407,8 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 		make_ssa(ssa, node);
 	}
 
+	shader->stats.num_vars = ssa->last_var;
+
 	DBG("AST (post-ssa/pre-optimize)");
 	of_ir_dump_ast(shader, dump_ssa_data, ssa);
 
