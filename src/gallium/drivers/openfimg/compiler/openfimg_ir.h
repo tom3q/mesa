@@ -73,6 +73,8 @@ enum of_ir_reg_type {
 	OF_IR_REG_O,
 	/** Address register 0 (write-only). */
 	OF_IR_REG_A0,
+	/** Virtual variable. */
+	OF_IR_REG_VAR,
 
 	OF_IR_NUM_REG_TYPES
 };
