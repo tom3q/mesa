@@ -184,7 +184,7 @@ get_dst_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst)
 		break;
 
 	case TGSI_FILE_TEMPORARY:
-		type = OF_IR_REG_R;
+		type = OF_IR_REG_VAR;
 		num = dst->Index;
 		break;
 
@@ -248,7 +248,7 @@ get_src_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst,
 
 	case TGSI_FILE_TEMPORARY:
 		num = src->Index;
-		type = OF_IR_REG_R;
+		type = OF_IR_REG_VAR;
 		break;
 
 	case TGSI_FILE_IMMEDIATE:
@@ -284,7 +284,7 @@ get_src_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst,
 static struct of_ir_register *
 get_temporary(struct of_compile_context *ctx)
 {
-	return of_ir_reg_create(ctx->shader, OF_IR_REG_R,
+	return of_ir_reg_create(ctx->shader, OF_IR_REG_VAR,
 				ctx->num_regs[TGSI_FILE_TEMPORARY]++,
 				"xyzw", 0);
 }
