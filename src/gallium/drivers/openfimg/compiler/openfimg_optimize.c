@@ -33,93 +33,8 @@
 
 struct of_ir_optimize {
 	struct of_heap *heap;
-	struct util_hash_table *ref_ht;
+	unsigned *ref_counts;
 };
-
-static unsigned
-hash_variable(void *key)
-{
-	return (unsigned)(unsigned long)key;
-}
-
-static int
-compare_variable(void *key1, void *key2)
-{
-	unsigned var1 = (unsigned long)key1;
-	unsigned var2 = (unsigned long)key2;
-
-	return var1 - var2;
-}
-
-static void
-eval_liveness_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
-{
-	struct of_ir_instruction *ins;
-
-	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
-		unsigned i;
-
-		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
-			struct of_ir_register *src = ins->srcs[i];
-			unsigned comp;
-
-			if (src->type != OF_IR_REG_VAR)
-				continue;
-
-			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-				unsigned long var = src->var[comp];
-				unsigned long ref_cnt;
-
-				if (!(src->mask & (1 << comp)))
-					continue;
-
-				ref_cnt = (unsigned long)util_hash_table_get(
-						opt->ref_ht, (void *)var);
-				util_hash_table_set(opt->ref_ht, (void *)var,
-						(void *)(ref_cnt + 1));
-			}
-		}
-	}
-}
-
-static void
-eval_liveness_phi(struct of_ir_optimize *opt, struct list_head *phis,
-		  unsigned count)
-{
-	struct of_ir_phi *phi;
-
-	LIST_FOR_EACH_ENTRY(phi, phis, list) {
-		unsigned i;
-
-		for (i = 0; i < count; ++i) {
-			unsigned long var = phi->src[i];
-			unsigned long ref_cnt;
-
-			ref_cnt = (unsigned long)util_hash_table_get(
-						opt->ref_ht, (void *)var);
-			util_hash_table_set(opt->ref_ht, (void *)var,
-						(void *)(ref_cnt + 1));
-		}
-	}
-}
-
-static void
-eval_liveness(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
-{
-	struct of_ir_ast_node *child;
-
-	if (node->type == OF_IR_NODE_LIST) {
-		eval_liveness_list(opt, node);
-		return;
-	}
-
-	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		eval_liveness(opt, child);
-
-	eval_liveness_phi(opt, &node->ssa.phis, node->ssa.depart_count);
-	eval_liveness_phi(opt, &node->ssa.loop_phis,
-				node->ssa.repeat_count + 1);
-}
 
 static int
 eliminate_dead_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
@@ -129,50 +44,42 @@ eliminate_dead_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
-		bool referenced = false;
-		unsigned comp;
-		unsigned i;
+		unsigned dcomp;
 
-		if (!dst || dst->type != OF_IR_REG_VAR)
-			continue;
+		for (dcomp = 0; dcomp < OF_IR_VEC_SIZE; ++dcomp) {
+			unsigned i;
 
-		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-			unsigned long var = dst->var[comp];
+			if (!dst || dst->type != OF_IR_REG_VAR)
+				goto has_ref;
 
-			if (!(dst->mask & (1 << comp)))
+			if (!(dst->mask & (1 << dcomp)))
 				continue;
 
-			if (util_hash_table_get(opt->ref_ht, (void *)var)) {
-				referenced = true;
-				break;
+			if (!opt->ref_counts[dst->var[dcomp]]) {
+				dst->mask &= ~(1 << dcomp);
+				ret = 1;
+				continue;
 			}
-		}
 
-		if (referenced)
-			continue;
+has_ref:
+			for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
+				struct of_ir_register *src = ins->srcs[i];
+				unsigned scomp;
 
-		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
-			struct of_ir_register *src = ins->srcs[i];
-
-			if (src->type != OF_IR_REG_VAR)
-				continue;
-
-			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-				unsigned long ref_cnt;
-				unsigned long var = src->var[comp];
-
-				if (!(src->mask & (1 << comp)))
+				if (src->type != OF_IR_REG_VAR)
 					continue;
 
-				ref_cnt = (unsigned long)util_hash_table_get(
-						opt->ref_ht, (void *)var);
-				util_hash_table_set(opt->ref_ht, (void *)var,
-						(void *)(ref_cnt - 1));
+				for (scomp = 0; scomp < OF_IR_VEC_SIZE; ++scomp) {
+					if (!(src->mask & (1 << scomp)))
+						continue;
+
+					++opt->ref_counts[src->var[scomp]];
+				}
 			}
 		}
 
-		ret = 1;
-		list_del(&ins->list);
+		if (!dst->mask)
+			list_del(&ins->list);
 	}
 
 	return ret;
@@ -186,27 +93,33 @@ eliminate_dead_phi(struct of_ir_optimize *opt, struct list_head *phis,
 	int ret = 0;
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
-		unsigned long dst_var = phi->dst;
 		unsigned i;
 
-		if (util_hash_table_get(opt->ref_ht, (void *)dst_var))
+		if (opt->ref_counts[phi->dst])
 			continue;
 
-		for (i = 0; i < count; ++i) {
-			unsigned long var = phi->src[i];
-			unsigned long ref_cnt;
+		for (i = 0; i < count; ++i)
+			--opt->ref_counts[phi->src[i]];
 
-			ref_cnt = (unsigned long)util_hash_table_get(
-						opt->ref_ht, (void *)var);
-			util_hash_table_set(opt->ref_ht, (void *)var,
-						(void *)(ref_cnt - 1));
-		}
-
-		ret = 1;
 		list_del(&phi->list);
+		ret = 1;
 	}
 
 	return ret;
+}
+
+static void
+assess_phi(struct of_ir_optimize *opt, struct list_head *phis,
+		   unsigned count)
+{
+	struct of_ir_phi *phi, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
+		unsigned i;
+
+		for (i = 0; i < count; ++i)
+			++opt->ref_counts[phi->src[i]];
+	}
 }
 
 static int
@@ -218,12 +131,16 @@ eliminate_dead_pass(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 	if (node->type == OF_IR_NODE_LIST)
 		return eliminate_dead_list(opt, node);
 
+	assess_phi(opt, &node->ssa.phis, node->ssa.depart_count);
 	ret |= eliminate_dead_phi(opt, &node->ssa.phis, node->ssa.depart_count);
-	ret |= eliminate_dead_phi(opt, &node->ssa.loop_phis,
-					node->ssa.repeat_count + 1);
+
+	assess_phi(opt, &node->ssa.loop_phis, node->ssa.repeat_count + 1);
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes, parent_list)
 		ret |= eliminate_dead_pass(opt, child);
+
+	ret |= eliminate_dead_phi(opt, &node->ssa.loop_phis,
+					node->ssa.repeat_count + 1);
 
 	return ret;
 }
@@ -250,10 +167,10 @@ of_ir_optimize(struct of_ir_shader *shader)
 	heap = of_heap_create();
 	opt = of_heap_alloc(heap, sizeof(*opt));
 	opt->heap = heap;
-	opt->ref_ht = util_hash_table_create(hash_variable, compare_variable);
+	opt->ref_counts = of_heap_alloc(heap, shader->stats.num_vars
+					* sizeof(*opt->ref_counts));
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
-		eval_liveness(opt, node);
 		eliminate_dead(opt, node);
 	}
 
