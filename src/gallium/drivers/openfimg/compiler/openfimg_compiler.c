@@ -483,6 +483,7 @@ translate_lrp(struct of_compile_context *ctx,
 
 	/* dst = src0 * src1 + -tmp */
 	instrs[1].opc = OF_OP_MAD;
+	instrs[1].dst.reg = get_dst_reg(ctx, inst);
 	instrs[1].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[1].src[1].reg = get_src_reg(ctx, inst, 1);
 	instrs[1].src[2].reg = of_ir_reg_clone(ctx->shader, instrs[0].dst.reg);
