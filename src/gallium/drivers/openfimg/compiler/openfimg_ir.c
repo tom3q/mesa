@@ -38,7 +38,58 @@
 		.name = #_opc,			\
 		.type = OF_IR_ ## _type,	\
 		.num_srcs = _num_srcs,		\
+		.dst_map = vector_dst_map,	\
 	}
+
+#define OF_IR_OPC_MAP(_opc, _type, _num_srcs, _map)	\
+	[OF_OP_ ## _opc] = {				\
+		.name = #_opc,				\
+		.type = OF_IR_ ## _type,		\
+		.num_srcs = _num_srcs,			\
+		.dst_map = _map,			\
+	}
+
+static const dst_map_t vector_dst_map[] = {
+	{ "x___", "_y__", "__z_", "___w" },
+	{ "x___", "_y__", "__z_", "___w" },
+	{ "x___", "_y__", "__z_", "___w" },
+};
+
+static const dst_map_t dp3_dst_map[] = {
+	{ "xyz_", "xyz_", "xyz_", "xyz_" },
+	{ "xyz_", "xyz_", "xyz_", "xyz_" },
+};
+
+static const dst_map_t dp4_dst_map[] = {
+	{ "xyzw", "xyzw", "xyzw", "xyzw" },
+	{ "xyzw", "xyzw", "xyzw", "xyzw" },
+};
+
+static const dst_map_t dph_dst_map[] = {
+	{ "xyz_", "xyz_", "xyz_", "xyz_" },
+	{ "xyzw", "xyzw", "xyzw", "xyzw" },
+};
+
+static const dst_map_t dst_dst_map[] = {
+	{ "____", "_y__", "__z_", "____" },
+	{ "____", "_y__", "____", "___w" },
+};
+
+static const dst_map_t scalar_dst_map[] = {
+	{ "x___", "x___", "x___", "x___" },
+};
+
+static const dst_map_t dp2add_dst_map[] = {
+	{ "xy__", "xy__", "xy__", "xy__" },
+	{ "xy__", "xy__", "xy__", "xy__" },
+	{ "x___", "x___", "x___", "x___" },
+};
+
+static const dst_map_t full_dst_map[] = {
+	{ "xyzw", "xyzw", "xyzw", "xyzw" },
+	{ "xyzw", "xyzw", "xyzw", "xyzw" },
+	{ "xyzw", "xyzw", "xyzw", "xyzw" },
+};
 
 const struct of_ir_opc_info of_ir_opc_info[] = {
 	OF_IR_OPC(NOP, ALU, 0),
@@ -48,17 +99,17 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 	OF_IR_OPC(ADD, ALU, 2),
 	OF_IR_OPC(MUL, ALU, 2),
 	OF_IR_OPC(MUL_LIT, ALU, 2),
-	OF_IR_OPC(DP3, ALU, 2),
-	OF_IR_OPC(DP4, ALU, 2),
-	OF_IR_OPC(DPH, ALU, 2),
-	OF_IR_OPC(DST, ALU, 2),
-	OF_IR_OPC(EXP, ALU, 1),
-	OF_IR_OPC(EXP_LIT, ALU, 1),
-	OF_IR_OPC(LOG, ALU, 1),
-	OF_IR_OPC(LOG_LIT, ALU, 1),
-	OF_IR_OPC(RCP, ALU, 1),
-	OF_IR_OPC(RSQ, ALU, 1),
-	OF_IR_OPC(DP2ADD, ALU, 3),
+	OF_IR_OPC_MAP(DP3, ALU, 2, dp3_dst_map),
+	OF_IR_OPC_MAP(DP4, ALU, 2, dp4_dst_map),
+	OF_IR_OPC_MAP(DPH, ALU, 2, dph_dst_map),
+	OF_IR_OPC_MAP(DST, ALU, 2, dst_dst_map),
+	OF_IR_OPC_MAP(EXP, ALU, 1, scalar_dst_map),
+	OF_IR_OPC_MAP(EXP_LIT, ALU, 1, scalar_dst_map),
+	OF_IR_OPC_MAP(LOG, ALU, 1, scalar_dst_map),
+	OF_IR_OPC_MAP(LOG_LIT, ALU, 1, scalar_dst_map),
+	OF_IR_OPC_MAP(RCP, ALU, 1, scalar_dst_map),
+	OF_IR_OPC_MAP(RSQ, ALU, 1, scalar_dst_map),
+	OF_IR_OPC_MAP(DP2ADD, ALU, 3, dp2add_dst_map),
 	OF_IR_OPC(MAX, ALU, 2),
 	OF_IR_OPC(MIN, ALU, 2),
 	OF_IR_OPC(SGE, ALU, 2),
@@ -71,11 +122,11 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 	OF_IR_OPC(MAD, ALU, 3),
 	OF_IR_OPC(FRC, ALU, 1),
 	OF_IR_OPC(FLR, ALU, 1),
-	OF_IR_OPC(TEXLD, ALU, 2),
-	OF_IR_OPC(CUBEDIR, ALU, 1),
-	OF_IR_OPC(MAXCOMP, ALU, 1),
-	OF_IR_OPC(TEXLDC, ALU, 3),
-	OF_IR_OPC(TEXKILL, ALU, 1),
+	OF_IR_OPC_MAP(TEXLD, ALU, 2, full_dst_map),
+	OF_IR_OPC_MAP(CUBEDIR, ALU, 1, full_dst_map),
+	OF_IR_OPC_MAP(MAXCOMP, ALU, 1, full_dst_map),
+	OF_IR_OPC_MAP(TEXLDC, ALU, 3, full_dst_map),
+	OF_IR_OPC_MAP(TEXKILL, ALU, 1, scalar_dst_map),
 	OF_IR_OPC(MOVIPS, ALU, 1),
 	OF_IR_OPC(ADDI, ALU, 2),
 	OF_IR_OPC(B, CF, 0),

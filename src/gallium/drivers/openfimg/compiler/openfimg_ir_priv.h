@@ -35,10 +35,6 @@ typedef void (*dump_ast_callback_t)(struct of_ir_shader *,
 				    struct of_ir_ast_node *, unsigned, bool,
 				    void *);
 
-enum {
-	OF_IR_VEC_SIZE = 4,
-};
-
 struct of_ir_phi {
 	struct list_head list;
 	uint16_t reg;

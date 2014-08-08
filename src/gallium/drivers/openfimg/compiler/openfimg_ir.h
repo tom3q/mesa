@@ -39,6 +39,7 @@
 enum {
 	OF_IR_NUM_CF_TARGETS = 2,
 	OF_IR_NUM_SRCS = 3,
+	OF_IR_VEC_SIZE = 4,
 };
 
 enum of_ir_shader_type {
@@ -100,10 +101,14 @@ struct of_ir_instruction;
 struct of_ir_ast_node;
 struct of_ir_shader;
 
+typedef const char *src_mask_t;
+typedef src_mask_t dst_map_t[OF_IR_VEC_SIZE];
+
 struct of_ir_opc_info {
 	const char *name;
 	enum of_ir_instr_type type;
 	unsigned num_srcs;
+	const dst_map_t *dst_map;
 };
 
 struct of_ir_instr_template {
