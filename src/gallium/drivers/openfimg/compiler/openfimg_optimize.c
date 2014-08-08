@@ -166,6 +166,53 @@ eliminate_dead(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 	} while (ret);
 }
 
+static void
+clean_sources_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins;
+
+	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
+		struct of_ir_register *dst = ins->dst;
+		const struct of_ir_opc_info *info;
+		unsigned i;
+
+		info = of_ir_get_opc_info(ins->opc);
+
+		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
+			const dst_map_t *dst_map = &info->dst_map[i];
+			struct of_ir_register *src = ins->srcs[i];
+			unsigned src_mask = 0;
+			unsigned dcomp;
+
+			for (dcomp = 0; dcomp < OF_IR_VEC_SIZE; ++dcomp) {
+				const char *mask = (*dst_map)[dcomp];
+				unsigned scomp;
+
+				if (!(dst->mask & (1 << dcomp)))
+					continue;
+
+				for (scomp = 0; scomp < OF_IR_VEC_SIZE; ++scomp) {
+					if (mask[scomp] == "xyzw"[scomp])
+						src_mask |= (1 << scomp);
+				}
+			}
+
+			src->mask = src_mask;
+		}
+	}
+}
+
+static void
+clean_sources(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child;
+
+	if (node->type == OF_IR_NODE_LIST)
+		return clean_sources_list(opt, node);
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		clean_sources(opt, child);
+}
 
 static void
 dump_phis(struct list_head *list, unsigned count, unsigned level)
@@ -244,6 +291,7 @@ of_ir_optimize(struct of_ir_shader *shader)
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
 		eliminate_dead(opt, node);
+		clean_sources(opt, node);
 	}
 
 	DBG("AST (post-optimize/pre-register-assignment)");
