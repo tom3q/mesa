@@ -34,6 +34,7 @@
 struct of_ir_optimize {
 	struct of_heap *heap;
 	unsigned *ref_counts;
+	unsigned num_vars;
 };
 
 static int
@@ -161,6 +162,8 @@ eliminate_dead(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 	int ret;
 
 	do {
+		memset(opt->ref_counts, 0, opt->num_vars
+			* sizeof(*opt->ref_counts));
 		DBG("Dead code elimination, pass %d", ++pass);
 		ret = eliminate_dead_pass(opt, node);
 	} while (ret);
@@ -286,7 +289,8 @@ of_ir_optimize(struct of_ir_shader *shader)
 	heap = of_heap_create();
 	opt = of_heap_alloc(heap, sizeof(*opt));
 	opt->heap = heap;
-	opt->ref_counts = of_heap_alloc(heap, shader->stats.num_vars
+	opt->num_vars = shader->stats.num_vars;
+	opt->ref_counts = of_heap_alloc(heap, opt->num_vars
 					* sizeof(*opt->ref_counts));
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
