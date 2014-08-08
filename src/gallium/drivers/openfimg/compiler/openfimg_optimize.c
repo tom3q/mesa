@@ -44,7 +44,10 @@ eliminate_dead_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
+		const struct of_ir_opc_info *info;
 		unsigned dcomp;
+
+		info = of_ir_get_opc_info(ins->opc);
 
 		for (dcomp = 0; dcomp < OF_IR_VEC_SIZE; ++dcomp) {
 			unsigned i;
@@ -64,13 +67,19 @@ eliminate_dead_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 has_ref:
 			for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
 				struct of_ir_register *src = ins->srcs[i];
+				const dst_map_t *dst_map = &info->dst_map[i];
 				unsigned scomp;
 
 				if (src->type != OF_IR_REG_VAR)
 					continue;
 
 				for (scomp = 0; scomp < OF_IR_VEC_SIZE; ++scomp) {
+					const char *mask = (*dst_map)[dcomp];
+
 					if (!(src->mask & (1 << scomp)))
+						continue;
+
+					if (mask[scomp] != "xyzw"[scomp])
 						continue;
 
 					++opt->ref_counts[src->var[scomp]];
