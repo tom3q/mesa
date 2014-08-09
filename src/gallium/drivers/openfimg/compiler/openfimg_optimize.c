@@ -299,7 +299,7 @@ of_ir_optimize(struct of_ir_shader *shader)
 	}
 
 	DBG("AST (post-optimize/pre-register-assignment)");
-	of_ir_dump_ast(shader, dump_opt_data, NULL);
+	of_ir_dump_ast(shader, dump_opt_data, opt);
 
 	of_heap_destroy(heap);
 
