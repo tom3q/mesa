@@ -152,5 +152,6 @@ void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 
 int of_ir_to_ssa(struct of_ir_shader *shader);
 int of_ir_optimize(struct of_ir_shader *shader);
+int of_ir_assign_registers(struct of_ir_shader *shader);
 
 #endif /* OF_IR_PRIV_H_ */
