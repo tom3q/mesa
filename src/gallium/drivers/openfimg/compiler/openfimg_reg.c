@@ -39,6 +39,10 @@ struct of_ir_reg_assign {
 	unsigned vars_bitmap_size;
 };
 
+/*
+ * Interference graph construction.
+ */
+
 static void
 add_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
 {
@@ -136,6 +140,150 @@ interference(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 	interference_phi(ra, &node->ssa.loop_phis, node->ssa.repeat_count + 1);
 }
 
+/*
+ * Live range splitting.
+ */
+
+static void
+add_coalesce(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2,
+	     unsigned cost)
+{
+
+}
+
+static struct of_ir_instruction *
+create_copy(struct of_ir_shader *shader, uint16_t dst_var, uint16_t src_var)
+{
+	struct of_ir_register *dst, *src;
+	struct of_ir_instruction *ins;
+
+	ins = of_ir_instr_create(shader, OF_OP_MOV);
+
+	dst = of_ir_reg_create(shader, OF_IR_REG_VAR, 0, "x___", 0);
+	of_ir_instr_add_dst(ins, dst);
+	dst->var[0] = dst_var;
+	dst->mask = 1;
+
+	src = of_ir_reg_create(shader, OF_IR_REG_VAR, 0, "xxxx", 0);
+	of_ir_instr_add_src(ins, src);
+	src->var[0] = src_var;
+	src->mask = 1;
+
+	return ins;
+}
+
+static void
+split_live_phi_src(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
+		   struct list_head *phis, unsigned arg, bool loop)
+{
+	struct of_ir_ast_node *list;
+	struct of_ir_phi *phi;
+
+	if (loop && !arg)
+		list = of_ir_node_list_before(node);
+	else
+		list = of_ir_node_list_back(node);
+
+	if (!list)
+		return;
+
+	LIST_FOR_EACH_ENTRY(phi, phis, list) {
+		struct of_ir_instruction *ins;
+		uint16_t tmp;
+
+		if (!phi->src[arg])
+			continue;
+
+		tmp = ra->num_vars++;
+		ins = create_copy(node->shader, tmp, phi->src[arg]);
+		of_ir_instr_insert(node->shader, list, NULL, ins);
+
+		add_coalesce(ra, tmp, phi->src[arg], 1);
+		add_coalesce(ra, tmp, phi->dst, 10000);
+
+		phi->src[arg] = tmp;
+	}
+}
+
+static void
+split_live_phi_dst(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
+		   struct list_head *phis, bool loop)
+{
+	struct of_ir_ast_node *list;
+	struct of_ir_phi *phi;
+
+	if (loop)
+		list = of_ir_node_list_front(node);
+	else
+		list = of_ir_node_list_after(node);
+
+	if (!list)
+		return;
+
+	LIST_FOR_EACH_ENTRY(phi, phis, list) {
+		struct of_ir_instruction *ins;
+		uint16_t tmp;
+
+		tmp = ra->num_vars++;
+		ins = create_copy(node->shader, phi->dst, tmp);
+		of_ir_instr_insert(node->shader, list, NULL, ins);
+
+		add_coalesce(ra, tmp, phi->dst, 1);
+
+		phi->dst = tmp;
+	}
+}
+
+static void
+constraint_phi(struct of_ir_reg_assign *ra, struct list_head *phis,
+	       unsigned num_srcs)
+{
+
+}
+
+static void
+split_live(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child, *s;
+	struct of_ir_ast_node *region;
+
+	switch (node->type) {
+	case OF_IR_NODE_DEPART:
+		region = node->depart_repeat.region;
+		split_live_phi_src(ra, node, &region->ssa.phis,
+					node->ssa.depart_number, false);
+		break;
+
+	case OF_IR_NODE_REPEAT:
+		region = node->depart_repeat.region;
+		split_live_phi_src(ra, node, &region->ssa.loop_phis,
+					node->ssa.repeat_number + 1, true);
+		break;
+
+	case OF_IR_NODE_REGION:
+		split_live_phi_dst(ra, node, &node->ssa.phis, false);
+		split_live_phi_dst(ra, node, &node->ssa.loop_phis, true);
+		split_live_phi_src(ra, node, &node->ssa.loop_phis, 0, true);
+		break;
+
+	default:
+		break;
+	}
+
+	LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes, parent_list)
+		split_live(ra, child);
+
+	if (node->type == OF_IR_NODE_REGION) {
+		constraint_phi(ra, &node->ssa.phis, node->ssa.depart_count);
+		constraint_phi(ra, &node->ssa.loop_phis,
+				node->ssa.repeat_count + 1);
+	}
+}
+
+/*
+ * AST dumping.
+ */
+
 static void
 dump_phis(struct list_head *list, unsigned count, unsigned level)
 {
@@ -226,6 +374,11 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	ra = of_heap_alloc(heap, sizeof(*ra));
 	ra->heap = heap;
 	ra->num_vars = shader->stats.num_vars;
+
+	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
+		split_live(ra, node);
+	}
+
 	ra->vars_bitmap_size = OF_BITMAP_WORDS_FOR_BITS(ra->num_vars)
 				* sizeof(uint32_t);
 	ra->live = of_heap_alloc(heap, ra->vars_bitmap_size);
