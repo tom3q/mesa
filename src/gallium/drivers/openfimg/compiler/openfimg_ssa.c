@@ -398,6 +398,7 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 	ssa->renames = of_stack_push(ssa->renames_stack);
 	memset(ssa->renames, 0, ssa->num_vars * sizeof(*ssa->renames));
 	ssa->shader_heap = shader->heap;
+	ssa->last_var = 1;
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
 		init_nodes(ssa, node);
