@@ -496,13 +496,19 @@ of_ir_node_list(struct of_ir_shader *shader)
 	return node;
 }
 
+static void
+insert_node(struct of_ir_ast_node *node, struct list_head *where,
+	    struct of_ir_ast_node *parent)
+{
+	list_del(&node->parent_list);
+	list_addtail(&node->parent_list, where);
+	node->parent = parent;
+}
+
 void
 of_ir_node_insert(struct of_ir_ast_node *where, struct of_ir_ast_node *node)
 {
-	list_del(&node->parent_list);
-	list_addtail(&node->parent_list, &where->nodes);
-	node->parent = where;
-	++where->num_nodes;
+	insert_node(node, &where->nodes, where);
 }
 
 enum of_ir_node_type of_ir_node_get_type(struct of_ir_ast_node *node)
@@ -514,6 +520,92 @@ struct of_ir_ast_node *
 of_ir_node_get_parent(struct of_ir_ast_node *node)
 {
 	return node->parent;
+}
+
+struct of_ir_ast_node *
+of_ir_node_list_before(struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *list;
+
+	if (!node->parent)
+		return NULL;
+
+	if (node->parent_list.prev != &node->parent->nodes) {
+		struct of_ir_ast_node *prev;
+
+		prev = LIST_ENTRY(struct of_ir_ast_node, node->parent_list.prev,
+					parent_list);
+		if (prev->type == OF_IR_NODE_LIST)
+			return prev;
+	}
+
+	list = of_ir_node_list(node->shader);
+	insert_node(list, &node->parent_list, node->parent);
+
+	return list;
+}
+
+struct of_ir_ast_node *
+of_ir_node_list_after(struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *list;
+
+	if (!node->parent)
+		return NULL;
+
+	if (node->parent_list.next != &node->parent->nodes) {
+		struct of_ir_ast_node *next;
+
+		next = LIST_ENTRY(struct of_ir_ast_node, node->parent_list.next,
+					parent_list);
+		if (next->type == OF_IR_NODE_LIST)
+			return next;
+	}
+
+	list = of_ir_node_list(node->shader);
+	insert_node(list, node->parent_list.next, node->parent);
+
+	return list;
+}
+
+struct of_ir_ast_node *
+of_ir_node_list_front(struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *list;
+
+	if (!LIST_IS_EMPTY(&node->nodes)) {
+		struct of_ir_ast_node *first;
+
+		first = LIST_ENTRY(struct of_ir_ast_node, node->nodes.next,
+					parent_list);
+		if (first->type == OF_IR_NODE_LIST)
+			return first;
+	}
+
+	list = of_ir_node_list(node->shader);
+	insert_node(list, node->nodes.next, node);
+
+	return list;
+}
+
+struct of_ir_ast_node *
+of_ir_node_list_back(struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *list;
+
+	if (!LIST_IS_EMPTY(&node->nodes)) {
+		struct of_ir_ast_node *last;
+
+		last = LIST_ENTRY(struct of_ir_ast_node, node->nodes.prev,
+					parent_list);
+		if (last->type == OF_IR_NODE_LIST)
+			return last;
+	}
+
+	list = of_ir_node_list(node->shader);
+	insert_node(list, &node->nodes, node);
+
+	return list;
 }
 
 /*
