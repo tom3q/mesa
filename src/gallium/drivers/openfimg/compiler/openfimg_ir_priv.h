@@ -84,8 +84,6 @@ struct of_ir_instruction {
 struct of_ir_ast_node {
 	/** List of subnodes of the block. */
 	struct list_head nodes;
-	/** Number of instructions in the block. */
-	unsigned num_nodes;
 	/** Parent of this node. */
 	struct of_ir_ast_node *parent;
 	/** List head used to link with the parent. */

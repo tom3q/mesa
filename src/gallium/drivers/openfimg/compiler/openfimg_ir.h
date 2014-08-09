@@ -204,6 +204,12 @@ void of_ir_node_insert(struct of_ir_ast_node *where,
 enum of_ir_node_type of_ir_node_get_type(struct of_ir_ast_node *node);
 struct of_ir_ast_node *of_ir_node_get_parent(struct of_ir_ast_node *node);
 
+/* Helpers to insert instructions in certain parts of the code. */
+struct of_ir_ast_node *of_ir_node_list_before(struct of_ir_ast_node *node);
+struct of_ir_ast_node *of_ir_node_list_front(struct of_ir_ast_node *node);
+struct of_ir_ast_node *of_ir_node_list_back(struct of_ir_ast_node *node);
+struct of_ir_ast_node *of_ir_node_list_after(struct of_ir_ast_node *node);
+
 struct of_ir_shader *of_ir_shader_create(enum of_ir_shader_type type);
 void of_ir_shader_destroy(struct of_ir_shader *shader);
 int of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
