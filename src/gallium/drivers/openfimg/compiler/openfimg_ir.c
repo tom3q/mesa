@@ -957,13 +957,6 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 #endif
 
 static int
-of_ir_assign_registers(struct of_ir_shader *shader)
-{
-	/* TODO */
-	return 0;
-}
-
-static int
 of_ir_insert_cf(struct of_ir_shader *shader)
 {
 	/* TODO */
