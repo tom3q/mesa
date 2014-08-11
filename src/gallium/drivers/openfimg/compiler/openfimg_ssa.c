@@ -382,7 +382,6 @@ dump_ssa_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 int
 of_ir_to_ssa(struct of_ir_shader *shader)
 {
-	struct of_ir_ast_node *node;
 	struct of_ir_ssa *ssa;
 	struct of_heap *heap;
 
@@ -400,13 +399,11 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 	ssa->shader_heap = shader->heap;
 	ssa->last_var = 1;
 
-	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
-		init_nodes(ssa, node);
-		variables_defined(ssa, node);
-		dep_rep_count(ssa, node);
-		insert_phi(ssa, node);
-		make_ssa(ssa, node);
-	}
+	RUN_PASS(shader, ssa, init_nodes);
+	RUN_PASS(shader, ssa, variables_defined);
+	RUN_PASS(shader, ssa, dep_rep_count);
+	RUN_PASS(shader, ssa, insert_phi);
+	RUN_PASS(shader, ssa, make_ssa);
 
 	shader->stats.num_vars = ssa->last_var;
 
