@@ -282,7 +282,6 @@ dump_opt_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 int
 of_ir_optimize(struct of_ir_shader *shader)
 {
-	struct of_ir_ast_node *node;
 	struct of_ir_optimize *opt;
 	struct of_heap *heap;
 
@@ -293,10 +292,8 @@ of_ir_optimize(struct of_ir_shader *shader)
 	opt->ref_counts = of_heap_alloc(heap, opt->num_vars
 					* sizeof(*opt->ref_counts));
 
-	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list) {
-		eliminate_dead(opt, node);
-		clean_sources(opt, node);
-	}
+	RUN_PASS(shader, opt, eliminate_dead);
+	RUN_PASS(shader, opt, clean_sources);
 
 	DBG("AST (post-optimize/pre-register-assignment)");
 	of_ir_dump_ast(shader, dump_opt_data, opt);
