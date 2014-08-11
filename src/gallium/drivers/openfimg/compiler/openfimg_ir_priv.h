@@ -31,6 +31,14 @@
 #define WARN_MSG(...)   DBG("WARN:  "__VA_ARGS__)
 #define ERROR_MSG(...)  DBG("ERROR: "__VA_ARGS__)
 
+#define RUN_PASS(shader, data, pass)					\
+	do {								\
+		struct of_ir_ast_node *node;				\
+									\
+		LIST_FOR_EACH_ENTRY(node, &(shader)->root_nodes, parent_list) \
+			pass(data, node);				\
+	} while (0)
+
 typedef void (*dump_ast_callback_t)(struct of_ir_shader *,
 				    struct of_ir_ast_node *, unsigned, bool,
 				    void *);
