@@ -477,6 +477,10 @@ of_heap_alloc(struct of_heap *heap, int sz)
 
 	if (heap->cur_free < sz)
 		of_heap_grow(heap);
+	if (heap->cur_free < sz) {
+		assert(0);
+		return NULL;
+	}
 
 	ptr = &heap->cur[heap->cur_ptr];
 	heap->cur_ptr += sz / sizeof(*heap->cur);
