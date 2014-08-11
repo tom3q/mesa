@@ -307,17 +307,14 @@ of_ir_instr_add_src(struct of_ir_instruction *instr, struct of_ir_register *reg)
 	}
 }
 
-void
-of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_ast_node *node,
-		   struct of_ir_instruction *where,
-		   struct of_ir_instruction *instr)
+static void
+insert_instr(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+	     struct list_head *list, struct of_ir_instruction *instr)
 {
 	const struct of_ir_opc_info *info = of_ir_get_opc_info(instr->opc);
-	struct list_head *list;
 
 	assert(instr->num_srcs == info->num_srcs);
 	assert(info->type != OF_IR_CF);
-	assert(node || where);
 
 	if (instr->dst && instr->dst->type == OF_IR_REG_VAR) {
 		unsigned comp;
@@ -333,6 +330,20 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	}
 
 	++shader->num_instrs;
+	list_addtail(&instr->list, list);
+	instr->node = node;
+	++node->list.num_instrs;
+}
+
+void
+of_ir_instr_insert_before(struct of_ir_shader *shader,
+			  struct of_ir_ast_node *node,
+			  struct of_ir_instruction *where,
+			  struct of_ir_instruction *instr)
+{
+	struct list_head *list;
+
+	assert(node || where);
 
 	if (where) {
 		/* Explicitly specified instruction to prepend. */
@@ -341,12 +352,32 @@ of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	} else {
 		/* Explicitly specified list node. */
 		assert(node->type == OF_IR_NODE_LIST);
+		list = node->list.instrs.next;
+	}
+
+	insert_instr(shader, node, list, instr);
+}
+
+void
+of_ir_instr_insert(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+		   struct of_ir_instruction *where,
+		   struct of_ir_instruction *instr)
+{
+	struct list_head *list;
+
+	assert(node || where);
+
+	if (where) {
+		/* Explicitly specified instruction to append. */
+		node = where->node;
+		list = where->list.next;
+	} else {
+		/* Explicitly specified list node. */
+		assert(node->type == OF_IR_NODE_LIST);
 		list = &node->list.instrs;
 	}
 
-	list_addtail(&instr->list, list);
-	instr->node = node;
-	++node->list.num_instrs;
+	insert_instr(shader, node, list, instr);
 }
 
 static void
