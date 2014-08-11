@@ -182,6 +182,10 @@ void of_ir_instr_insert(struct of_ir_shader *shader,
 			struct of_ir_ast_node *block,
 			struct of_ir_instruction *where,
 			struct of_ir_instruction *instr);
+void of_ir_instr_insert_before(struct of_ir_shader *shader,
+			       struct of_ir_ast_node *node,
+			       struct of_ir_instruction *where,
+			       struct of_ir_instruction *instr);
 struct of_ir_instruction *of_ir_instr_ptr(struct of_ir_shader *shader);
 
 void of_ir_instr_insert_templ(struct of_ir_shader *shader,
