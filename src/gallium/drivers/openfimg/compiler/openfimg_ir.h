@@ -109,6 +109,7 @@ struct of_ir_opc_info {
 	enum of_ir_instr_type type;
 	unsigned num_srcs;
 	const dst_map_t *dst_map;
+	bool fix_comp;
 };
 
 struct of_ir_instr_template {
