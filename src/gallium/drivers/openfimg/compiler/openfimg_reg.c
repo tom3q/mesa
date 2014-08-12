@@ -27,28 +27,29 @@
 #include <assert.h>
 
 #include <util/u_dynarray.h>
+#include <util/u_slab.h>
 
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
 enum of_ir_constraint_type {
-	OF_IR_CONSTR_SAME_REG,
-	OF_IR_CONSTR_PHI,
+	OF_IR_CONSTR_SAME_REG = (1 << 0),
+	OF_IR_CONSTR_PHI = (1 << 1),
 };
 
 struct of_ir_chunk {
 	struct list_head list;
-	struct list_head vars;
+	struct of_valset vars;
 	unsigned cost;
 	uint8_t comp;
 };
 
 struct of_ir_variable {
 	struct of_ir_chunk *chunk;
-	struct list_head chunk_list;
 	struct of_ir_instruction *def_ins;
 	struct of_ir_phi *def_phi;
 	uint32_t *interference;
+	unsigned constraints;
 	uint8_t comp;
 };
 
@@ -58,25 +59,58 @@ struct of_ir_affinity {
 };
 
 struct of_ir_constraint {
-	uint16_t vars[OF_IR_VEC_SIZE];
+	struct of_valset vars;
 	unsigned num_vars;
 	enum of_ir_constraint_type type;
-	struct list_head list;
-	struct list_head next;
 };
 
 struct of_ir_reg_assign {
 	struct of_ir_shader *shader;
 	struct of_heap *heap;
-	struct of_ir_variable *vars;
+	struct util_slab_mempool valset_slab;
 	uint32_t *live;
+	struct util_dynarray vars;
 	unsigned num_vars;
 	unsigned vars_bitmap_size;
 	struct list_head chunks;
-	struct list_head constraints;
+	struct util_dynarray constraints;
+	unsigned num_constraints;
 	struct util_dynarray affinities;
 	unsigned num_affinities;
 };
+
+/*
+ * Variable management.
+ */
+
+static INLINE uint16_t
+var_num(struct of_ir_reg_assign *ra, struct of_ir_variable *var)
+{
+	struct of_ir_variable *vars = util_dynarray_begin(&ra->vars);
+	return var - vars;
+}
+
+static INLINE struct of_ir_variable *
+get_var(struct of_ir_reg_assign *ra, uint16_t var)
+{
+	return util_dynarray_element(&ra->vars, struct of_ir_variable, var);
+}
+
+static INLINE struct of_ir_variable *
+add_var(struct of_ir_reg_assign *ra)
+{
+	static const struct of_ir_variable v = { 0, };
+
+	util_dynarray_append(&ra->vars, struct of_ir_variable, v);
+	++ra->num_vars;
+	return util_dynarray_top_ptr(&ra->vars, struct of_ir_variable);
+}
+
+static INLINE uint16_t
+add_var_num(struct of_ir_reg_assign *ra)
+{
+	return var_num(ra, add_var(ra));
+}
 
 /*
  * Interference graph construction.
@@ -85,8 +119,8 @@ struct of_ir_reg_assign {
 static void
 add_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
 {
-	struct of_ir_variable *v1 = &ra->vars[var1];
-	struct of_ir_variable *v2 = &ra->vars[var2];
+	struct of_ir_variable *v1 = get_var(ra, var1);
+	struct of_ir_variable *v2 = get_var(ra, var2);
 
 	if (!v1->interference)
 		v1->interference = of_heap_alloc(ra->heap,
@@ -119,8 +153,7 @@ interference_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 			if (!(dst->mask & (1 << comp)))
 				continue;
 
-			ra->vars[var].def_ins = ins;
-			ra->vars[var].comp = comp + 1;
+			get_var(ra, var)->def_ins = ins;
 			of_bitmap_clear(ra->live, var);
 		}
 
@@ -158,7 +191,7 @@ interference_phi(struct of_ir_reg_assign *ra, struct list_head *phis,
 		unsigned var = phi->dst;
 		unsigned i;
 
-		ra->vars[var].def_phi = phi;
+		get_var(ra, var)->def_phi = phi;
 		of_bitmap_clear(ra->live, var);
 
 		for (i = 0; i < count; ++i) {
@@ -196,17 +229,22 @@ affinity_compare(const void *a, const void *b)
 	const struct of_ir_affinity *aa = *(const struct of_ir_affinity **)a;
 	const struct of_ir_affinity *ab = *(const struct of_ir_affinity **)b;
 
-	return aa->cost - ab->cost;
+	return ab->cost - aa->cost;
 }
 
 static struct of_ir_chunk *
 create_chunk(struct of_ir_reg_assign *ra, struct of_ir_variable *var)
 {
 	struct of_ir_chunk *c = CALLOC_STRUCT(of_ir_chunk);
+	uint16_t num = var_num(ra, var);
 
-	LIST_INITHEAD(&c->vars);
-	list_addtail(&var->chunk_list, &c->vars);
 	list_addtail(&c->list, &ra->chunks);
+
+	if (var->chunk)
+		of_valset_del(&c->vars, num);
+
+	of_valset_init(&c->vars, &ra->valset_slab);
+	of_valset_add(&c->vars, num);
 
 	c->comp = var->comp;
 	var->chunk = c;
@@ -221,26 +259,24 @@ destroy_chunk(struct of_ir_reg_assign *ra, struct of_ir_chunk *c)
 	FREE(c);
 }
 
-static INLINE uint16_t
-var_num(struct of_ir_reg_assign *ra, struct of_ir_variable *var)
-{
-	return var - ra->vars;
-}
-
 static void
 try_to_merge_chunks(struct of_ir_reg_assign *ra, struct of_ir_affinity *a,
 		    struct of_ir_chunk *c0, struct of_ir_chunk *c1)
 {
-	struct of_ir_variable *v0, *v1;
+	unsigned long *num0, *num1;
 
 	if (c0->comp && c1->comp && c0->comp != c1->comp)
 		return;
 
-	LIST_FOR_EACH_ENTRY(v0, &c0->vars, chunk_list) {
-		LIST_FOR_EACH_ENTRY(v1, &c1->vars, chunk_list) {
-			if (v1 == v0)
+	OF_VALSET_FOR_EACH_VAL(num0, &c0->vars) {
+		struct of_ir_variable *v0 = get_var(ra, *num0);
+
+		OF_VALSET_FOR_EACH_VAL(num1, &c1->vars) {
+			struct of_ir_variable *v1 = get_var(ra, *num1);
+
+			if (v0 == v1)
 				continue;
-			if (of_bitmap_get(v0->interference, var_num(ra, v1)))
+			if (of_bitmap_get(v0->interference, *num1))
 				return;
 		}
 	}
@@ -248,10 +284,13 @@ try_to_merge_chunks(struct of_ir_reg_assign *ra, struct of_ir_affinity *a,
 	c0->comp |= c1->comp;
 	c0->cost += a->cost;
 
-	LIST_FOR_EACH_ENTRY(v1, &c1->vars, chunk_list)
-		v1->chunk = c0;
+	OF_VALSET_FOR_EACH_VAL(num1, &c1->vars) {
+		struct of_ir_variable *v1 = get_var(ra, *num1);
 
-	list_splice(&c1->vars, &c0->vars);
+		of_valset_add(&c0->vars, *num1);
+		v1->chunk = c0;
+	}
+
 	destroy_chunk(ra, c1);
 }
 
@@ -266,8 +305,8 @@ prepare_chunks(struct of_ir_reg_assign *ra)
 
 	for (i = 0; i < ra->num_affinities; ++i) {
 		struct of_ir_affinity *a = array[i];
-		struct of_ir_variable *v0 = &ra->vars[a->vars[0]];
-		struct of_ir_variable *v1 = &ra->vars[a->vars[1]];
+		struct of_ir_variable *v0 = get_var(ra, a->vars[0]);
+		struct of_ir_variable *v1 = get_var(ra, a->vars[1]);
 
 		if (!v0->chunk)
 			create_chunk(ra, v0);
@@ -292,12 +331,12 @@ dump_chunks(struct of_ir_reg_assign *ra)
 	_debug_printf("Coalescer chunks:\n");
 
 	LIST_FOR_EACH_ENTRY(c, &ra->chunks, list) {
-		struct of_ir_variable *v;
+		unsigned long *num;
 
 		_debug_printf("{cost = %u, comp = %u}: ", c->cost, c->comp);
 
-		LIST_FOR_EACH_ENTRY(v, &c->vars, chunk_list)
-			_debug_printf("%u ", var_num(ra, v));
+		OF_VALSET_FOR_EACH_VAL(num, &c->vars)
+			_debug_printf("%lu ", *num);
 
 		_debug_printf("\n");
 	}
@@ -323,29 +362,22 @@ create_constraint(struct of_ir_reg_assign *ra, enum of_ir_constraint_type type)
 	struct of_ir_constraint *c = of_heap_alloc(ra->heap, sizeof(*c));
 
 	c->type = type;
-	list_addtail(&c->list, &ra->constraints);
-	LIST_INITHEAD(&c->next);
+	of_valset_init(&c->vars, &ra->valset_slab);
+
+	util_dynarray_append(&ra->constraints, struct of_ir_constraint *, c);
+	++ra->num_constraints;
 
 	return c;
 }
 
-static INLINE void constraint_add_var(struct of_ir_reg_assign *ra,
-				      struct of_ir_constraint *c, uint16_t var)
+static INLINE void
+constraint_add_var(struct of_ir_reg_assign *ra, struct of_ir_constraint *c,
+		   uint16_t var)
 {
-	struct of_ir_constraint *last = c;
+	struct of_ir_variable *v = get_var(ra, var);
 
-	if (!LIST_IS_EMPTY(&c->next))
-		last = LIST_ENTRY(struct of_ir_constraint, c->next.prev, list);
-
-	if (last->num_vars == ARRAY_SIZE(last->vars)) {
-		struct of_ir_constraint *new;
-
-		new = of_heap_alloc(ra->heap, sizeof(*new));
-		list_addtail(&new->list, &c->next);
-		last = new;
-	}
-
-	last->vars[last->num_vars++] = var;
+	of_valset_add(&c->vars, var);
+	v->constraints |= c->type;
 }
 
 static void
@@ -410,25 +442,24 @@ split_operand(struct of_ir_reg_assign *ra, struct of_ir_instruction *ins,
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 		struct of_ir_instruction *copy;
+		uint16_t tmp;
 
 		if (!comp_used(reg, comp))
 			continue;
 
+		tmp = add_var_num(ra);
 		constraint_add_var(ra, c, reg->var[comp]);
 
 		if (dst) {
-			copy = create_copy(ra->shader, reg->var[comp],
-						ra->num_vars);
+			copy = create_copy(ra->shader, reg->var[comp], tmp);
 			of_ir_instr_insert(ra->shader, NULL, ins, copy);
 		} else {
-			copy = create_copy(ra->shader, ra->num_vars,
-						reg->var[comp]);
-			of_ir_instr_insert_before(ra->shader,
-							NULL, ins, copy);
+			copy = create_copy(ra->shader, tmp, reg->var[comp]);
+			of_ir_instr_insert_before(ra->shader, NULL, ins, copy);
 		}
 
-		add_affinity(ra, ra->num_vars, reg->var[comp], 20000);
-		reg->var[comp] = ra->num_vars++;
+		add_affinity(ra, tmp, reg->var[comp], 20000);
+		reg->var[comp] = tmp;
 	}
 }
 
@@ -477,7 +508,7 @@ split_live_phi_src(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
 				return;
 		}
 
-		tmp = ra->num_vars++;
+		tmp = add_var_num(ra);
 		ins = create_copy(node->shader, tmp, phi->src[arg]);
 		of_ir_instr_insert(node->shader, list, NULL, ins);
 
@@ -509,7 +540,7 @@ split_live_phi_dst(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
 				return;
 		}
 
-		tmp = ra->num_vars++;
+		tmp = add_var_num(ra);
 		ins = create_copy(node->shader, phi->dst, tmp);
 		of_ir_instr_insert_before(node->shader, list, NULL, ins);
 
@@ -661,12 +692,13 @@ dump_interference(struct of_ir_reg_assign *ra)
 	unsigned var1, var2;
 
 	for (var1 = 0; var1 < ra->num_vars; ++var1) {
-		if (!ra->vars[var1].interference)
+		struct of_ir_variable *v = get_var(ra, var1);
+
+		if (!v->interference)
 			continue;
 
 		_debug_printf("@%d: ", var1);
-		OF_BITMAP_FOR_EACH_SET_BIT(var2, ra->vars[var1].interference,
-					   ra->num_vars)
+		OF_BITMAP_FOR_EACH_SET_BIT(var2, v->interference, ra->num_vars)
 			_debug_printf("@%d ", var2);
 		_debug_printf("\n");
 	}
@@ -683,20 +715,24 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	ra->shader = shader;
 	ra->heap = heap;
 	ra->num_vars = shader->stats.num_vars;
-	LIST_INITHEAD(&ra->constraints);
 	LIST_INITHEAD(&ra->chunks);
+	util_dynarray_init(&ra->constraints);
 	util_dynarray_init(&ra->affinities);
+	util_dynarray_init(&ra->vars);
+	util_dynarray_resize(&ra->vars, ra->num_vars
+				* sizeof(struct of_ir_variable));
+	memset(util_dynarray_begin(&ra->vars), 0, ra->num_vars
+				* sizeof(struct of_ir_variable));
+	util_slab_create(&ra->valset_slab, sizeof(struct of_valset_value),
+				64, UTIL_SLAB_SINGLETHREADED);
 
 	RUN_PASS(shader, ra, split_live);
 
 	ra->vars_bitmap_size = OF_BITMAP_WORDS_FOR_BITS(ra->num_vars)
 				* sizeof(uint32_t);
 	ra->live = CALLOC(1, ra->vars_bitmap_size);
-	ra->vars = CALLOC(ra->num_vars, sizeof(*ra->vars));
-
 	RUN_PASS(shader, ra, interference);
 	dump_interference(ra);
-
 	FREE(ra->live);
 
 	prepare_coalesce(ra);
@@ -705,7 +741,9 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	DBG("AST (post-register-assignment/pre-CF-insertion)");
 	of_ir_dump_ast(shader, dump_ra_data, ra);
 
-	FREE(ra->vars);
+	util_dynarray_fini(&ra->vars);
+	util_dynarray_fini(&ra->affinities);
+	util_dynarray_fini(&ra->constraints);
 	of_heap_destroy(heap);
 
 	return 0;
