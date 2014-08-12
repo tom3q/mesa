@@ -77,13 +77,14 @@ struct of_ir_reg_assign {
 	uint32_t *live;
 	struct util_dynarray vars;
 	unsigned num_vars;
-	unsigned vars_bitmap_size;
+	struct util_slab_mempool chunk_slab;
 	struct list_head chunks;
 	struct util_dynarray constraints;
 	unsigned num_constraints;
 	struct util_dynarray affinities;
 	unsigned num_affinities;
 	uint32_t *reg_bitmap[4];
+	uint32_t *chunk_interf;
 };
 
 /*
@@ -131,11 +132,11 @@ add_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
 
 	if (!v1->interference)
 		v1->interference = of_heap_alloc(ra->heap,
-							ra->vars_bitmap_size);
+					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 
 	if (!v2->interference)
-		v2->interference = of_heap_alloc(ra->heap,
-							ra->vars_bitmap_size);
+		v2->interference = of_heap_alloc(ra->heap, sizeof(uint32_t) *
+					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 
 	of_bitmap_set(v1->interference, var2);
 	of_bitmap_set(v2->interference, var1);
@@ -242,8 +243,10 @@ affinity_compare(const void *a, const void *b)
 static struct of_ir_chunk *
 create_chunk(struct of_ir_reg_assign *ra, struct of_ir_variable *var)
 {
-	struct of_ir_chunk *c = CALLOC_STRUCT(of_ir_chunk);
+	struct of_ir_chunk *c = util_slab_alloc(&ra->chunk_slab);
 	uint16_t num = var_num(ra, var);
+
+	memset(c, 0, sizeof(*c));
 
 	list_addtail(&c->list, &ra->chunks);
 
@@ -263,7 +266,7 @@ static void
 destroy_chunk(struct of_ir_reg_assign *ra, struct of_ir_chunk *c)
 {
 	list_del(&c->list);
-	FREE(c);
+	util_slab_free(&ra->chunk_slab, c);
 }
 
 static void
@@ -492,16 +495,21 @@ static void
 init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t *regs,
 		struct of_ir_chunk *c)
 {
-	uint32_t *interf = CALLOC(1, ra->vars_bitmap_size);
+	uint32_t *interf;
 	struct of_ir_variable *v;
 	unsigned long *num;
 	unsigned var;
 
+	if (!ra->chunk_interf)
+		ra->chunk_interf = of_heap_alloc(ra->heap,
+					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
+	interf = ra->chunk_interf;
+	memset(interf, 0, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
+
 	/* Calculate interference of the chunk. */
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
 		v = get_var(ra, *num);
-		of_bitmap_or(interf, interf, v->interference,
-				ra->vars_bitmap_size);
+		of_bitmap_or(interf, interf, v->interference, ra->num_vars);
 	}
 
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars)
@@ -515,8 +523,6 @@ init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t *regs,
 		if (v->color)
 			of_bitmap_set(regs, v->color);
 	}
-
-	FREE(interf);
 }
 
 static int
@@ -550,7 +556,8 @@ color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
 		}
 
 		if (!ra->reg_bitmap[i])
-			ra->reg_bitmap[i] = MALLOC(OF_REG_BITMAP_SIZE);
+			ra->reg_bitmap[i] = of_heap_alloc(ra->heap,
+							OF_REG_BITMAP_SIZE);
 		rb[i] = ra->reg_bitmap[i];
 		init_reg_bitmap(ra, rb[i], ch[i]);
 		++i;
@@ -1028,13 +1035,13 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	DBG("AST (post-split-live)");
 	of_ir_dump_ast(shader, dump_ra_data, ra);
 
-	ra->vars_bitmap_size = OF_BITMAP_WORDS_FOR_BITS(ra->num_vars)
-				* sizeof(uint32_t);
-	ra->live = CALLOC(1, ra->vars_bitmap_size);
+	ra->live = CALLOC(1, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 	RUN_PASS(shader, ra, interference);
 	dump_interference(ra);
 	FREE(ra->live);
 
+	util_slab_create(&ra->chunk_slab, sizeof(struct of_ir_chunk),
+				32, UTIL_SLAB_SINGLETHREADED);
 	prepare_coalesce(ra);
 	RUN_PASS(shader, ra, precolor_constrained);
 	DBG("AST (post-precoloring)");
@@ -1043,6 +1050,8 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	util_dynarray_fini(&ra->vars);
 	util_dynarray_fini(&ra->affinities);
 	util_dynarray_fini(&ra->constraints);
+	util_slab_destroy(&ra->chunk_slab);
+	util_slab_destroy(&ra->valset_slab);
 	of_heap_destroy(heap);
 
 	return 0;
