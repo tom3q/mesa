@@ -205,7 +205,7 @@ void *of_heap_alloc(struct of_heap *heap, int sz);
 
 #define OF_BITMAP_BITS_PER_WORD		(8 * sizeof(uint32_t))
 #define OF_BITMAP_WORDS_FOR_BITS(bits)	\
-	(((bits) + OF_BITMAP_BITS_PER_WORD + 1) / OF_BITMAP_BITS_PER_WORD)
+	(((bits) + OF_BITMAP_BITS_PER_WORD - 1) / OF_BITMAP_BITS_PER_WORD)
 
 unsigned of_bitmap_find_next_set(uint32_t *words, unsigned size,
 				 unsigned index);
