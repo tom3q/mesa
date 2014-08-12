@@ -1304,6 +1304,48 @@ assign_registers(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 }
 
 /*
+ * Copy elimination.
+ */
+
+static void
+copy_elimination_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE(ins, s, &node->list.instrs, list) {
+		struct of_ir_register *dst = ins->dst, *src = ins->srcs[0];
+		unsigned comp;
+
+		if (ins->opc != OF_OP_MOV || src->type != OF_IR_REG_VARC
+		    || dst->type != OF_IR_REG_VARC)
+			continue;
+
+		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+			if (!(dst->mask & (1 << comp)))
+				continue;
+			if (src->var[comp] != dst->var[comp])
+				break;
+		}
+
+		if (comp == OF_IR_VEC_SIZE)
+			list_del(&ins->list);
+	}
+}
+
+static void
+copy_elimination(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list) {
+		if (child->type == OF_IR_NODE_LIST)
+			copy_elimination_list(ra, child);
+		else
+			copy_elimination(ra, child);
+	}
+}
+
+/*
  * AST dumping.
  */
 
@@ -1434,7 +1476,11 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	precolor(ra);
 	RUN_PASS(shader, ra, assign_registers);
 	DBG("AST (post-register-assignment)");
-	of_ir_dump_ast(shader, dump_ra_data, ra);
+	of_ir_dump_ast(shader, NULL, 0);
+
+	RUN_PASS(shader, ra, copy_elimination);
+	DBG("AST (post-copy-elimination)");
+	of_ir_dump_ast(shader, NULL, 0);
 
 	util_dynarray_fini(&ra->vars);
 	util_dynarray_fini(&ra->affinities);
