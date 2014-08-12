@@ -186,6 +186,13 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 		.readable = true,					\
 	}
 
+#define OF_IR_REG_VARC_INFO						\
+	[OF_IR_REG_VARC] = {						\
+		.name = "$",						\
+		.writable = true,					\
+		.readable = true,					\
+	}
+
 static const struct of_ir_reg_info vs_reg_info[OF_IR_NUM_REG_TYPES] = {
 	/* (reg, num_regs, a0_addr, al_addr[, num_reads]) */
 	OF_IR_REG_RW(R,   32, false, true,  2),
@@ -199,6 +206,7 @@ static const struct of_ir_reg_info vs_reg_info[OF_IR_NUM_REG_TYPES] = {
 	OF_IR_REG_W( O,   10, false, true),
 	OF_IR_REG_W(A0,    1, false, false),
 	OF_IR_REG_VAR_INFO, /* Virtual variable */
+	OF_IR_REG_VARC_INFO, /* Virtual variable */
 };
 
 static const struct of_ir_reg_info ps_reg_info[OF_IR_NUM_REG_TYPES] = {
@@ -217,6 +225,7 @@ static const struct of_ir_reg_info ps_reg_info[OF_IR_NUM_REG_TYPES] = {
 	OF_IR_REG_W( O,     1, false, true),
 	OF_IR_REG_W(A0,     1, false, false),
 	OF_IR_REG_VAR_INFO, /* Virtual variable */
+	OF_IR_REG_VARC_INFO, /* Virtual variable */
 };
 
 const struct of_ir_reg_info *
@@ -774,7 +783,8 @@ format_src_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 	do {
 		if (!(reg->mask & (1 << comp))) {
 			strncat(buf, "-", maxlen);
-		} else if (reg->type == OF_IR_REG_VAR) {
+		} else if (reg->type == OF_IR_REG_VAR
+			   || reg->type == OF_IR_REG_VARC) {
 			snprintf(comp_str, sizeof(comp_str), "%s%s%s%d%s",
 				reg->flags & OF_IR_REG_NEGATE ? "-" : "",
 				reg->flags & OF_IR_REG_ABS ? "|" : "",
@@ -812,7 +822,8 @@ format_dst_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 	do {
 		if (!(reg->mask & (1 << comp))) {
 			strncat(buf, "-", maxlen);
-		} else if (reg->type == OF_IR_REG_VAR) {
+		} else if (reg->type == OF_IR_REG_VAR
+			   || reg->type == OF_IR_REG_VARC) {
 			snprintf(comp_str, sizeof(comp_str), "%s%d",
 					info->name, reg->var[comp]);
 			strncat(buf, comp_str, maxlen);
