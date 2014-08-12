@@ -622,6 +622,12 @@ done:
 		unsigned color = make_color(reg, swz[i]);
 		struct of_ir_chunk *cc = ch[i];
 
+		if (v->color) {
+			/* FIXME: Do not allow duplicates in constraints. */
+			++i;
+			continue;
+		}
+
 		if (cc->fixed) {
 			if (cc->color == color) {
 				++i;
