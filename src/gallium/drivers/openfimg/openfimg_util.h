@@ -274,9 +274,23 @@ void of_stack_destroy(struct of_stack *stack);
 static INLINE void *
 of_stack_push(struct of_stack *stack)
 {
-	stack->ptr += stack->element_size;
-	if (stack->ptr > stack->size)
+	if (stack->ptr + stack->element_size >= stack->size)
 		of_stack_grow(stack);
+
+	stack->ptr += stack->element_size;
+
+	return stack->buffer + stack->ptr;
+}
+
+static INLINE void *
+of_stack_push_copy(struct of_stack *stack)
+{
+	if (stack->ptr + stack->element_size >= stack->size)
+		of_stack_grow(stack);
+
+	memcpy(stack->buffer + stack->ptr + stack->element_size,
+		stack->buffer + stack->ptr, stack->element_size);
+	stack->ptr += stack->element_size;
 
 	return stack->buffer + stack->ptr;
 }
