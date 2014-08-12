@@ -95,6 +95,7 @@ enum of_ir_reg_flags {
 
 enum of_ir_instr_flags {
 	OF_IR_INSTR_NEXT_3SRC = (1 << 0),
+	OF_IR_INSTR_COPY = (1 << 1),
 };
 
 struct of_ir_register;

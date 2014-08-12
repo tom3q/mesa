@@ -812,6 +812,8 @@ create_copy(struct of_ir_shader *shader, uint16_t dst_var, uint16_t src_var)
 	src->var[0] = src_var;
 	src->mask = 1;
 
+	ins->flags |= OF_IR_INSTR_COPY;
+
 	return ins;
 }
 
