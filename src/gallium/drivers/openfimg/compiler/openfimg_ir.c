@@ -49,6 +49,15 @@
 		.dst_map = _map,			\
 	}
 
+#define OF_IR_OPC_MAP_FIX(_opc, _type, _num_srcs, _map)	\
+	[OF_OP_ ## _opc] = {				\
+		.name = #_opc,				\
+		.type = OF_IR_ ## _type,		\
+		.num_srcs = _num_srcs,			\
+		.dst_map = _map,			\
+		.fix_comp = true,			\
+	}
+
 static const dst_map_t vector_dst_map[] = {
 	{ "x___", "_y__", "__z_", "___w" },
 	{ "x___", "_y__", "__z_", "___w" },
@@ -102,7 +111,7 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 	OF_IR_OPC_MAP(DP3, ALU, 2, dp3_dst_map),
 	OF_IR_OPC_MAP(DP4, ALU, 2, dp4_dst_map),
 	OF_IR_OPC_MAP(DPH, ALU, 2, dph_dst_map),
-	OF_IR_OPC_MAP(DST, ALU, 2, dst_dst_map),
+	OF_IR_OPC_MAP_FIX(DST, ALU, 2, dst_dst_map),
 	OF_IR_OPC_MAP(EXP, ALU, 1, scalar_dst_map),
 	OF_IR_OPC_MAP(EXP_LIT, ALU, 1, scalar_dst_map),
 	OF_IR_OPC_MAP(LOG, ALU, 1, scalar_dst_map),
@@ -122,10 +131,10 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 	OF_IR_OPC(MAD, ALU, 3),
 	OF_IR_OPC(FRC, ALU, 1),
 	OF_IR_OPC(FLR, ALU, 1),
-	OF_IR_OPC_MAP(TEXLD, ALU, 2, full_dst_map),
-	OF_IR_OPC_MAP(CUBEDIR, ALU, 1, full_dst_map),
-	OF_IR_OPC_MAP(MAXCOMP, ALU, 1, full_dst_map),
-	OF_IR_OPC_MAP(TEXLDC, ALU, 3, full_dst_map),
+	OF_IR_OPC_MAP_FIX(TEXLD, ALU, 2, full_dst_map),
+	OF_IR_OPC_MAP_FIX(CUBEDIR, ALU, 1, full_dst_map),
+	OF_IR_OPC_MAP_FIX(MAXCOMP, ALU, 1, full_dst_map),
+	OF_IR_OPC_MAP_FIX(TEXLDC, ALU, 3, full_dst_map),
 	OF_IR_OPC_MAP(TEXKILL, ALU, 1, scalar_dst_map),
 	OF_IR_OPC(MOVIPS, ALU, 1),
 	OF_IR_OPC(ADDI, ALU, 2),
