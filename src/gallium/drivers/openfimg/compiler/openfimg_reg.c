@@ -850,10 +850,7 @@ static void
 split_operand(struct of_ir_reg_assign *ra, struct of_ir_instruction *ins,
 	      struct of_ir_register *reg, bool dst)
 {
-	struct of_ir_constraint *c;
 	unsigned comp;
-
-	c = create_constraint(ra, OF_IR_CONSTR_SAME_REG);
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 		struct of_ir_instruction *copy;
@@ -863,7 +860,6 @@ split_operand(struct of_ir_reg_assign *ra, struct of_ir_instruction *ins,
 			continue;
 
 		tmp = add_var_num(ra);
-		constraint_add_var(ra, c, reg->var[comp]);
 		copy = create_copy(ra->shader, tmp, reg->var[comp]);
 
 		if (dst)
@@ -882,28 +878,10 @@ split_live_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY_SAFE(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
-		const struct of_ir_opc_info *info;
 		unsigned i;
 
-		if (dst && dst->type == OF_IR_REG_VAR) {
-			info = of_ir_get_opc_info(ins->opc);
-
-			if (info->fix_comp) {
-				unsigned comp;
-
-				for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-					uint16_t var = dst->var[comp];
-
-					if (!comp_used(dst, comp))
-						continue;
-
-					get_var(ra, var)->comp = (1 << comp);
-				}
-			}
-
-			if (is_vector(dst))
-				split_operand(ra, ins, dst, true);
-		}
+		if (dst && dst->type == OF_IR_REG_VAR && is_vector(dst))
+			split_operand(ra, ins, dst, true);
 
 		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
@@ -1179,6 +1157,78 @@ rename_copies(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 }
 
 /*
+ * Add vector constraints.
+ */
+
+static void
+constraint_vector(struct of_ir_reg_assign *ra, struct of_ir_register *reg)
+{
+	struct of_ir_constraint *c;
+	unsigned comp;
+
+	c = create_constraint(ra, OF_IR_CONSTR_SAME_REG);
+
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		if (!comp_used(reg, comp))
+			continue;
+
+		constraint_add_var(ra, c, reg->var[comp]);
+	}
+}
+
+static void
+constraint_vectors_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins;
+
+	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
+		struct of_ir_register *dst = ins->dst;
+		const struct of_ir_opc_info *info;
+		unsigned i;
+
+		if (dst && dst->type == OF_IR_REG_VAR) {
+			info = of_ir_get_opc_info(ins->opc);
+
+			if (info->fix_comp) {
+				unsigned comp;
+
+				for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+					uint16_t var = dst->var[comp];
+
+					if (!comp_used(dst, comp))
+						continue;
+
+					get_var(ra, var)->comp = (1 << comp);
+				}
+			}
+
+			if (is_vector(dst))
+				constraint_vector(ra, dst);
+		}
+
+		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
+			struct of_ir_register *src = ins->srcs[i];
+
+			if (src->type == OF_IR_REG_VAR && is_vector(src))
+				constraint_vector(ra, src);
+		}
+	}
+}
+
+static void
+constraint_vectors(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child;
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list) {
+		if (child->type == OF_IR_NODE_LIST)
+			constraint_vectors_list(ra, child);
+		else
+			constraint_vectors(ra, child);
+	}
+}
+
+/*
  * Register assignment.
  */
 
@@ -1372,6 +1422,7 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	DBG("AST (post-rename-copies)");
 	of_ir_dump_ast(shader, NULL, 0);
 
+	RUN_PASS(shader, ra, constraint_vectors);
 	ra->live = CALLOC(1, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 	RUN_PASS(shader, ra, interference);
 	dump_interference(ra);
