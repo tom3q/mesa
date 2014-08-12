@@ -880,7 +880,7 @@ split_live_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins, *s;
 
-	LIST_FOR_EACH_ENTRY_SAFE_REV(ins, s, &node->list.instrs, list) {
+	LIST_FOR_EACH_ENTRY_SAFE(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
 		const struct of_ir_opc_info *info;
 		unsigned i;
@@ -1030,7 +1030,7 @@ split_live(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 		break;
 	}
 
-	LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes, parent_list)
+	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list)
 		split_live(ra, child);
 
 	if (node->type == OF_IR_NODE_REGION) {
