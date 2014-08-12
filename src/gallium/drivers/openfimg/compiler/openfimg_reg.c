@@ -88,6 +88,8 @@ struct of_ir_reg_assign {
 	uint32_t *chunk_interf;
 	struct util_dynarray chunk_queue;
 	unsigned chunk_queue_len;
+	struct of_stack *renames_stack;
+	uint16_t *renames;
 };
 
 /*
@@ -872,7 +874,6 @@ split_operand(struct of_ir_reg_assign *ra, struct of_ir_instruction *ins,
 		}
 
 		add_affinity(ra, tmp, reg->var[comp], 20000);
-		reg->var[comp] = tmp;
 	}
 }
 
@@ -1038,6 +1039,144 @@ split_live(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 		constraint_phi(ra, &node->ssa.phis, node->ssa.depart_count);
 		constraint_phi(ra, &node->ssa.loop_phis,
 				node->ssa.repeat_count + 1);
+	}
+}
+
+/*
+ * A pass propagating copies introduced in split_live to instruction operands.
+ * Essentialy a second pass of live range splitting.
+ */
+
+static void
+rename_copies_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins;
+
+	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
+		struct of_ir_register *dst, *src;
+		uint16_t new_src[3][OF_IR_VEC_SIZE];
+		unsigned comp;
+		unsigned i;
+
+		for (i = 0; i < ins->num_srcs; ++i) {
+			src = ins->srcs[i];
+			if (src->type != OF_IR_REG_VAR)
+				continue;
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				uint16_t var = src->var[comp];
+
+				if (!(src->mask & (1 << comp)))
+					continue;
+
+				if (ra->renames[var])
+					new_src[i][comp] = ra->renames[var];
+				else
+					new_src[i][comp] = 0;
+			}
+		}
+
+		if (ins->flags & OF_IR_INSTR_COPY) {
+			dst = ins->dst;
+			assert(dst && dst->type == OF_IR_REG_VAR);
+			assert(ins->num_srcs == 1);
+			src = ins->srcs[0];
+			assert(src && src->type == OF_IR_REG_VAR);
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				uint16_t var = src->var[comp];
+
+				if (!(dst->mask & (1 << comp)))
+					continue;
+
+				ra->renames[var] = dst->var[comp];
+			}
+		}
+
+		for (i = 0; i < ins->num_srcs; ++i) {
+			src = ins->srcs[i];
+			if (src->type != OF_IR_REG_VAR)
+				continue;
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				if (!(src->mask & (1 << comp)))
+					continue;
+
+				if (new_src[i][comp])
+					src->var[comp] = new_src[i][comp];
+			}
+		}
+	}
+}
+
+static INLINE void
+rename_phi_operand(struct of_ir_reg_assign *ra, unsigned num,
+		   struct of_ir_phi *phi, uint16_t *renames)
+{
+	if (renames[phi->reg])
+		phi->src[num] = renames[phi->reg];
+}
+
+static void
+rename_copies(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *region;
+	struct of_ir_ast_node *child;
+	struct of_ir_phi *phi;
+
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		LIST_FOR_EACH_ENTRY(phi, &node->ssa.loop_phis, list)
+			rename_phi_operand(ra, 0, phi, ra->renames);
+		break;
+
+	case OF_IR_NODE_IF_THEN:
+		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
+			rename_phi_operand(ra, 0, phi, ra->renames);
+		break;
+
+	case OF_IR_NODE_DEPART:
+	case OF_IR_NODE_REPEAT:
+		ra->renames = of_stack_push_copy(ra->renames_stack);
+		break;
+
+	case OF_IR_NODE_LIST:
+		rename_copies_list(ra, node);
+		return;
+	}
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		rename_copies(ra, child);
+
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		break;
+
+	case OF_IR_NODE_IF_THEN:
+		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
+			rename_phi_operand(ra, 1, phi, ra->renames);
+		break;
+
+	case OF_IR_NODE_DEPART:
+		region = node->depart_repeat.region;
+		LIST_FOR_EACH_ENTRY(phi, &region->ssa.phis, list)
+			rename_phi_operand(ra, node->ssa.depart_number, phi,
+						ra->renames);
+
+		ra->renames = of_stack_pop(ra->renames_stack);
+		break;
+
+	case OF_IR_NODE_REPEAT:
+		region = node->depart_repeat.region;
+		LIST_FOR_EACH_ENTRY(phi, &region->ssa.loop_phis, list)
+			rename_phi_operand(ra, node->ssa.repeat_number, phi,
+						ra->renames);
+
+		ra->renames = of_stack_pop(ra->renames_stack);
+		break;
+
+	default:
+		break;
 	}
 }
 
@@ -1225,6 +1364,15 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	RUN_PASS(shader, ra, split_live);
 	DBG("AST (post-split-live)");
 	of_ir_dump_ast(shader, dump_ra_data, ra);
+
+	ra->renames_stack = of_stack_create(ra->num_vars
+						* sizeof(*ra->renames), 1);
+	ra->renames = of_stack_top(ra->renames_stack);
+	memset(ra->renames, 0, ra->num_vars * sizeof(*ra->renames));
+	RUN_PASS(shader, ra, rename_copies);
+	of_stack_destroy(ra->renames_stack);
+	DBG("AST (post-rename-copies)");
+	of_ir_dump_ast(shader, NULL, 0);
 
 	ra->live = CALLOC(1, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 	RUN_PASS(shader, ra, interference);
