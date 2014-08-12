@@ -40,6 +40,7 @@ enum of_ir_constraint_type {
 struct of_ir_chunk {
 	struct list_head list;
 	struct of_valset vars;
+	unsigned num_vars;
 	unsigned cost;
 	unsigned color;
 	uint8_t comp;
@@ -85,6 +86,8 @@ struct of_ir_reg_assign {
 	unsigned num_affinities;
 	uint32_t *reg_bitmap[4];
 	uint32_t *chunk_interf;
+	struct util_dynarray chunk_queue;
+	unsigned chunk_queue_len;
 };
 
 /*
@@ -250,12 +253,15 @@ create_chunk(struct of_ir_reg_assign *ra, struct of_ir_variable *var)
 
 	list_addtail(&c->list, &ra->chunks);
 
-	if (var->chunk)
-		of_valset_del(&c->vars, num);
+	if (var->chunk) {
+		of_valset_del(&var->chunk->vars, num);
+		--var->chunk->num_vars;
+	}
 
 	of_valset_init(&c->vars, &ra->valset_slab);
 	of_valset_add(&c->vars, num);
 
+	c->num_vars = 1;
 	c->comp = var->comp;
 	var->chunk = c;
 
@@ -291,6 +297,7 @@ try_to_merge_chunks(struct of_ir_reg_assign *ra, struct of_ir_affinity *a,
 		}
 	}
 
+	c0->num_vars += c1->num_vars;
 	c0->comp |= c1->comp;
 	c0->cost += a->cost;
 
@@ -442,8 +449,8 @@ next_swizzle(uint8_t swz[4])
 }
 
 #define OF_NUM_REGS		32
-#define OF_REG_BITMAP_SIZE	\
-	(OF_BITMAP_WORDS_FOR_BITS(OF_NUM_REGS * OF_IR_VEC_SIZE + 1))
+#define OF_REG_BITMAP_BITS	(OF_NUM_REGS * OF_IR_VEC_SIZE + 1)
+#define OF_REG_BITMAP_SIZE	(OF_BITMAP_WORDS_FOR_BITS(OF_REG_BITMAP_BITS))
 
 static INLINE unsigned
 make_color(uint16_t reg, uint8_t swz)
@@ -492,13 +499,35 @@ color_chunk(struct of_ir_reg_assign *ra, struct of_ir_chunk *c, unsigned color)
 }
 
 static void
-init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t *regs,
-		struct of_ir_chunk *c)
+init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t **regs,
+		uint32_t *interf)
 {
-	uint32_t *interf;
+	struct of_ir_variable *v;
+	uint32_t *bitmap;
+	unsigned var;
+
+	bitmap = *regs;
+	if (!bitmap)
+		*regs = bitmap = of_heap_alloc(ra->heap, OF_REG_BITMAP_SIZE);
+
+	memset(bitmap, 0xff, OF_REG_BITMAP_SIZE);
+	of_bitmap_clear(bitmap, 0);
+
+	/* Mark registers already assigned to interfering variables. */
+	OF_BITMAP_FOR_EACH_SET_BIT(var, interf, ra->num_vars) {
+		v = get_var(ra, var);
+		if (v->color)
+			of_bitmap_clear(bitmap, v->color);
+	}
+}
+
+static void
+init_reg_bitmap_for_chunk(struct of_ir_reg_assign *ra, uint32_t **regs,
+			  struct of_ir_chunk *c)
+{
 	struct of_ir_variable *v;
 	unsigned long *num;
-	unsigned var;
+	uint32_t *interf;
 
 	if (!ra->chunk_interf)
 		ra->chunk_interf = of_heap_alloc(ra->heap,
@@ -515,14 +544,7 @@ init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t *regs,
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars)
 		of_bitmap_clear(interf, *num);
 
-	memset(regs, 0, OF_REG_BITMAP_SIZE);
-
-	/* Mark registers already assigned to interfering variables. */
-	OF_BITMAP_FOR_EACH_SET_BIT(var, interf, ra->num_vars) {
-		v = get_var(ra, var);
-		if (v->color)
-			of_bitmap_set(regs, v->color);
-	}
+	init_reg_bitmap(ra, regs, interf);
 }
 
 static int
@@ -531,7 +553,6 @@ color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
 	struct of_ir_chunk *ch[OF_IR_VEC_SIZE];
 	unsigned comp_mask = 0;
 	uint8_t swz[OF_IR_VEC_SIZE] = {0, 1, 2, 3};
-	uint32_t *rb[OF_IR_VEC_SIZE];
 	unsigned long *num;
 	unsigned num_vars;
 	unsigned reg;
@@ -555,11 +576,7 @@ color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
 			}
 		}
 
-		if (!ra->reg_bitmap[i])
-			ra->reg_bitmap[i] = of_heap_alloc(ra->heap,
-							OF_REG_BITMAP_SIZE);
-		rb[i] = ra->reg_bitmap[i];
-		init_reg_bitmap(ra, rb[i], ch[i]);
+		init_reg_bitmap_for_chunk(ra, &ra->reg_bitmap[i], ch[i]);
 		++i;
 	}
 	num_vars = i;
@@ -575,7 +592,7 @@ color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
 			for (i = 0; i < num_vars; ++i) {
 				unsigned color = make_color(reg, swz[i]);
 
-				if (of_bitmap_get(rb[i], color))
+				if (!of_bitmap_get(ra->reg_bitmap[i], color))
 					break;
 			}
 			if (i == num_vars)
@@ -633,14 +650,106 @@ color_constraints(struct of_ir_reg_assign *ra)
 	return 0;
 }
 
+static int
+chunk_compare(const void *a, const void *b)
+{
+	const struct of_ir_chunk *ca = *(const struct of_ir_chunk **)a;
+	const struct of_ir_chunk *cb = *(const struct of_ir_chunk **)b;
+
+	return cb->cost - ca->cost;
+}
+
 static void
-prepare_coalesce(struct of_ir_reg_assign *ra)
+prepare_chunk_queue(struct of_ir_reg_assign *ra)
+{
+	unsigned num_chunks;
+	struct of_ir_chunk *c;
+
+	num_chunks = 0;
+	LIST_FOR_EACH_ENTRY(c, &ra->chunks, list) {
+		if (c->fixed)
+			continue;
+
+		util_dynarray_append(&ra->chunk_queue, struct of_ir_chunk *, c);
+		++num_chunks;
+	}
+
+	qsort(util_dynarray_begin(&ra->chunk_queue), num_chunks,
+		sizeof(struct of_ir_chunk *), chunk_compare);
+	ra->chunk_queue_len = num_chunks;
+}
+
+static void
+dump_chunk_queue(struct of_ir_reg_assign *ra)
+{
+	struct of_ir_chunk **array = util_dynarray_begin(&ra->chunk_queue);
+	unsigned i;
+
+	_debug_printf("Chunk queue:\n");
+
+	for (i = 0; i < ra->chunk_queue_len; ++i) {
+		struct of_ir_chunk *c = array[i];
+		unsigned long *num;
+
+		_debug_printf("{cost = %u, comp = %u}: ", c->cost, c->comp);
+
+		OF_VALSET_FOR_EACH_VAL(num, &c->vars)
+			_debug_printf("%lu ", *num);
+
+		_debug_printf("\n");
+	}
+}
+
+static void
+color_chunks(struct of_ir_reg_assign *ra)
+{
+	struct of_ir_chunk **array = util_dynarray_begin(&ra->chunk_queue);
+	unsigned i;
+
+	for (i = 0; i < ra->chunk_queue_len; ++i) {
+		struct of_ir_chunk *c = array[i];
+		unsigned color = 0;
+		unsigned comp_mask;
+		unsigned reg;
+
+		if (c->fixed || c->num_vars == 1)
+			continue;
+
+		init_reg_bitmap_for_chunk(ra, &ra->reg_bitmap[0], c);
+
+		comp_mask = c->comp ? c->comp : 0xf;
+
+		for (reg = 0; reg < OF_NUM_REGS; ++reg) {
+			while (comp_mask) {
+				int comp = u_bit_scan(&comp_mask);
+				unsigned bit = make_color(reg, comp);
+
+				if (of_bitmap_get(ra->reg_bitmap[0], bit)) {
+					color = bit;
+					goto done;
+				}
+			}
+		}
+
+		DBG("out of registers?");
+		assert(0);
+
+done:
+		color_chunk(ra, c, color);
+	}
+}
+
+static void
+precolor(struct of_ir_reg_assign *ra)
 {
 	prepare_chunks(ra);
 	dump_chunks(ra);
 	prepare_constraints(ra);
 	dump_constraints(ra);
 	color_constraints(ra);
+	prepare_chunk_queue(ra);
+	dump_chunk_queue(ra);
+	color_chunks(ra);
 }
 
 static struct of_ir_constraint *
@@ -916,13 +1025,78 @@ split_live(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 }
 
 /*
- * Constrained instruction precoloring.
+ * Register assignment.
  */
 
 static void
-precolor_constrained(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+color_var(struct of_ir_reg_assign *ra, struct of_ir_variable *v)
 {
+	unsigned comp_mask;
+	unsigned color;
 
+	init_reg_bitmap(ra, &ra->reg_bitmap[0], v->interference);
+
+	comp_mask = v->comp ? v->comp : 0xf;
+
+	OF_BITMAP_FOR_EACH_SET_BIT(color, ra->reg_bitmap[0],
+				   OF_REG_BITMAP_BITS) {
+		unsigned comp = color_comp(color);
+
+		if (comp_mask & (1 << comp))
+			break;
+	}
+
+	assert(color != -1U && "color failed");
+	v->color = color;
+}
+
+static void
+color_register(struct of_ir_reg_assign *ra, struct of_ir_register *reg)
+{
+	unsigned comp;
+
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		struct of_ir_variable *v = get_var(ra, reg->var[comp]);
+
+		if (!(reg->mask & (1 << comp)))
+			continue;
+
+		if (!v->color)
+			color_var(ra, v);
+
+		reg->var[comp] = v->color;
+	}
+
+	reg->type = OF_IR_REG_VARC;
+}
+
+static void
+assign_registers_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins;
+
+	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
+		unsigned i;
+
+		if (ins->dst && ins->dst->type == OF_IR_REG_VAR)
+			color_register(ra, ins->dst);
+
+		for (i = 0; i < ins->num_srcs; ++i)
+			if (ins->srcs[i]->type == OF_IR_REG_VAR)
+				color_register(ra, ins->srcs[i]);
+	}
+}
+
+static void
+assign_registers(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child;
+
+	if (node->type == OF_IR_NODE_LIST)
+		return assign_registers_list(ra, node);
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		assign_registers(ra, child);
 }
 
 /*
@@ -1040,11 +1214,12 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	dump_interference(ra);
 	FREE(ra->live);
 
+	util_dynarray_init(&ra->chunk_queue);
 	util_slab_create(&ra->chunk_slab, sizeof(struct of_ir_chunk),
 				32, UTIL_SLAB_SINGLETHREADED);
-	prepare_coalesce(ra);
-	RUN_PASS(shader, ra, precolor_constrained);
-	DBG("AST (post-precoloring)");
+	precolor(ra);
+	RUN_PASS(shader, ra, assign_registers);
+	DBG("AST (post-register-assignment)");
 	of_ir_dump_ast(shader, dump_ra_data, ra);
 
 	util_dynarray_fini(&ra->vars);
