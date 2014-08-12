@@ -470,10 +470,28 @@ split_live_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
+		const struct of_ir_opc_info *info;
 		unsigned i;
 
-		if (dst && dst->type == OF_IR_REG_VAR && is_vector(dst))
-			split_operand(ra, ins, dst, true);
+		if (dst && dst->type == OF_IR_REG_VAR) {
+			info = of_ir_get_opc_info(ins->opc);
+
+			if (info->fix_comp) {
+				unsigned comp;
+
+				for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+					uint16_t var = dst->var[comp];
+
+					if (!comp_used(dst, comp))
+						continue;
+
+					get_var(ra, var)->comp = (1 << comp);
+				}
+			}
+
+			if (is_vector(dst))
+				split_operand(ra, ins, dst, true);
+		}
 
 		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
