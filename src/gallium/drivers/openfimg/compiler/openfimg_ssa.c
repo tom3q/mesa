@@ -225,7 +225,6 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *region;
 	struct of_ir_ast_node *child;
-	uint16_t *old_renames;
 	struct of_ir_phi *phi;
 
 	switch (node->type) {
@@ -243,10 +242,7 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 
 	case OF_IR_NODE_DEPART:
 	case OF_IR_NODE_REPEAT:
-		old_renames = ssa->renames;
-		ssa->renames = of_stack_push(ssa->renames_stack);
-		memcpy(ssa->renames, old_renames,
-			ssa->num_vars * sizeof(*ssa->renames));
+		ssa->renames = of_stack_push_copy(ssa->renames_stack);
 		break;
 
 	case OF_IR_NODE_LIST:
@@ -394,7 +390,7 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 				* sizeof(uint32_t);
 	ssa->renames_stack = of_stack_create(ssa->num_vars
 						* sizeof(*ssa->renames), 16);
-	ssa->renames = of_stack_push(ssa->renames_stack);
+	ssa->renames = of_stack_top(ssa->renames_stack);
 	memset(ssa->renames, 0, ssa->num_vars * sizeof(*ssa->renames));
 	ssa->shader_heap = shader->heap;
 	ssa->last_var = 1;

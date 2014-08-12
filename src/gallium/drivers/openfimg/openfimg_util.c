@@ -564,6 +564,9 @@ of_stack_create(unsigned element_size, unsigned initial_size)
 
 	stack->initial_size = initial_size * element_size;
 	stack->element_size = element_size;
+
+	of_stack_grow(stack);
+
 	return stack;
 }
 
