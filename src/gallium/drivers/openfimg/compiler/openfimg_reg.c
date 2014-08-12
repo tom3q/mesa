@@ -41,7 +41,10 @@ struct of_ir_chunk {
 	struct list_head list;
 	struct of_valset vars;
 	unsigned cost;
+	unsigned color;
 	uint8_t comp;
+	unsigned fixed :1;
+	unsigned prealloc :1;
 };
 
 struct of_ir_variable {
@@ -50,7 +53,9 @@ struct of_ir_variable {
 	struct of_ir_phi *def_phi;
 	uint32_t *interference;
 	unsigned constraints;
+	unsigned color;
 	uint8_t comp;
+	unsigned fixed :1;
 };
 
 struct of_ir_affinity {
@@ -61,6 +66,7 @@ struct of_ir_affinity {
 struct of_ir_constraint {
 	struct of_valset vars;
 	unsigned num_vars;
+	unsigned cost;
 	enum of_ir_constraint_type type;
 };
 
@@ -77,6 +83,7 @@ struct of_ir_reg_assign {
 	unsigned num_constraints;
 	struct util_dynarray affinities;
 	unsigned num_affinities;
+	uint32_t *reg_bitmap[4];
 };
 
 /*
@@ -342,10 +349,281 @@ dump_chunks(struct of_ir_reg_assign *ra)
 	}
 }
 
+static int
+constraint_compare(const void *a, const void *b)
+{
+	const struct of_ir_constraint *ca =
+					*(const struct of_ir_constraint **)a;
+	const struct of_ir_constraint *cb =
+					*(const struct of_ir_constraint **)b;
+
+	if (ca->type != cb->type)
+		return ca->type - cb->type;
+
+	return cb->cost - ca->cost;
+}
+
 static void
 prepare_constraints(struct of_ir_reg_assign *ra)
 {
+	struct of_ir_constraint **array = util_dynarray_begin(&ra->constraints);
+	unsigned i;
 
+	for (i = 0; i < ra->num_constraints; ++i) {
+		struct of_ir_constraint *c = array[i];
+		unsigned long *num;
+
+		if (c->type != OF_IR_CONSTR_SAME_REG)
+			continue;
+
+		OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
+			struct of_ir_variable *v = get_var(ra, *num);
+
+			if (!v->chunk)
+				create_chunk(ra, v);
+			else
+				c->cost += v->chunk->cost;
+		}
+	}
+
+	qsort(array, ra->num_constraints, sizeof(*array), constraint_compare);
+}
+
+static void
+dump_constraints(struct of_ir_reg_assign *ra)
+{
+	struct of_ir_constraint **array = util_dynarray_begin(&ra->constraints);
+	unsigned i;
+
+	_debug_printf("Coloring constraints:\n");
+
+	for (i = 0; i < ra->num_constraints; ++i) {
+		struct of_ir_constraint *c = array[i];
+		unsigned long *num;
+
+		_debug_printf("{type = %u, cost = %u}: ", c->type, c->cost);
+
+		OF_VALSET_FOR_EACH_VAL(num, &c->vars)
+			_debug_printf("%u ", *num);
+
+		_debug_printf("\n");
+	}
+}
+
+static bool
+next_swizzle(uint8_t swz[4])
+{
+	unsigned i;
+	int k = -1, l = -1;
+
+	for (i = 0; i < 4 - 1; ++i) {
+		if (swz[i] < swz[i + 1]) {
+			k = i;
+			l = i + 1;
+		}
+	}
+
+	if (k < 0)
+		return false;
+
+	for (i = l + 1; i < 4; ++i)
+		if (swz[k] < swz[i])
+			l = i;
+
+	swap(swz[k], swz[l], uint8_t);
+
+	for (i = 0; i < (4 - (k + 1)) / 2; ++i)
+		swap(swz[k + 1 + i], swz[4 - 1 - i], uint8_t);
+
+	return true;
+}
+
+#define OF_NUM_REGS		32
+#define OF_REG_BITMAP_SIZE	\
+	(OF_BITMAP_WORDS_FOR_BITS(OF_NUM_REGS * OF_IR_VEC_SIZE + 1))
+
+static INLINE unsigned
+make_color(uint16_t reg, uint8_t swz)
+{
+	return reg * OF_IR_VEC_SIZE + swz + 1;
+}
+
+static INLINE uint8_t
+color_comp(unsigned color)
+{
+	return (color - 1) % OF_IR_VEC_SIZE;
+}
+
+static INLINE uint8_t
+color_reg(unsigned color)
+{
+	return (color - 1) / OF_IR_VEC_SIZE;
+}
+
+static void
+color_chunk(struct of_ir_reg_assign *ra, struct of_ir_chunk *c, unsigned color)
+{
+	uint8_t comp = color_comp(color);
+	unsigned long *num;
+
+	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
+		struct of_ir_variable *v = get_var(ra, *num);
+
+		if (v->comp && v->comp != color_comp(color)) {
+			create_chunk(ra, v);
+			continue;
+		}
+
+		v->color = color;
+
+		if (v->constraints & OF_IR_CONSTR_PHI) {
+			v->fixed = 1;
+			c->fixed = 1;
+		}
+
+		DBG("assigned R%u.%c to @%u",
+			color_reg(color), "xyzw"[comp], *num);
+	}
+
+	c->color = color;
+}
+
+static void
+init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t *regs,
+		struct of_ir_chunk *c)
+{
+	uint32_t *interf = CALLOC(1, ra->vars_bitmap_size);
+	struct of_ir_variable *v;
+	unsigned long *num;
+	unsigned var;
+
+	/* Calculate interference of the chunk. */
+	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
+		v = get_var(ra, *num);
+		of_bitmap_or(interf, interf, v->interference,
+				ra->vars_bitmap_size);
+	}
+
+	OF_VALSET_FOR_EACH_VAL(num, &c->vars)
+		of_bitmap_clear(interf, *num);
+
+	memset(regs, 0, OF_REG_BITMAP_SIZE);
+
+	/* Mark registers already assigned to interfering variables. */
+	OF_BITMAP_FOR_EACH_SET_BIT(var, interf, ra->num_vars) {
+		v = get_var(ra, var);
+		if (v->color)
+			of_bitmap_set(regs, v->color);
+	}
+
+	FREE(interf);
+}
+
+static int
+color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
+{
+	struct of_ir_chunk *ch[OF_IR_VEC_SIZE];
+	unsigned comp_mask = 0;
+	uint8_t swz[OF_IR_VEC_SIZE] = {0, 1, 2, 3};
+	uint32_t *rb[OF_IR_VEC_SIZE];
+	unsigned long *num;
+	unsigned num_vars;
+	unsigned reg;
+	unsigned i;
+
+	i = 0;
+	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
+		struct of_ir_variable *v = get_var(ra, *num);
+
+		if (!v->chunk)
+			create_chunk(ra, v);
+
+		ch[i] = v->chunk;
+
+		if (v->chunk->comp) {
+			if (v->chunk->comp & comp_mask) {
+				ch[i] = create_chunk(ra, v);
+				assert(!ch[i]->comp);
+			} else {
+				comp_mask |= v->chunk->comp;
+			}
+		}
+
+		if (!ra->reg_bitmap[i])
+			ra->reg_bitmap[i] = MALLOC(OF_REG_BITMAP_SIZE);
+		rb[i] = ra->reg_bitmap[i];
+		init_reg_bitmap(ra, rb[i], ch[i]);
+		++i;
+	}
+	num_vars = i;
+
+	do {
+		for (i = 0; i < num_vars; ++i)
+			if (ch[i]->comp && ch[i]->comp != (1 << swz[i]))
+				break;
+		if (i != num_vars)
+			continue;
+
+		for (reg = 0; reg < OF_NUM_REGS - 1; ++reg) {
+			for (i = 0; i < num_vars; ++i) {
+				unsigned color = make_color(reg, swz[i]);
+
+				if (of_bitmap_get(rb[i], color))
+					break;
+			}
+			if (i == num_vars)
+				goto done;
+		}
+	} while (next_swizzle(swz));
+
+	DBG("out of registers");
+	return -1;
+
+done:
+	DBG("reg = %u, swz = (%d,%d,%d,%d)",
+		reg, swz[0], swz[1], swz[2], swz[3]);
+
+	i = 0;
+	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
+		struct of_ir_variable *v = get_var(ra, *num);
+		unsigned color = make_color(reg, swz[i]);
+		struct of_ir_chunk *cc = ch[i];
+
+		if (cc->fixed) {
+			if (cc->color == color) {
+				++i;
+				continue;
+			}
+			cc = create_chunk(ra, v);
+		}
+
+		color_chunk(ra, cc, color);
+		cc->fixed = 1;
+		cc->prealloc = 1;
+		++i;
+	}
+
+	return 0;
+}
+
+static int
+color_constraints(struct of_ir_reg_assign *ra)
+{
+	struct of_ir_constraint **array = util_dynarray_begin(&ra->constraints);
+	unsigned i;
+
+	for (i = 0; i < ra->num_constraints; ++i) {
+		struct of_ir_constraint *c = array[i];
+		int ret;
+
+		if (c->type == OF_IR_CONSTR_SAME_REG) {
+			ret = color_reg_constraint(ra, c);
+			if (ret)
+				return ret;
+		}
+	}
+
+	return 0;
 }
 
 static void
@@ -354,6 +632,8 @@ prepare_coalesce(struct of_ir_reg_assign *ra)
 	prepare_chunks(ra);
 	dump_chunks(ra);
 	prepare_constraints(ra);
+	dump_constraints(ra);
+	color_constraints(ra);
 }
 
 static struct of_ir_constraint *
@@ -745,6 +1025,8 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 				64, UTIL_SLAB_SINGLETHREADED);
 
 	RUN_PASS(shader, ra, split_live);
+	DBG("AST (post-split-live)");
+	of_ir_dump_ast(shader, dump_ra_data, ra);
 
 	ra->vars_bitmap_size = OF_BITMAP_WORDS_FOR_BITS(ra->num_vars)
 				* sizeof(uint32_t);
@@ -755,8 +1037,7 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 
 	prepare_coalesce(ra);
 	RUN_PASS(shader, ra, precolor_constrained);
-
-	DBG("AST (post-register-assignment/pre-CF-insertion)");
+	DBG("AST (post-precoloring)");
 	of_ir_dump_ast(shader, dump_ra_data, ra);
 
 	util_dynarray_fini(&ra->vars);
