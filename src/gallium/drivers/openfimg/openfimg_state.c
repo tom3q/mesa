@@ -51,7 +51,7 @@ of_set_blend_color(struct pipe_context *pctx,
 	struct of_context *ctx = of_context(pctx);
 
 	util_pack_color(blend_color->color, PIPE_FORMAT_ABGR8888_UNORM, &uc);
-	ctx->blend_color = uc.ui;
+	ctx->blend_color = uc.ui[0];
 	ctx->dirty |= OF_DIRTY_BLEND_COLOR;
 }
 
