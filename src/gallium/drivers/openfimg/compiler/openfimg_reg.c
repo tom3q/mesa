@@ -127,6 +127,14 @@ add_var_num(struct of_ir_reg_assign *ra)
  * Interference graph construction.
  */
 
+static INLINE bool
+vars_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
+{
+	struct of_ir_variable *v1 = get_var(ra, var1);
+
+	return v1->interference && of_bitmap_get(v1->interference, var2);
+}
+
 static void
 add_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
 {
@@ -285,14 +293,10 @@ try_to_merge_chunks(struct of_ir_reg_assign *ra, struct of_ir_affinity *a,
 		return;
 
 	OF_VALSET_FOR_EACH_VAL(num0, &c0->vars) {
-		struct of_ir_variable *v0 = get_var(ra, *num0);
-
 		OF_VALSET_FOR_EACH_VAL(num1, &c1->vars) {
-			struct of_ir_variable *v1 = get_var(ra, *num1);
-
-			if (v0 == v1)
+			if (*num0 == *num1)
 				continue;
-			if (of_bitmap_get(v0->interference, *num1))
+			if (vars_interference(ra, *num0, *num1))
 				return;
 		}
 	}
@@ -513,6 +517,9 @@ init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t **regs,
 	memset(bitmap, 0xff, OF_REG_BITMAP_SIZE);
 	of_bitmap_clear(bitmap, 0);
 
+	if (!interf)
+		return;
+
 	/* Mark registers already assigned to interfering variables. */
 	OF_BITMAP_FOR_EACH_SET_BIT(var, interf, ra->num_vars) {
 		v = get_var(ra, var);
@@ -529,15 +536,17 @@ init_reg_bitmap_for_chunk(struct of_ir_reg_assign *ra, uint32_t **regs,
 	unsigned long *num;
 	uint32_t *interf;
 
-	if (!ra->chunk_interf)
-		ra->chunk_interf = of_heap_alloc(ra->heap,
-					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 	interf = ra->chunk_interf;
+	if (!interf)
+		ra->chunk_interf = interf = of_heap_alloc(ra->heap,
+					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 	memset(interf, 0, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 
 	/* Calculate interference of the chunk. */
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
 		v = get_var(ra, *num);
+		if (!v->interference)
+			continue;
 		of_bitmap_or(interf, interf, v->interference, ra->num_vars);
 	}
 
