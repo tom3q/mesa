@@ -732,9 +732,9 @@ color_chunks(struct of_ir_reg_assign *ra)
 
 		init_reg_bitmap_for_chunk(ra, &ra->reg_bitmap[0], c);
 
-		comp_mask = c->comp ? c->comp : 0xf;
-
 		for (reg = 0; reg < OF_NUM_REGS; ++reg) {
+			comp_mask = c->comp ? c->comp : 0xf;
+
 			while (comp_mask) {
 				int comp = u_bit_scan(&comp_mask);
 				unsigned bit = make_color(reg, comp);
