@@ -325,6 +325,10 @@ of_screen_get_paramf(struct pipe_screen *pscreen, enum pipe_capf param)
 	}
 }
 
+/* TODO */
+#define OF_CAP_INDIRECT_REG_ADDR	0
+#define OF_CAP_SUBROUTINES		0
+
 static int
 of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 		enum pipe_shader_cap param)
@@ -376,8 +380,9 @@ of_screen_get_shader_param(struct pipe_screen *pscreen, unsigned shader,
 	case PIPE_SHADER_CAP_INDIRECT_OUTPUT_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_TEMP_ADDR:
 	case PIPE_SHADER_CAP_INDIRECT_CONST_ADDR:
+		return OF_CAP_INDIRECT_REG_ADDR;
 	case PIPE_SHADER_CAP_SUBROUTINES:
-		return 1;
+		return OF_CAP_SUBROUTINES;
 	case PIPE_SHADER_CAP_TGSI_CONT_SUPPORTED:
 	case PIPE_SHADER_CAP_TGSI_SQRT_SUPPORTED:
 	case PIPE_SHADER_CAP_INTEGERS:
