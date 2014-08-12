@@ -293,6 +293,75 @@ of_stack_top(struct of_stack *stack)
 }
 
 /*
+ * Value set.
+ */
+
+#include <util/u_slab.h>
+
+struct of_valset_value {
+	unsigned long val;
+	struct of_valset_value *next;
+};
+
+struct of_valset {
+	struct util_slab_mempool *pool;
+	struct of_valset_value *vals;
+};
+
+static INLINE struct of_valset_value *
+__of_valset_valptr_to_valset(unsigned long *valptr)
+{
+	return container_of(valptr, (struct of_valset_value *)0, val);
+}
+
+static INLINE unsigned long *
+__of_valset_next_val(unsigned long *valptr)
+{
+	return &(__of_valset_valptr_to_valset(valptr)->next->val);
+}
+
+#define OF_VALSET_FOR_EACH_VAL(valptr, valset)				\
+	for (valptr = &((valset)->vals->val);				\
+	     __of_valset_valptr_to_valset(valptr);			\
+	     valptr = __of_valset_next_val(valptr))
+
+static INLINE void
+of_valset_add(struct of_valset *set, unsigned long val)
+{
+	struct of_valset_value *v = util_slab_alloc(set->pool);
+
+	v->val = val;
+	v->next = set->vals;
+	set->vals = v;
+}
+
+static INLINE void
+of_valset_del(struct of_valset *set, unsigned long val)
+{
+	struct of_valset_value *v = set->vals, *prev = NULL;
+
+	while (v) {
+		if (v->val == val) {
+			if (prev)
+				prev->next = v->next;
+			else
+				set->vals = v->next;
+			util_slab_free(set->pool, v);
+			return;
+		}
+
+		prev = v;
+		v = v->next;
+	}
+}
+
+static INLINE void
+of_valset_init(struct of_valset *set, struct util_slab_mempool *pool)
+{
+	set->pool = pool;
+}
+
+/*
  * List helpers
  */
 
