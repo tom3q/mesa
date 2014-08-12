@@ -864,14 +864,12 @@ split_operand(struct of_ir_reg_assign *ra, struct of_ir_instruction *ins,
 
 		tmp = add_var_num(ra);
 		constraint_add_var(ra, c, reg->var[comp]);
+		copy = create_copy(ra->shader, tmp, reg->var[comp]);
 
-		if (dst) {
-			copy = create_copy(ra->shader, reg->var[comp], tmp);
+		if (dst)
 			of_ir_instr_insert(ra->shader, NULL, ins, copy);
-		} else {
-			copy = create_copy(ra->shader, tmp, reg->var[comp]);
+		else
 			of_ir_instr_insert_before(ra->shader, NULL, ins, copy);
-		}
 
 		add_affinity(ra, tmp, reg->var[comp], 20000);
 	}
