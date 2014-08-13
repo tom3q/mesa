@@ -647,7 +647,7 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 
 	/* emit clear color */
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
-	OUT_RING(ring, RSD_UNIT_TYPE_OFFS(SHADER_FRAGMENT,
+	OUT_RING(ring, RSD_UNIT_TYPE_OFFS(OF_SHADER_PIXEL,
 			G3D_SHADER_DATA_FLOAT, 0));
 	OUT_RING(ring, color->ui[0]);
 	OUT_RING(ring, color->ui[1]);

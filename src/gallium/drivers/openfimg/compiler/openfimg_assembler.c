@@ -29,6 +29,180 @@
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
+struct of_instr_bitfield {
+	uint32_t mask;
+	uint8_t shift;
+	uint8_t word;
+};
+
+struct of_instr_flag {
+	uint32_t instr;
+	uint32_t ir;
+	uint8_t word;
+};
+
+struct of_reg_bitfields {
+	struct of_instr_bitfield num;
+	struct of_instr_bitfield type;
+	struct of_instr_bitfield mask;
+	struct of_instr_flag flags[3];
+};
+
+static const enum of_ir_reg_type src_types[] = {
+	[OF_SRC_V] = OF_IR_REG_V,
+	[OF_SRC_R] = OF_IR_REG_R,
+	[OF_SRC_C] = OF_IR_REG_C,
+	[OF_SRC_I] = OF_IR_REG_I,
+	[OF_SRC_AL] = OF_IR_REG_AL,
+	[OF_SRC_B] = OF_IR_REG_B,
+	[OF_SRC_P] = OF_IR_REG_P,
+	[OF_SRC_S] = OF_IR_REG_S,
+	[OF_SRC_D] = OF_IR_REG_D,
+	[OF_SRC_VFACE] = OF_IR_REG_VFACE,
+	[OF_SRC_VPOS] = OF_IR_REG_VPOS,
+};
+
+static const enum of_ir_reg_type dst_types[] = {
+	[OF_DST_O] = OF_IR_REG_O,
+	[OF_DST_R] = OF_IR_REG_R,
+	[OF_DST_P] = OF_IR_REG_P,
+	[OF_DST_A0] = OF_IR_REG_A0,
+	[OF_DST_AL] = OF_IR_REG_AL,
+};
+
+
+static const struct of_reg_bitfields src_bitfields[] = {
+	[0] = {
+		.num = {
+			.mask = INSTR_WORD1_SRC0_NUM__MASK,
+			.shift = INSTR_WORD1_SRC0_NUM__SHIFT,
+			.word = 1,
+		},
+		.type = {
+			.mask = INSTR_WORD1_SRC0_TYPE__MASK,
+			.shift = INSTR_WORD1_SRC0_TYPE__SHIFT,
+			.word = 1,
+		},
+		.mask = {
+			.mask = INSTR_WORD2_SRC0_SWIZZLE__MASK,
+			.shift = INSTR_WORD2_SRC0_SWIZZLE__SHIFT,
+			.word = 2,
+		},
+		.flags = {
+			{
+				.instr = INSTR_WORD1_SRC0_NEGATE,
+				.ir = OF_IR_REG_NEGATE,
+				.word = 1,
+			}, {
+				.instr = INSTR_WORD1_SRC0_ABS,
+				.ir = OF_IR_REG_ABS,
+				.word = 1,
+			}
+		}
+	},
+	[1] = {
+		.num = {
+			.mask = ALU_WORD0_SRC1_NUM__MASK,
+			.shift = ALU_WORD0_SRC1_NUM__SHIFT,
+			.word = 0,
+		},
+		.type = {
+			.mask = ALU_WORD1_SRC1_TYPE__MASK,
+			.shift = ALU_WORD1_SRC1_TYPE__SHIFT,
+			.word = 1,
+		},
+		.mask = {
+			.mask = ALU_WORD1_SRC1_SWIZZLE__MASK,
+			.shift = ALU_WORD1_SRC1_SWIZZLE__SHIFT,
+			.word = 1,
+		},
+		.flags = {
+			{
+				.instr = ALU_WORD1_SRC1_NEGATE,
+				.ir = OF_IR_REG_NEGATE,
+				.word = 1,
+			}, {
+				.instr = ALU_WORD1_SRC1_ABS,
+				.ir = OF_IR_REG_ABS,
+				.word = 1,
+			}
+		}
+	},
+	[2] = {
+		.num = {
+			.mask = ALU_WORD0_SRC2_NUM__MASK,
+			.shift = ALU_WORD0_SRC2_NUM__SHIFT,
+			.word = 0,
+		},
+		.type = {
+			.mask = ALU_WORD0_SRC2_TYPE__MASK,
+			.shift = ALU_WORD0_SRC2_TYPE__SHIFT,
+			.word = 0,
+		},
+		.mask = {
+			.mask = ALU_WORD0_SRC2_SWIZZLE__MASK,
+			.shift = ALU_WORD0_SRC2_SWIZZLE__SHIFT,
+			.word = 0,
+		},
+		.flags = {
+			{
+				.instr = ALU_WORD0_SRC2_NEGATE,
+				.ir = OF_IR_REG_NEGATE,
+				.word = 0,
+			}, {
+				.instr = ALU_WORD0_SRC2_ABS,
+				.ir = OF_IR_REG_ABS,
+				.word = 0,
+			}
+		}
+	},
+};
+
+static const struct of_reg_bitfields dst_bitfields = {
+	.num = {
+		.mask = ALU_WORD2_DST_NUM__MASK,
+		.shift = ALU_WORD2_DST_NUM__SHIFT,
+		.word = 2,
+	},
+	.type = {
+		.mask = ALU_WORD2_DST_TYPE__MASK,
+		.shift = ALU_WORD2_DST_TYPE__SHIFT,
+		.word = 2,
+	},
+	.mask = {
+		.mask = ALU_WORD2_DST_MASK__MASK,
+		.shift = ALU_WORD2_DST_MASK__SHIFT,
+		.word = 2,
+	},
+	.flags = {
+		{
+			.instr = ALU_WORD2_DST_SAT,
+			.ir = OF_IR_REG_SAT,
+			.word = 2,
+		}
+	}
+};
+
+static INLINE unsigned
+get_bitfield(const uint32_t *instr, const struct of_instr_bitfield *field)
+{
+	return (instr[field->word] & field->mask) >> field->shift;
+}
+
+static INLINE unsigned
+get_flags(const uint32_t *instr, const struct of_instr_flag *flags)
+{
+	unsigned val = 0;
+
+	while (flags->instr) {
+		if (instr[flags->word] & flags->instr)
+			val |= flags->ir;
+		++flags;
+	}
+
+	return val;
+}
+
 static uint32_t
 dst_mask(struct of_ir_register *reg)
 {
@@ -324,4 +498,100 @@ fail:
 	of_heap_destroy(heap);
 	pipe_resource_reference(&shader->buffer, NULL);
 	return -1;
+}
+
+/*
+ * Disassembler.
+ */
+
+static void
+disassemble_code(uint32_t *dwords, unsigned num_dwords,
+		 enum of_shader_type type)
+{
+	struct of_ir_shader *shader = of_ir_shader_create(type);
+	static const char mask_templ[] = "_x_y_z_w";
+	struct of_ir_ast_node *list;
+	unsigned i;
+
+	list = of_ir_node_list(shader);
+
+	for (i = 0; i < num_dwords; i += 4) {
+		const struct of_ir_opc_info *info;
+		unsigned num, type, mask, flags;
+		struct of_ir_instruction *ins;
+		uint32_t *instr = &dwords[i];
+		struct of_ir_register *reg;
+		char mask_str[4];
+		unsigned opcode;
+		unsigned comp;
+		unsigned s;
+
+		opcode = (instr[2] & INSTR_WORD2_OPCODE__MASK)
+				>> INSTR_WORD2_OPCODE__SHIFT;
+		if (opcode > OF_OP_RET)
+			opcode = OF_OP_NOP;
+
+		info = of_ir_get_opc_info(opcode);
+		ins = of_ir_instr_create(shader, opcode);
+
+		for (s = 0; s < info->num_srcs; ++s) {
+			num = get_bitfield(instr, &src_bitfields[s].num);
+			type = get_bitfield(instr, &src_bitfields[s].type);
+			mask = get_bitfield(instr, &src_bitfields[s].mask);
+			flags = get_flags(instr, src_bitfields[s].flags);
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				unsigned idx = (mask >> (2 * comp)) & 3;
+
+				mask_str[comp] = "xyzw"[idx];
+			}
+
+			reg = of_ir_reg_create(shader, src_types[type], num,
+						mask_str, flags);
+			of_ir_instr_add_src(ins, reg);
+		}
+
+		if (info->type == OF_IR_ALU) {
+			num = get_bitfield(instr, &dst_bitfields.num);
+			type = get_bitfield(instr, &dst_bitfields.type);
+			mask = get_bitfield(instr, &dst_bitfields.mask);
+			flags = get_flags(instr, dst_bitfields.flags);
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				unsigned idx = 2 * comp + (mask & (1 << comp));
+
+				mask_str[comp] = mask_templ[idx];
+			}
+
+			reg = of_ir_reg_create(shader, dst_types[type], num,
+						mask_str, flags);
+			of_ir_instr_add_dst(ins, reg);
+		}
+
+		of_ir_instr_insert(shader, list, NULL, ins);
+	}
+
+	of_ir_dump_ast(shader, NULL, NULL);
+
+	of_ir_shader_destroy(shader);
+}
+
+int
+of_ir_shader_disassemble(struct of_context *ctx, struct pipe_resource *buffer,
+			 unsigned num_dwords, enum of_shader_type type)
+{
+	struct pipe_transfer *transfer;
+	uint32_t *dwords;
+
+	dwords = pipe_buffer_map(&ctx->base, buffer, PIPE_TRANSFER_WRITE,
+					&transfer);
+	if (!dwords)
+		return -1;
+
+	disassemble_code(dwords, num_dwords, type);
+
+	if (transfer)
+		pipe_buffer_unmap(&ctx->base, transfer);
+
+	return 0;
 }

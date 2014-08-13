@@ -1467,10 +1467,10 @@ compile_init(const struct tgsi_token *tokens)
 
 	switch (ctx->parser.FullHeader.Processor.Processor) {
 	case TGSI_PROCESSOR_VERTEX:
-		ctx->type = OF_IR_SHADER_VERTEX;
+		ctx->type = OF_SHADER_VERTEX;
 		break;
 	case TGSI_PROCESSOR_FRAGMENT:
-		ctx->type = OF_IR_SHADER_PIXEL;
+		ctx->type = OF_SHADER_PIXEL;
 		break;
 	default:
 		assert(0);
