@@ -31,184 +31,324 @@
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
-static int
-eliminate_dead_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+/*
+ * Liveness analysis with optional computation of interferences.
+ */
+
+static void
+add_interference(struct of_ir_optimizer *opt, uint16_t var1, uint16_t var2)
+{
+	struct of_ir_variable *v1 = get_var(opt, var1);
+	struct of_ir_variable *v2 = get_var(opt, var2);
+
+	assert(var1 < opt->num_vars);
+	assert(var2 < opt->num_vars);
+
+	if (!v1->interference)
+		v1->interference = of_heap_alloc(opt->heap,
+					OF_BITMAP_BYTES_FOR_BITS(opt->num_vars));
+
+	if (!v2->interference)
+		v2->interference = of_heap_alloc(opt->heap,
+					OF_BITMAP_BYTES_FOR_BITS(opt->num_vars));
+
+	of_bitmap_set(v1->interference, var2);
+	of_bitmap_set(v2->interference, var1);
+}
+
+static void
+liveness_src(struct of_ir_optimizer *opt, struct of_ir_register *dst,
+	     struct of_ir_register *src, const dst_map_t *dst_map)
+{
+	unsigned scomp;
+
+	for (scomp = 0; scomp < OF_IR_VEC_SIZE; ++scomp) {
+		unsigned alive = 0;
+		unsigned dcomp;
+		unsigned var;
+
+		if (!(src->mask & (1 << scomp)))
+			continue;
+
+		for (dcomp = 0; dcomp < OF_IR_VEC_SIZE; ++dcomp) {
+			const char *mask = (*dst_map)[dcomp];
+
+			if (!(dst->mask & (1 << dcomp))
+			    || (dst->deadmask & (1 << dcomp)))
+				continue;
+
+			if (mask[scomp] == "xyzw"[scomp]) {
+				alive = 1;
+				break;
+			}
+		}
+
+		if (!alive) {
+			src->deadmask |= 1 << scomp;
+			continue;
+		}
+		src->deadmask &= ~(1 << scomp);
+
+		if (src->type != OF_IR_REG_VAR)
+			continue;
+
+		if (opt->want_interference)
+			OF_BITMAP_FOR_EACH_SET_BIT(var, opt->live,
+						   opt->num_vars)
+				add_interference(opt, src->var[scomp], var);
+
+		of_bitmap_set(opt->live, src->var[scomp]);
+	}
+}
+
+static void
+liveness_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins, *s;
-	int ret = 0;
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
 		const struct of_ir_opc_info *info;
-		unsigned dcomp;
+		unsigned alive = 0;
+		unsigned comp;
+		unsigned i;
 
-		info = of_ir_get_opc_info(ins->opc);
+		if (!dst || dst->type != OF_IR_REG_VAR)
+			goto no_dst;
 
-		for (dcomp = 0; dcomp < OF_IR_VEC_SIZE; ++dcomp) {
-			unsigned i;
+		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+			uint16_t var = dst->var[comp];
+			unsigned comp_alive;
 
-			if (!dst || dst->type != OF_IR_REG_VAR)
-				goto has_ref;
-
-			if (!(dst->mask & (1 << dcomp)))
+			if (!(dst->mask & (1 << comp)))
 				continue;
 
-			if (!opt->ref_counts[dst->var[dcomp]]) {
-				dst->mask &= ~(1 << dcomp);
-				ret = 1;
-				continue;
-			}
+			get_var(opt, var)->def_ins = ins;
+			comp_alive = of_bitmap_get(opt->live, var);
+			of_bitmap_clear(opt->live, var);
+			alive |= comp_alive;
 
-has_ref:
-			for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
-				struct of_ir_register *src = ins->srcs[i];
-				const dst_map_t *dst_map = &info->dst_map[i];
-				unsigned scomp;
-
-				if (src->type != OF_IR_REG_VAR)
-					continue;
-
-				for (scomp = 0; scomp < OF_IR_VEC_SIZE; ++scomp) {
-					const char *mask = (*dst_map)[dcomp];
-
-					if (!(src->mask & (1 << scomp)))
-						continue;
-
-					if (mask[scomp] != "xyzw"[scomp])
-						continue;
-
-					++opt->ref_counts[src->var[scomp]];
-				}
-			}
+			if (!comp_alive)
+				dst->deadmask |= 1 << comp;
+			else
+				dst->deadmask &= ~(1 << comp);
 		}
 
-		if (!dst->mask)
-			list_del(&ins->list);
-	}
-
-	return ret;
-}
-
-static int
-eliminate_dead_phi(struct of_ir_optimizer *opt, struct list_head *phis,
-		   unsigned count)
-{
-	struct of_ir_phi *phi, *s;
-	int ret = 0;
-
-	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
-		unsigned i;
-
-		if (opt->ref_counts[phi->dst])
+		if (!alive) {
+			ins->flags |= OF_IR_INSTR_DEAD;
 			continue;
+		}
+		ins->flags &= ~OF_IR_INSTR_DEAD;
 
-		for (i = 0; i < count; ++i)
-			--opt->ref_counts[phi->src[i]];
-
-		list_del(&phi->list);
-		ret = 1;
-	}
-
-	return ret;
-}
-
-static void
-assess_phi(struct of_ir_optimizer *opt, struct list_head *phis,
-		   unsigned count)
-{
-	struct of_ir_phi *phi, *s;
-
-	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
-		unsigned i;
-
-		for (i = 0; i < count; ++i)
-			++opt->ref_counts[phi->src[i]];
-	}
-}
-
-static int
-eliminate_dead_pass(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
-{
-	struct of_ir_ast_node *child, *s;
-	int ret = 0;
-
-	if (node->type == OF_IR_NODE_LIST)
-		return eliminate_dead_list(opt, node);
-
-	assess_phi(opt, &node->ssa.phis, node->ssa.depart_count);
-	ret |= eliminate_dead_phi(opt, &node->ssa.phis, node->ssa.depart_count);
-
-	assess_phi(opt, &node->ssa.loop_phis, node->ssa.repeat_count + 1);
-
-	LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes, parent_list)
-		ret |= eliminate_dead_pass(opt, child);
-
-	ret |= eliminate_dead_phi(opt, &node->ssa.loop_phis,
-					node->ssa.repeat_count + 1);
-
-	return ret;
-}
-
-static void
-eliminate_dead(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
-{
-	unsigned pass = 0;
-	int ret;
-
-	do {
-		memset(opt->ref_counts, 0, opt->num_vars
-			* sizeof(*opt->ref_counts));
-		DBG("Dead code elimination, pass %d", ++pass);
-		ret = eliminate_dead_pass(opt, node);
-	} while (ret);
-}
-
-static void
-clean_sources_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
-{
-	struct of_ir_instruction *ins;
-
-	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
-		struct of_ir_register *dst = ins->dst;
-		const struct of_ir_opc_info *info;
-		unsigned i;
-
+no_dst:
 		info = of_ir_get_opc_info(ins->opc);
 
 		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
-			const dst_map_t *dst_map = &info->dst_map[i];
 			struct of_ir_register *src = ins->srcs[i];
-			unsigned src_mask = 0;
-			unsigned dcomp;
+			const dst_map_t *dst_map = &info->dst_map[i];
 
-			for (dcomp = 0; dcomp < OF_IR_VEC_SIZE; ++dcomp) {
-				const char *mask = (*dst_map)[dcomp];
-				unsigned scomp;
-
-				if (!(dst->mask & (1 << dcomp)))
-					continue;
-
-				for (scomp = 0; scomp < OF_IR_VEC_SIZE; ++scomp) {
-					if (mask[scomp] == "xyzw"[scomp])
-						src_mask |= (1 << scomp);
-				}
-			}
-
-			src->mask = src_mask;
+			liveness_src(opt, dst, src, dst_map);
 		}
 	}
 }
 
 static void
-clean_sources(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+liveness_phi_dst(struct of_ir_optimizer *opt, struct list_head *phis,
+		 unsigned num_srcs)
 {
-	struct of_ir_ast_node *child;
+	struct of_ir_phi *phi, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
+		unsigned var = phi->dst;
+		unsigned alive;
+
+		get_var(opt, var)->def_phi = phi;
+		alive = of_bitmap_get(opt->live, var);
+		of_bitmap_clear(opt->live, var);
+
+		if (!alive) {
+			phi->dead = 1;
+			continue;
+		}
+		phi->dead = 0;
+	}
+}
+
+static void
+liveness_phi_src(struct of_ir_optimizer *opt, struct list_head *phis,
+		 unsigned src)
+{
+	struct of_ir_phi *phi, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
+		unsigned var;
+
+		if (phi->dead)
+			continue;
+
+		of_bitmap_set(opt->live, phi->src[src]);
+
+		if (opt->want_interference)
+			OF_BITMAP_FOR_EACH_SET_BIT(var, opt->live,
+						   opt->num_vars)
+				add_interference(opt, phi->src[src], var);
+	}
+}
+
+static void
+copy_bitmap(struct of_ir_optimizer *opt, uint32_t **dst_ptr, uint32_t *src,
+	    unsigned size)
+{
+	uint32_t *dst = *dst_ptr;
+
+	if (!dst)
+		*dst_ptr = dst = util_slab_alloc(&opt->live_slab);
+
+	if (src)
+		of_bitmap_copy(dst, src, size);
+	else
+		of_bitmap_fill(dst, 0, size);
+}
+
+void
+liveness(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child, *s;
+	struct of_ir_ast_node *region;
+	uint32_t *live_copy;
+
+	switch (node->type) {
+	case OF_IR_NODE_LIST:
+		copy_bitmap(opt, &node->liveout, opt->live, opt->num_vars);
+		liveness_list(opt, node);
+		copy_bitmap(opt, &node->livein, opt->live, opt->num_vars);
+		return;
+
+	case OF_IR_NODE_REGION:
+		live_copy = util_slab_alloc(&opt->live_slab);
+		copy_bitmap(opt, &live_copy, opt->live, opt->num_vars);
+
+		liveness_phi_dst(opt, &node->ssa.phis,
+					node->ssa.depart_count);
+
+		copy_bitmap(opt, &node->liveout, opt->live, opt->num_vars);
+		of_bitmap_fill(opt->live, 0, opt->num_vars);
+		if (!LIST_IS_EMPTY(&node->ssa.loop_phis) && node->livein)
+			of_bitmap_fill(node->livein, 0, opt->num_vars);
+		break;
+
+	case OF_IR_NODE_DEPART:
+		region = node->depart_repeat.region;
+		copy_bitmap(opt, &opt->live, region->liveout, opt->num_vars);
+		liveness_phi_src(opt, &region->ssa.phis,
+					node->ssa.depart_number);
+		break;
+
+	case OF_IR_NODE_REPEAT:
+		region = node->depart_repeat.region;
+		copy_bitmap(opt, &opt->live, region->livein, opt->num_vars);
+		liveness_phi_src(opt, &region->ssa.loop_phis,
+					node->ssa.repeat_number);
+		break;
+
+	case OF_IR_NODE_IF_THEN:
+		copy_bitmap(opt, &node->liveout, opt->live, opt->num_vars);
+		break;
+	}
+
+	LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes, parent_list)
+		liveness(opt, child);
+
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		if (!LIST_IS_EMPTY(&node->ssa.loop_phis)) {
+			liveness_phi_dst(opt, &node->ssa.loop_phis,
+						node->ssa.repeat_count + 1);
+
+			copy_bitmap(opt, &node->livein, opt->live, opt->num_vars);
+
+			LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes,
+						     parent_list)
+				liveness(opt, child);
+
+			liveness_phi_dst(opt, &node->ssa.loop_phis,
+						node->ssa.repeat_count + 1);
+			liveness_phi_src(opt, &node->ssa.loop_phis, 0);
+		}
+
+		copy_bitmap(opt, &node->liveout, live_copy, opt->num_vars);
+		copy_bitmap(opt, &node->livein, opt->live, opt->num_vars);
+		util_slab_free(&opt->live_slab, live_copy);
+		break;
+
+	case OF_IR_NODE_IF_THEN:
+		of_bitmap_or(opt->live, opt->live, node->liveout, opt->num_vars);
+		break;
+
+	default:
+		break;
+	}
+}
+
+/*
+ * Dead code elimination, including masking out unused vector componenents.
+ */
+
+static void
+cleanup_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE(ins, s, &node->list.instrs, list) {
+		struct of_ir_register *dst = ins->dst;
+		unsigned i;
+
+		if (ins->flags & OF_IR_INSTR_DEAD) {
+			list_del(&ins->list);
+			continue;
+		}
+
+		if (dst)
+			dst->mask &= ~dst->deadmask;
+
+		for (i = 0; i < ins->num_srcs; ++i) {
+			struct of_ir_register *src = ins->srcs[i];
+
+			src->mask &= ~src->deadmask;
+		}
+	}
+}
+
+static void
+cleanup_phis(struct of_ir_optimizer *opt, struct list_head *phis)
+{
+	struct of_ir_phi *phi, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE(phi, s, phis, list)
+		if (phi->dead)
+			list_del(&phi->list);
+}
+
+void
+cleanup(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child, *s;
+
+	/* Clean-up live bitmap pointers. Memory is pooled using a slab cache,
+	 * so all bitmaps will be freed in one go later. */
+	node->livein = NULL;
+	node->liveout = NULL;
 
 	if (node->type == OF_IR_NODE_LIST)
-		return clean_sources_list(opt, node);
+		return cleanup_list(opt, node);
 
-	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		clean_sources(opt, child);
+	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list)
+		cleanup(opt, child);
+
+	if (!LIST_IS_EMPTY(&node->ssa.phis))
+		cleanup_phis(opt, &node->ssa.phis);
+	if (!LIST_IS_EMPTY(&node->ssa.loop_phis))
+		cleanup_phis(opt, &node->ssa.loop_phis);
 }
 
 static void
@@ -285,13 +425,24 @@ of_ir_optimize(struct of_ir_shader *shader)
 	opt->num_vars = shader->stats.num_vars;
 	opt->ref_counts = of_heap_alloc(heap, opt->num_vars
 					* sizeof(*opt->ref_counts));
+	util_slab_create(&opt->live_slab, OF_BITMAP_BYTES_FOR_BITS(opt->num_vars),
+				32, UTIL_SLAB_SINGLETHREADED);
+	opt->live = util_slab_alloc(&opt->live_slab);
+	of_bitmap_fill(opt->live, 0, opt->num_vars);
+	util_dynarray_init(&opt->vars);
+	util_dynarray_resize(&opt->vars, opt->num_vars
+				* sizeof(struct of_ir_variable));
+	memset(util_dynarray_begin(&opt->vars), 0, opt->num_vars
+				* sizeof(struct of_ir_variable));
 
-	RUN_PASS(shader, opt, eliminate_dead);
-	RUN_PASS(shader, opt, clean_sources);
+	RUN_PASS(shader, opt, liveness);
+	RUN_PASS(shader, opt, cleanup);
 
 	DBG("AST (post-optimize/pre-register-assignment)");
 	of_ir_dump_ast(shader, dump_opt_data, opt);
 
+	util_dynarray_fini(&opt->vars);
+	util_slab_destroy(&opt->live_slab);
 	of_heap_destroy(heap);
 
 	return 0;
