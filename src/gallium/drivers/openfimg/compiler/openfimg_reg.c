@@ -818,24 +818,26 @@ add_affinity(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2,
  */
 
 static struct of_ir_instruction *
-create_copy(struct of_ir_shader *shader, uint16_t dst_var, uint16_t src_var)
+create_copy(struct of_ir_reg_assign *ra, uint16_t dst_var, uint16_t src_var)
 {
 	struct of_ir_register *dst, *src;
 	struct of_ir_instruction *ins;
 
-	ins = of_ir_instr_create(shader, OF_OP_MOV);
+	ins = of_ir_instr_create(ra->shader, OF_OP_MOV);
 
-	dst = of_ir_reg_create(shader, OF_IR_REG_VAR, 0, "x___", 0);
+	dst = of_ir_reg_create(ra->shader, OF_IR_REG_VAR, 0, "x___", 0);
 	of_ir_instr_add_dst(ins, dst);
 	dst->var[0] = dst_var;
 	dst->mask = 1;
 
-	src = of_ir_reg_create(shader, OF_IR_REG_VAR, 0, "xxxx", 0);
+	src = of_ir_reg_create(ra->shader, OF_IR_REG_VAR, 0, "xxxx", 0);
 	of_ir_instr_add_src(ins, src);
 	src->var[0] = src_var;
 	src->mask = 1;
 
 	ins->flags |= OF_IR_INSTR_COPY;
+
+	add_affinity(ra, dst_var, src_var, 1);
 
 	return ins;
 }
@@ -878,7 +880,7 @@ split_operand(struct of_ir_reg_assign *ra, struct of_ir_instruction *ins,
 			continue;
 
 		tmp = add_var_num(ra);
-		copy = create_copy(ra->shader, tmp, var);
+		copy = create_copy(ra, tmp, var);
 
 		if (dst)
 			of_ir_instr_insert(ra->shader, NULL, ins, copy);
@@ -936,13 +938,8 @@ split_live_phi_src(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
 		}
 
 		tmp = add_var_num(ra);
-		ins = create_copy(node->shader, tmp, phi->src[arg]);
+		ins = create_copy(ra, tmp, phi->src[arg]);
 		of_ir_instr_insert(node->shader, list, NULL, ins);
-
-		add_affinity(ra, tmp, phi->src[arg], 1);
-		add_affinity(ra, tmp, phi->dst, 10000);
-
-		phi->src[arg] = tmp;
 	}
 }
 
@@ -968,30 +965,9 @@ split_live_phi_dst(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
 		}
 
 		tmp = add_var_num(ra);
-		ins = create_copy(node->shader, phi->dst, tmp);
+		ins = create_copy(ra, phi->dst, tmp);
 		of_ir_instr_insert_before(node->shader, list, NULL, ins);
-
-		add_affinity(ra, tmp, phi->dst, 1);
-
 		phi->dst = tmp;
-	}
-}
-
-static void
-constraint_phi(struct of_ir_reg_assign *ra, struct list_head *phis,
-	       unsigned num_srcs)
-{
-	struct of_ir_phi *phi;
-
-	LIST_FOR_EACH_ENTRY(phi, phis, list) {
-		struct of_ir_constraint *c;
-		unsigned i;
-
-		c = create_constraint(ra, OF_IR_CONSTR_PHI);
-		constraint_add_var(ra, c, phi->dst);
-
-		for (i = 0; i < num_srcs; ++i)
-			constraint_add_var(ra, c, phi->src[i]);
 	}
 }
 
@@ -1029,12 +1005,6 @@ split_live(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list)
 		split_live(ra, child);
-
-	if (node->type == OF_IR_NODE_REGION) {
-		constraint_phi(ra, &node->ssa.phis, node->ssa.depart_count);
-		constraint_phi(ra, &node->ssa.loop_phis,
-				node->ssa.repeat_count + 1);
-	}
 }
 
 /*
@@ -1211,7 +1181,7 @@ constraint_vector(struct of_ir_reg_assign *ra, struct of_ir_register *reg)
 }
 
 static void
-constraint_vectors_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+add_constraints_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
 
@@ -1250,16 +1220,43 @@ constraint_vectors_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node
 }
 
 static void
-constraint_vectors(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+add_constraints_phi(struct of_ir_reg_assign *ra, struct list_head *phis,
+		    unsigned num_srcs)
+{
+	struct of_ir_phi *phi;
+
+	LIST_FOR_EACH_ENTRY(phi, phis, list) {
+		struct of_ir_constraint *c;
+		unsigned i;
+
+		c = create_constraint(ra, OF_IR_CONSTR_PHI);
+		constraint_add_var(ra, c, phi->dst);
+
+		for (i = 0; i < num_srcs; ++i) {
+			if (!phi->src[i])
+				continue;
+			constraint_add_var(ra, c, phi->src[i]);
+			add_affinity(ra, phi->src[i], phi->dst, 30000);
+		}
+	}
+}
+
+static void
+add_constraints(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child;
 
+	add_constraints_phi(ra, &node->ssa.loop_phis,
+				node->ssa.repeat_count + 1);
+
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list) {
 		if (child->type == OF_IR_NODE_LIST)
-			constraint_vectors_list(ra, child);
+			add_constraints_list(ra, child);
 		else
-			constraint_vectors(ra, child);
+			add_constraints(ra, child);
 	}
+
+	add_constraints_phi(ra, &node->ssa.phis, node->ssa.depart_count);
 }
 
 /*
@@ -1498,7 +1495,7 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	DBG("AST (post-rename-copies)");
 	of_ir_dump_ast(shader, NULL, 0);
 
-	RUN_PASS(shader, ra, constraint_vectors);
+	RUN_PASS(shader, ra, add_constraints);
 	ra->live = CALLOC(1, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 	RUN_PASS(shader, ra, interference);
 	dump_interference(ra);
