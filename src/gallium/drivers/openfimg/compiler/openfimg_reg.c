@@ -75,6 +75,7 @@ struct of_ir_reg_assign {
 	struct of_ir_shader *shader;
 	struct of_heap *heap;
 	struct util_slab_mempool valset_slab;
+	struct util_slab_mempool live_slab;
 	uint32_t *live;
 	struct util_dynarray vars;
 	unsigned num_vars;
@@ -163,12 +164,13 @@ add_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
 }
 
 static void
-interference_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+liveness_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins, *s;
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
+		unsigned alive = 0;
 		unsigned comp;
 		unsigned i;
 
@@ -182,8 +184,15 @@ interference_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 				continue;
 
 			get_var(ra, var)->def_ins = ins;
+			alive |= of_bitmap_get(ra->live, var);
 			of_bitmap_clear(ra->live, var);
 		}
+
+		if (!alive) {
+			ins->flags |= OF_IR_INSTR_DEAD;
+			continue;
+		}
+		ins->flags &= ~OF_IR_INSTR_DEAD;
 
 no_dst:
 		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
@@ -210,41 +219,139 @@ no_dst:
 }
 
 static void
-interference_phi(struct of_ir_reg_assign *ra, struct list_head *phis,
-		 unsigned count)
+liveness_phi_dst(struct of_ir_reg_assign *ra, struct list_head *phis,
+		 unsigned num_srcs)
 {
 	struct of_ir_phi *phi, *s;
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
 		unsigned var = phi->dst;
-		unsigned i;
+		unsigned alive;
 
 		get_var(ra, var)->def_phi = phi;
+		alive = of_bitmap_get(ra->live, var);
 		of_bitmap_clear(ra->live, var);
 
-		for (i = 0; i < count; ++i) {
-			OF_BITMAP_FOR_EACH_SET_BIT(var, ra->live, ra->num_vars)
-				add_interference(ra, phi->src[i], var);
-
-			of_bitmap_set(ra->live, phi->src[i]);
+		if (!alive) {
+			phi->dead = 1;
+			continue;
 		}
+		phi->dead = 0;
 	}
 }
 
 static void
-interference(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+liveness_phi_src(struct of_ir_reg_assign *ra, struct list_head *phis,
+		 unsigned src)
+{
+	struct of_ir_phi *phi, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
+		unsigned var;
+
+		if (phi->dead)
+			continue;
+
+		of_bitmap_set(ra->live, phi->src[src]);
+
+		OF_BITMAP_FOR_EACH_SET_BIT(var, ra->live, ra->num_vars)
+			add_interference(ra, phi->src[src], var);
+	}
+}
+
+static void
+copy_bitmap(struct of_ir_reg_assign *ra, uint32_t **dst_ptr, uint32_t *src,
+	    unsigned size)
+{
+	uint32_t *dst = *dst_ptr;
+
+	if (!dst)
+		*dst_ptr = dst = util_slab_alloc(&ra->live_slab);
+
+	if (src)
+		of_bitmap_copy(dst, src, size);
+	else
+		of_bitmap_fill(dst, 0, size);
+}
+
+static void
+liveness(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child, *s;
+	struct of_ir_ast_node *region;
+	uint32_t *live_copy;
 
-	if (node->type == OF_IR_NODE_LIST)
-		return interference_list(ra, node);
+	switch (node->type) {
+	case OF_IR_NODE_LIST:
+		copy_bitmap(ra, &node->liveout, ra->live, ra->num_vars);
+		liveness_list(ra, node);
+		copy_bitmap(ra, &node->livein, ra->live, ra->num_vars);
+		return;
 
-	interference_phi(ra, &node->ssa.phis, node->ssa.depart_count);
+	case OF_IR_NODE_REGION:
+		live_copy = util_slab_alloc(&ra->live_slab);
+		copy_bitmap(ra, &live_copy, ra->live, ra->num_vars);
+
+		liveness_phi_dst(ra, &node->ssa.phis,
+					node->ssa.depart_count);
+
+		copy_bitmap(ra, &node->liveout, ra->live, ra->num_vars);
+		of_bitmap_fill(ra->live, 0, ra->num_vars);
+		if (!LIST_IS_EMPTY(&node->ssa.loop_phis) && node->livein)
+			of_bitmap_fill(node->livein, 0, ra->num_vars);
+		break;
+
+	case OF_IR_NODE_DEPART:
+		region = node->depart_repeat.region;
+		copy_bitmap(ra, &ra->live, region->liveout, ra->num_vars);
+		liveness_phi_src(ra, &region->ssa.phis,
+					node->ssa.depart_number);
+		break;
+
+	case OF_IR_NODE_REPEAT:
+		region = node->depart_repeat.region;
+		copy_bitmap(ra, &ra->live, region->livein, ra->num_vars);
+		liveness_phi_src(ra, &region->ssa.loop_phis,
+					node->ssa.repeat_number);
+		break;
+
+	case OF_IR_NODE_IF_THEN:
+		copy_bitmap(ra, &node->liveout, ra->live, ra->num_vars);
+		break;
+	}
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes, parent_list)
-		interference(ra, child);
+		liveness(ra, child);
 
-	interference_phi(ra, &node->ssa.loop_phis, node->ssa.repeat_count + 1);
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		if (!LIST_IS_EMPTY(&node->ssa.loop_phis)) {
+			liveness_phi_dst(ra, &node->ssa.loop_phis,
+						node->ssa.repeat_count + 1);
+
+			copy_bitmap(ra, &node->livein, ra->live, ra->num_vars);
+
+			LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes,
+						     parent_list)
+				liveness(ra, child);
+
+			liveness_phi_dst(ra, &node->ssa.loop_phis,
+						node->ssa.repeat_count + 1);
+			liveness_phi_src(ra, &node->ssa.loop_phis, 0);
+		}
+
+		copy_bitmap(ra, &node->liveout, live_copy, ra->num_vars);
+		copy_bitmap(ra, &node->livein, ra->live, ra->num_vars);
+		util_slab_free(&ra->live_slab, live_copy);
+		break;
+
+	case OF_IR_NODE_IF_THEN:
+		of_bitmap_or(ra->live, ra->live, node->liveout, ra->num_vars);
+		break;
+
+	default:
+		break;
+	}
 }
 
 /*
@@ -1495,11 +1602,14 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	DBG("AST (post-rename-copies)");
 	of_ir_dump_ast(shader, NULL, 0);
 
+	util_slab_create(&ra->live_slab, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars),
+				32, UTIL_SLAB_SINGLETHREADED);
+	ra->live = util_slab_alloc(&ra->live_slab);
+	of_bitmap_fill(ra->live, 0, ra->num_vars);
 	RUN_PASS(shader, ra, add_constraints);
-	ra->live = CALLOC(1, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
-	RUN_PASS(shader, ra, interference);
+	RUN_PASS(shader, ra, liveness);
 	dump_interference(ra);
-	FREE(ra->live);
+	util_slab_destroy(&ra->live_slab);
 
 	util_dynarray_init(&ra->chunk_queue);
 	util_slab_create(&ra->chunk_slab, sizeof(struct of_ir_chunk),
