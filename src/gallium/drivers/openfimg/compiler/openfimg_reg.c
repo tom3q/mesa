@@ -1014,7 +1014,7 @@ split_live(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 	case OF_IR_NODE_REPEAT:
 		region = node->depart_repeat.region;
 		split_live_phi_src(ra, node, &region->ssa.loop_phis,
-					node->ssa.repeat_number + 1, true);
+					node->ssa.repeat_number, true);
 		break;
 
 	case OF_IR_NODE_REGION:
