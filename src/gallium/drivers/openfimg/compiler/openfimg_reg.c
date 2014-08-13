@@ -26,9 +26,6 @@
 #include <string.h>
 #include <assert.h>
 
-#include <util/u_dynarray.h>
-#include <util/u_slab.h>
-
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
@@ -48,17 +45,6 @@ struct of_ir_chunk {
 	unsigned prealloc :1;
 };
 
-struct of_ir_variable {
-	struct of_ir_chunk *chunk;
-	struct of_ir_instruction *def_ins;
-	struct of_ir_phi *def_phi;
-	uint32_t *interference;
-	unsigned constraints;
-	unsigned color;
-	uint8_t comp;
-	unsigned fixed :1;
-};
-
 struct of_ir_affinity {
 	uint16_t vars[2];
 	unsigned cost;
@@ -71,60 +57,38 @@ struct of_ir_constraint {
 	enum of_ir_constraint_type type;
 };
 
-struct of_ir_reg_assign {
-	struct of_ir_shader *shader;
-	struct of_heap *heap;
-	struct util_slab_mempool valset_slab;
-	struct util_slab_mempool live_slab;
-	uint32_t *live;
-	struct util_dynarray vars;
-	unsigned num_vars;
-	struct util_slab_mempool chunk_slab;
-	struct list_head chunks;
-	struct util_dynarray constraints;
-	unsigned num_constraints;
-	struct util_dynarray affinities;
-	unsigned num_affinities;
-	uint32_t *reg_bitmap[4];
-	uint32_t *chunk_interf;
-	struct util_dynarray chunk_queue;
-	unsigned chunk_queue_len;
-	struct of_stack *renames_stack;
-	uint16_t *renames;
-};
-
 /*
  * Variable management.
  */
 
 static INLINE uint16_t
-var_num(struct of_ir_reg_assign *ra, struct of_ir_variable *var)
+var_num(struct of_ir_optimizer *opt, struct of_ir_variable *var)
 {
-	struct of_ir_variable *vars = util_dynarray_begin(&ra->vars);
+	struct of_ir_variable *vars = util_dynarray_begin(&opt->vars);
 	return var - vars;
 }
 
 static INLINE struct of_ir_variable *
-get_var(struct of_ir_reg_assign *ra, uint16_t var)
+get_var(struct of_ir_optimizer *opt, uint16_t var)
 {
-	assert(var < ra->num_vars);
-	return util_dynarray_element(&ra->vars, struct of_ir_variable, var);
+	assert(var < opt->num_vars);
+	return util_dynarray_element(&opt->vars, struct of_ir_variable, var);
 }
 
 static INLINE struct of_ir_variable *
-add_var(struct of_ir_reg_assign *ra)
+add_var(struct of_ir_optimizer *opt)
 {
 	static const struct of_ir_variable v = { 0, };
 
-	util_dynarray_append(&ra->vars, struct of_ir_variable, v);
-	++ra->num_vars;
-	return util_dynarray_top_ptr(&ra->vars, struct of_ir_variable);
+	util_dynarray_append(&opt->vars, struct of_ir_variable, v);
+	++opt->num_vars;
+	return util_dynarray_top_ptr(&opt->vars, struct of_ir_variable);
 }
 
 static INLINE uint16_t
-add_var_num(struct of_ir_reg_assign *ra)
+add_var_num(struct of_ir_optimizer *opt)
 {
-	return var_num(ra, add_var(ra));
+	return var_num(opt, add_var(opt));
 }
 
 /*
@@ -132,39 +96,39 @@ add_var_num(struct of_ir_reg_assign *ra)
  */
 
 static INLINE bool
-vars_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
+vars_interference(struct of_ir_optimizer *opt, uint16_t var1, uint16_t var2)
 {
-	struct of_ir_variable *v1 = get_var(ra, var1);
+	struct of_ir_variable *v1 = get_var(opt, var1);
 
-	assert(var1 < ra->num_vars);
-	assert(var2 < ra->num_vars);
+	assert(var1 < opt->num_vars);
+	assert(var2 < opt->num_vars);
 
 	return v1->interference && of_bitmap_get(v1->interference, var2);
 }
 
 static void
-add_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
+add_interference(struct of_ir_optimizer *opt, uint16_t var1, uint16_t var2)
 {
-	struct of_ir_variable *v1 = get_var(ra, var1);
-	struct of_ir_variable *v2 = get_var(ra, var2);
+	struct of_ir_variable *v1 = get_var(opt, var1);
+	struct of_ir_variable *v2 = get_var(opt, var2);
 
-	assert(var1 < ra->num_vars);
-	assert(var2 < ra->num_vars);
+	assert(var1 < opt->num_vars);
+	assert(var2 < opt->num_vars);
 
 	if (!v1->interference)
-		v1->interference = of_heap_alloc(ra->heap,
-					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
+		v1->interference = of_heap_alloc(opt->heap,
+					OF_BITMAP_BYTES_FOR_BITS(opt->num_vars));
 
 	if (!v2->interference)
-		v2->interference = of_heap_alloc(ra->heap,
-					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
+		v2->interference = of_heap_alloc(opt->heap,
+					OF_BITMAP_BYTES_FOR_BITS(opt->num_vars));
 
 	of_bitmap_set(v1->interference, var2);
 	of_bitmap_set(v2->interference, var1);
 }
 
 static void
-liveness_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+liveness_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins, *s;
 
@@ -183,9 +147,9 @@ liveness_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 			if (!(dst->mask & (1 << comp)))
 				continue;
 
-			get_var(ra, var)->def_ins = ins;
-			alive |= of_bitmap_get(ra->live, var);
-			of_bitmap_clear(ra->live, var);
+			get_var(opt, var)->def_ins = ins;
+			alive |= of_bitmap_get(opt->live, var);
+			of_bitmap_clear(opt->live, var);
 		}
 
 		if (!alive) {
@@ -207,19 +171,19 @@ no_dst:
 				if (!(src->mask & (1 << comp)))
 					continue;
 
-				OF_BITMAP_FOR_EACH_SET_BIT(var, ra->live,
-							   ra->num_vars)
-					add_interference(ra, src->var[comp],
+				OF_BITMAP_FOR_EACH_SET_BIT(var, opt->live,
+							   opt->num_vars)
+					add_interference(opt, src->var[comp],
 								var);
 
-				of_bitmap_set(ra->live, src->var[comp]);
+				of_bitmap_set(opt->live, src->var[comp]);
 			}
 		}
 	}
 }
 
 static void
-liveness_phi_dst(struct of_ir_reg_assign *ra, struct list_head *phis,
+liveness_phi_dst(struct of_ir_optimizer *opt, struct list_head *phis,
 		 unsigned num_srcs)
 {
 	struct of_ir_phi *phi, *s;
@@ -228,9 +192,9 @@ liveness_phi_dst(struct of_ir_reg_assign *ra, struct list_head *phis,
 		unsigned var = phi->dst;
 		unsigned alive;
 
-		get_var(ra, var)->def_phi = phi;
-		alive = of_bitmap_get(ra->live, var);
-		of_bitmap_clear(ra->live, var);
+		get_var(opt, var)->def_phi = phi;
+		alive = of_bitmap_get(opt->live, var);
+		of_bitmap_clear(opt->live, var);
 
 		if (!alive) {
 			phi->dead = 1;
@@ -241,7 +205,7 @@ liveness_phi_dst(struct of_ir_reg_assign *ra, struct list_head *phis,
 }
 
 static void
-liveness_phi_src(struct of_ir_reg_assign *ra, struct list_head *phis,
+liveness_phi_src(struct of_ir_optimizer *opt, struct list_head *phis,
 		 unsigned src)
 {
 	struct of_ir_phi *phi, *s;
@@ -252,21 +216,21 @@ liveness_phi_src(struct of_ir_reg_assign *ra, struct list_head *phis,
 		if (phi->dead)
 			continue;
 
-		of_bitmap_set(ra->live, phi->src[src]);
+		of_bitmap_set(opt->live, phi->src[src]);
 
-		OF_BITMAP_FOR_EACH_SET_BIT(var, ra->live, ra->num_vars)
-			add_interference(ra, phi->src[src], var);
+		OF_BITMAP_FOR_EACH_SET_BIT(var, opt->live, opt->num_vars)
+			add_interference(opt, phi->src[src], var);
 	}
 }
 
 static void
-copy_bitmap(struct of_ir_reg_assign *ra, uint32_t **dst_ptr, uint32_t *src,
+copy_bitmap(struct of_ir_optimizer *opt, uint32_t **dst_ptr, uint32_t *src,
 	    unsigned size)
 {
 	uint32_t *dst = *dst_ptr;
 
 	if (!dst)
-		*dst_ptr = dst = util_slab_alloc(&ra->live_slab);
+		*dst_ptr = dst = util_slab_alloc(&opt->live_slab);
 
 	if (src)
 		of_bitmap_copy(dst, src, size);
@@ -275,7 +239,7 @@ copy_bitmap(struct of_ir_reg_assign *ra, uint32_t **dst_ptr, uint32_t *src,
 }
 
 static void
-liveness(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+liveness(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child, *s;
 	struct of_ir_ast_node *region;
@@ -283,70 +247,70 @@ liveness(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 
 	switch (node->type) {
 	case OF_IR_NODE_LIST:
-		copy_bitmap(ra, &node->liveout, ra->live, ra->num_vars);
-		liveness_list(ra, node);
-		copy_bitmap(ra, &node->livein, ra->live, ra->num_vars);
+		copy_bitmap(opt, &node->liveout, opt->live, opt->num_vars);
+		liveness_list(opt, node);
+		copy_bitmap(opt, &node->livein, opt->live, opt->num_vars);
 		return;
 
 	case OF_IR_NODE_REGION:
-		live_copy = util_slab_alloc(&ra->live_slab);
-		copy_bitmap(ra, &live_copy, ra->live, ra->num_vars);
+		live_copy = util_slab_alloc(&opt->live_slab);
+		copy_bitmap(opt, &live_copy, opt->live, opt->num_vars);
 
-		liveness_phi_dst(ra, &node->ssa.phis,
+		liveness_phi_dst(opt, &node->ssa.phis,
 					node->ssa.depart_count);
 
-		copy_bitmap(ra, &node->liveout, ra->live, ra->num_vars);
-		of_bitmap_fill(ra->live, 0, ra->num_vars);
+		copy_bitmap(opt, &node->liveout, opt->live, opt->num_vars);
+		of_bitmap_fill(opt->live, 0, opt->num_vars);
 		if (!LIST_IS_EMPTY(&node->ssa.loop_phis) && node->livein)
-			of_bitmap_fill(node->livein, 0, ra->num_vars);
+			of_bitmap_fill(node->livein, 0, opt->num_vars);
 		break;
 
 	case OF_IR_NODE_DEPART:
 		region = node->depart_repeat.region;
-		copy_bitmap(ra, &ra->live, region->liveout, ra->num_vars);
-		liveness_phi_src(ra, &region->ssa.phis,
+		copy_bitmap(opt, &opt->live, region->liveout, opt->num_vars);
+		liveness_phi_src(opt, &region->ssa.phis,
 					node->ssa.depart_number);
 		break;
 
 	case OF_IR_NODE_REPEAT:
 		region = node->depart_repeat.region;
-		copy_bitmap(ra, &ra->live, region->livein, ra->num_vars);
-		liveness_phi_src(ra, &region->ssa.loop_phis,
+		copy_bitmap(opt, &opt->live, region->livein, opt->num_vars);
+		liveness_phi_src(opt, &region->ssa.loop_phis,
 					node->ssa.repeat_number);
 		break;
 
 	case OF_IR_NODE_IF_THEN:
-		copy_bitmap(ra, &node->liveout, ra->live, ra->num_vars);
+		copy_bitmap(opt, &node->liveout, opt->live, opt->num_vars);
 		break;
 	}
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes, parent_list)
-		liveness(ra, child);
+		liveness(opt, child);
 
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
 		if (!LIST_IS_EMPTY(&node->ssa.loop_phis)) {
-			liveness_phi_dst(ra, &node->ssa.loop_phis,
+			liveness_phi_dst(opt, &node->ssa.loop_phis,
 						node->ssa.repeat_count + 1);
 
-			copy_bitmap(ra, &node->livein, ra->live, ra->num_vars);
+			copy_bitmap(opt, &node->livein, opt->live, opt->num_vars);
 
 			LIST_FOR_EACH_ENTRY_SAFE_REV(child, s, &node->nodes,
 						     parent_list)
-				liveness(ra, child);
+				liveness(opt, child);
 
-			liveness_phi_dst(ra, &node->ssa.loop_phis,
+			liveness_phi_dst(opt, &node->ssa.loop_phis,
 						node->ssa.repeat_count + 1);
-			liveness_phi_src(ra, &node->ssa.loop_phis, 0);
+			liveness_phi_src(opt, &node->ssa.loop_phis, 0);
 		}
 
-		copy_bitmap(ra, &node->liveout, live_copy, ra->num_vars);
-		copy_bitmap(ra, &node->livein, ra->live, ra->num_vars);
-		util_slab_free(&ra->live_slab, live_copy);
+		copy_bitmap(opt, &node->liveout, live_copy, opt->num_vars);
+		copy_bitmap(opt, &node->livein, opt->live, opt->num_vars);
+		util_slab_free(&opt->live_slab, live_copy);
 		break;
 
 	case OF_IR_NODE_IF_THEN:
-		of_bitmap_or(ra->live, ra->live, node->liveout, ra->num_vars);
+		of_bitmap_or(opt->live, opt->live, node->liveout, opt->num_vars);
 		break;
 
 	default:
@@ -368,21 +332,21 @@ affinity_compare(const void *a, const void *b)
 }
 
 static struct of_ir_chunk *
-create_chunk(struct of_ir_reg_assign *ra, struct of_ir_variable *var)
+create_chunk(struct of_ir_optimizer *opt, struct of_ir_variable *var)
 {
-	struct of_ir_chunk *c = util_slab_alloc(&ra->chunk_slab);
-	uint16_t num = var_num(ra, var);
+	struct of_ir_chunk *c = util_slab_alloc(&opt->chunk_slab);
+	uint16_t num = var_num(opt, var);
 
 	memset(c, 0, sizeof(*c));
 
-	list_addtail(&c->list, &ra->chunks);
+	list_addtail(&c->list, &opt->chunks);
 
 	if (var->chunk) {
 		of_valset_del(&var->chunk->vars, num);
 		--var->chunk->num_vars;
 	}
 
-	of_valset_init(&c->vars, &ra->valset_slab);
+	of_valset_init(&c->vars, &opt->valset_slab);
 	of_valset_add(&c->vars, num);
 
 	c->num_vars = 1;
@@ -393,14 +357,14 @@ create_chunk(struct of_ir_reg_assign *ra, struct of_ir_variable *var)
 }
 
 static void
-destroy_chunk(struct of_ir_reg_assign *ra, struct of_ir_chunk *c)
+destroy_chunk(struct of_ir_optimizer *opt, struct of_ir_chunk *c)
 {
 	list_del(&c->list);
-	util_slab_free(&ra->chunk_slab, c);
+	util_slab_free(&opt->chunk_slab, c);
 }
 
 static void
-try_to_merge_chunks(struct of_ir_reg_assign *ra, struct of_ir_affinity *a,
+try_to_merge_chunks(struct of_ir_optimizer *opt, struct of_ir_affinity *a,
 		    struct of_ir_chunk *c0, struct of_ir_chunk *c1)
 {
 	unsigned long *num0, *num1;
@@ -412,7 +376,7 @@ try_to_merge_chunks(struct of_ir_reg_assign *ra, struct of_ir_affinity *a,
 		OF_VALSET_FOR_EACH_VAL(num1, &c1->vars) {
 			if (*num0 == *num1)
 				continue;
-			if (vars_interference(ra, *num0, *num1))
+			if (vars_interference(opt, *num0, *num1))
 				return;
 		}
 	}
@@ -422,54 +386,54 @@ try_to_merge_chunks(struct of_ir_reg_assign *ra, struct of_ir_affinity *a,
 	c0->cost += a->cost;
 
 	OF_VALSET_FOR_EACH_VAL(num1, &c1->vars) {
-		struct of_ir_variable *v1 = get_var(ra, *num1);
+		struct of_ir_variable *v1 = get_var(opt, *num1);
 
 		of_valset_add(&c0->vars, *num1);
 		v1->chunk = c0;
 	}
 
-	destroy_chunk(ra, c1);
+	destroy_chunk(opt, c1);
 }
 
 static void
-prepare_chunks(struct of_ir_reg_assign *ra)
+prepare_chunks(struct of_ir_optimizer *opt)
 {
-	struct of_ir_affinity **array = util_dynarray_begin(&ra->affinities);
+	struct of_ir_affinity **array = util_dynarray_begin(&opt->affinities);
 	unsigned i;
 
-	qsort(array, ra->num_affinities, sizeof(struct of_ir_affinity *),
+	qsort(array, opt->num_affinities, sizeof(struct of_ir_affinity *),
 		affinity_compare);
 
-	for (i = 0; i < ra->num_affinities; ++i) {
+	for (i = 0; i < opt->num_affinities; ++i) {
 		struct of_ir_affinity *a = array[i];
-		struct of_ir_variable *v0 = get_var(ra, a->vars[0]);
-		struct of_ir_variable *v1 = get_var(ra, a->vars[1]);
+		struct of_ir_variable *v0 = get_var(opt, a->vars[0]);
+		struct of_ir_variable *v1 = get_var(opt, a->vars[1]);
 
 		DBG("v0 = %u, v1 = %u", a->vars[0], a->vars[1]);
 
 		if (!v0->chunk)
-			create_chunk(ra, v0);
+			create_chunk(opt, v0);
 
 		if (!v1->chunk)
-			create_chunk(ra, v1);
+			create_chunk(opt, v1);
 
 		if (v0->chunk == v1->chunk) {
 			v1->chunk->cost += a->cost;
 			continue;
 		}
 
-		try_to_merge_chunks(ra, a, v0->chunk, v1->chunk);
+		try_to_merge_chunks(opt, a, v0->chunk, v1->chunk);
 	}
 }
 
 static void
-dump_chunks(struct of_ir_reg_assign *ra)
+dump_chunks(struct of_ir_optimizer *opt)
 {
 	struct of_ir_chunk *c;
 
 	_debug_printf("Coalescer chunks:\n");
 
-	LIST_FOR_EACH_ENTRY(c, &ra->chunks, list) {
+	LIST_FOR_EACH_ENTRY(c, &opt->chunks, list) {
 		unsigned long *num;
 
 		_debug_printf("{cost = %u, comp = %u}: ", c->cost, c->comp);
@@ -496,12 +460,12 @@ constraint_compare(const void *a, const void *b)
 }
 
 static void
-prepare_constraints(struct of_ir_reg_assign *ra)
+prepare_constraints(struct of_ir_optimizer *opt)
 {
-	struct of_ir_constraint **array = util_dynarray_begin(&ra->constraints);
+	struct of_ir_constraint **array = util_dynarray_begin(&opt->constraints);
 	unsigned i;
 
-	for (i = 0; i < ra->num_constraints; ++i) {
+	for (i = 0; i < opt->num_constraints; ++i) {
 		struct of_ir_constraint *c = array[i];
 		unsigned long *num;
 
@@ -509,27 +473,27 @@ prepare_constraints(struct of_ir_reg_assign *ra)
 			continue;
 
 		OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
-			struct of_ir_variable *v = get_var(ra, *num);
+			struct of_ir_variable *v = get_var(opt, *num);
 
 			if (!v->chunk)
-				create_chunk(ra, v);
+				create_chunk(opt, v);
 			else
 				c->cost += v->chunk->cost;
 		}
 	}
 
-	qsort(array, ra->num_constraints, sizeof(*array), constraint_compare);
+	qsort(array, opt->num_constraints, sizeof(*array), constraint_compare);
 }
 
 static void
-dump_constraints(struct of_ir_reg_assign *ra)
+dump_constraints(struct of_ir_optimizer *opt)
 {
-	struct of_ir_constraint **array = util_dynarray_begin(&ra->constraints);
+	struct of_ir_constraint **array = util_dynarray_begin(&opt->constraints);
 	unsigned i;
 
 	_debug_printf("Coloring constraints:\n");
 
-	for (i = 0; i < ra->num_constraints; ++i) {
+	for (i = 0; i < opt->num_constraints; ++i) {
 		struct of_ir_constraint *c = array[i];
 		unsigned long *num;
 
@@ -593,16 +557,16 @@ color_reg(unsigned color)
 }
 
 static void
-color_chunk(struct of_ir_reg_assign *ra, struct of_ir_chunk *c, unsigned color)
+color_chunk(struct of_ir_optimizer *opt, struct of_ir_chunk *c, unsigned color)
 {
 	uint8_t comp = color_comp(color);
 	unsigned long *num;
 
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
-		struct of_ir_variable *v = get_var(ra, *num);
+		struct of_ir_variable *v = get_var(opt, *num);
 
 		if (v->comp && v->comp != color_comp(color)) {
-			create_chunk(ra, v);
+			create_chunk(opt, v);
 			continue;
 		}
 
@@ -621,7 +585,7 @@ color_chunk(struct of_ir_reg_assign *ra, struct of_ir_chunk *c, unsigned color)
 }
 
 static void
-init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t **regs,
+init_reg_bitmap(struct of_ir_optimizer *opt, uint32_t **regs,
 		uint32_t *interf)
 {
 	struct of_ir_variable *v;
@@ -630,7 +594,7 @@ init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t **regs,
 
 	bitmap = *regs;
 	if (!bitmap)
-		*regs = bitmap = of_heap_alloc(ra->heap, OF_REG_BITMAP_SIZE);
+		*regs = bitmap = of_heap_alloc(opt->heap, OF_REG_BITMAP_SIZE);
 
 	memset(bitmap, 0xff, OF_REG_BITMAP_SIZE);
 	of_bitmap_clear(bitmap, 0);
@@ -639,43 +603,43 @@ init_reg_bitmap(struct of_ir_reg_assign *ra, uint32_t **regs,
 		return;
 
 	/* Mark registers already assigned to interfering variables. */
-	OF_BITMAP_FOR_EACH_SET_BIT(var, interf, ra->num_vars) {
-		v = get_var(ra, var);
+	OF_BITMAP_FOR_EACH_SET_BIT(var, interf, opt->num_vars) {
+		v = get_var(opt, var);
 		if (v->color)
 			of_bitmap_clear(bitmap, v->color);
 	}
 }
 
 static void
-init_reg_bitmap_for_chunk(struct of_ir_reg_assign *ra, uint32_t **regs,
+init_reg_bitmap_for_chunk(struct of_ir_optimizer *opt, uint32_t **regs,
 			  struct of_ir_chunk *c)
 {
 	struct of_ir_variable *v;
 	unsigned long *num;
 	uint32_t *interf;
 
-	interf = ra->chunk_interf;
+	interf = opt->chunk_interf;
 	if (!interf)
-		ra->chunk_interf = interf = of_heap_alloc(ra->heap,
-					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
-	memset(interf, 0, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
+		opt->chunk_interf = interf = of_heap_alloc(opt->heap,
+					OF_BITMAP_BYTES_FOR_BITS(opt->num_vars));
+	memset(interf, 0, OF_BITMAP_BYTES_FOR_BITS(opt->num_vars));
 
 	/* Calculate interference of the chunk. */
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
-		v = get_var(ra, *num);
+		v = get_var(opt, *num);
 		if (!v->interference)
 			continue;
-		of_bitmap_or(interf, interf, v->interference, ra->num_vars);
+		of_bitmap_or(interf, interf, v->interference, opt->num_vars);
 	}
 
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars)
 		of_bitmap_clear(interf, *num);
 
-	init_reg_bitmap(ra, regs, interf);
+	init_reg_bitmap(opt, regs, interf);
 }
 
 static int
-color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
+color_reg_constraint(struct of_ir_optimizer *opt, struct of_ir_constraint *c)
 {
 	struct of_ir_chunk *ch[OF_IR_VEC_SIZE];
 	unsigned comp_mask = 0;
@@ -689,23 +653,23 @@ color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
 
 	i = 0;
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
-		struct of_ir_variable *v = get_var(ra, *num);
+		struct of_ir_variable *v = get_var(opt, *num);
 
 		if (!v->chunk)
-			create_chunk(ra, v);
+			create_chunk(opt, v);
 
 		ch[i] = v->chunk;
 
 		if (v->chunk->comp) {
 			if (v->chunk->comp & comp_mask) {
-				ch[i] = create_chunk(ra, v);
+				ch[i] = create_chunk(opt, v);
 				assert(!ch[i]->comp);
 			} else {
 				comp_mask |= v->chunk->comp;
 			}
 		}
 
-		init_reg_bitmap_for_chunk(ra, &ra->reg_bitmap[i], ch[i]);
+		init_reg_bitmap_for_chunk(opt, &opt->reg_bitmap[i], ch[i]);
 		++i;
 	}
 
@@ -720,7 +684,7 @@ color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
 			for (i = 0; i < c->num_vars; ++i) {
 				unsigned color = make_color(reg, swz[i]);
 
-				if (!of_bitmap_get(ra->reg_bitmap[i], color))
+				if (!of_bitmap_get(opt->reg_bitmap[i], color))
 					break;
 			}
 			if (i == c->num_vars)
@@ -737,7 +701,7 @@ done:
 
 	i = 0;
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
-		struct of_ir_variable *v = get_var(ra, *num);
+		struct of_ir_variable *v = get_var(opt, *num);
 		unsigned color = make_color(reg, swz[i]);
 		struct of_ir_chunk *cc = ch[i];
 
@@ -746,10 +710,10 @@ done:
 				++i;
 				continue;
 			}
-			cc = create_chunk(ra, v);
+			cc = create_chunk(opt, v);
 		}
 
-		color_chunk(ra, cc, color);
+		color_chunk(opt, cc, color);
 		cc->fixed = 1;
 		cc->prealloc = 1;
 		cc->comp = (1 << swz[i]);
@@ -760,17 +724,17 @@ done:
 }
 
 static int
-color_constraints(struct of_ir_reg_assign *ra)
+color_constraints(struct of_ir_optimizer *opt)
 {
-	struct of_ir_constraint **array = util_dynarray_begin(&ra->constraints);
+	struct of_ir_constraint **array = util_dynarray_begin(&opt->constraints);
 	unsigned i;
 
-	for (i = 0; i < ra->num_constraints; ++i) {
+	for (i = 0; i < opt->num_constraints; ++i) {
 		struct of_ir_constraint *c = array[i];
 		int ret;
 
 		if (c->type == OF_IR_CONSTR_SAME_REG) {
-			ret = color_reg_constraint(ra, c);
+			ret = color_reg_constraint(opt, c);
 			if (ret)
 				return ret;
 		}
@@ -789,34 +753,34 @@ chunk_compare(const void *a, const void *b)
 }
 
 static void
-prepare_chunk_queue(struct of_ir_reg_assign *ra)
+prepare_chunk_queue(struct of_ir_optimizer *opt)
 {
 	unsigned num_chunks;
 	struct of_ir_chunk *c;
 
 	num_chunks = 0;
-	LIST_FOR_EACH_ENTRY(c, &ra->chunks, list) {
+	LIST_FOR_EACH_ENTRY(c, &opt->chunks, list) {
 		if (c->fixed)
 			continue;
 
-		util_dynarray_append(&ra->chunk_queue, struct of_ir_chunk *, c);
+		util_dynarray_append(&opt->chunk_queue, struct of_ir_chunk *, c);
 		++num_chunks;
 	}
 
-	qsort(util_dynarray_begin(&ra->chunk_queue), num_chunks,
+	qsort(util_dynarray_begin(&opt->chunk_queue), num_chunks,
 		sizeof(struct of_ir_chunk *), chunk_compare);
-	ra->chunk_queue_len = num_chunks;
+	opt->chunk_queue_len = num_chunks;
 }
 
 static void
-dump_chunk_queue(struct of_ir_reg_assign *ra)
+dump_chunk_queue(struct of_ir_optimizer *opt)
 {
-	struct of_ir_chunk **array = util_dynarray_begin(&ra->chunk_queue);
+	struct of_ir_chunk **array = util_dynarray_begin(&opt->chunk_queue);
 	unsigned i;
 
 	_debug_printf("Chunk queue:\n");
 
-	for (i = 0; i < ra->chunk_queue_len; ++i) {
+	for (i = 0; i < opt->chunk_queue_len; ++i) {
 		struct of_ir_chunk *c = array[i];
 		unsigned long *num;
 
@@ -830,12 +794,12 @@ dump_chunk_queue(struct of_ir_reg_assign *ra)
 }
 
 static void
-color_chunks(struct of_ir_reg_assign *ra)
+color_chunks(struct of_ir_optimizer *opt)
 {
-	struct of_ir_chunk **array = util_dynarray_begin(&ra->chunk_queue);
+	struct of_ir_chunk **array = util_dynarray_begin(&opt->chunk_queue);
 	unsigned i;
 
-	for (i = 0; i < ra->chunk_queue_len; ++i) {
+	for (i = 0; i < opt->chunk_queue_len; ++i) {
 		struct of_ir_chunk *c = array[i];
 		unsigned color = 0;
 		unsigned comp_mask;
@@ -844,7 +808,7 @@ color_chunks(struct of_ir_reg_assign *ra)
 		if (c->fixed || c->num_vars == 1)
 			continue;
 
-		init_reg_bitmap_for_chunk(ra, &ra->reg_bitmap[0], c);
+		init_reg_bitmap_for_chunk(opt, &opt->reg_bitmap[0], c);
 
 		for (reg = 0; reg < OF_NUM_REGS; ++reg) {
 			comp_mask = c->comp ? c->comp : 0xf;
@@ -853,7 +817,7 @@ color_chunks(struct of_ir_reg_assign *ra)
 				int comp = u_bit_scan(&comp_mask);
 				unsigned bit = make_color(reg, comp);
 
-				if (of_bitmap_get(ra->reg_bitmap[0], bit)) {
+				if (of_bitmap_get(opt->reg_bitmap[0], bit)) {
 					color = bit;
 					goto done;
 				}
@@ -864,42 +828,42 @@ color_chunks(struct of_ir_reg_assign *ra)
 		assert(0);
 
 done:
-		color_chunk(ra, c, color);
+		color_chunk(opt, c, color);
 	}
 }
 
 static void
-precolor(struct of_ir_reg_assign *ra)
+precolor(struct of_ir_optimizer *opt)
 {
-	prepare_chunks(ra);
-	dump_chunks(ra);
-	prepare_constraints(ra);
-	dump_constraints(ra);
-	color_constraints(ra);
-	prepare_chunk_queue(ra);
-	dump_chunk_queue(ra);
-	color_chunks(ra);
+	prepare_chunks(opt);
+	dump_chunks(opt);
+	prepare_constraints(opt);
+	dump_constraints(opt);
+	color_constraints(opt);
+	prepare_chunk_queue(opt);
+	dump_chunk_queue(opt);
+	color_chunks(opt);
 }
 
 static struct of_ir_constraint *
-create_constraint(struct of_ir_reg_assign *ra, enum of_ir_constraint_type type)
+create_constraint(struct of_ir_optimizer *opt, enum of_ir_constraint_type type)
 {
-	struct of_ir_constraint *c = of_heap_alloc(ra->heap, sizeof(*c));
+	struct of_ir_constraint *c = of_heap_alloc(opt->heap, sizeof(*c));
 
 	c->type = type;
-	of_valset_init(&c->vars, &ra->valset_slab);
+	of_valset_init(&c->vars, &opt->valset_slab);
 
-	util_dynarray_append(&ra->constraints, struct of_ir_constraint *, c);
-	++ra->num_constraints;
+	util_dynarray_append(&opt->constraints, struct of_ir_constraint *, c);
+	++opt->num_constraints;
 
 	return c;
 }
 
 static INLINE void
-constraint_add_var(struct of_ir_reg_assign *ra, struct of_ir_constraint *c,
+constraint_add_var(struct of_ir_optimizer *opt, struct of_ir_constraint *c,
 		   uint16_t var)
 {
-	struct of_ir_variable *v = get_var(ra, var);
+	struct of_ir_variable *v = get_var(opt, var);
 
 	of_valset_add(&c->vars, var);
 	v->constraints |= c->type;
@@ -907,17 +871,17 @@ constraint_add_var(struct of_ir_reg_assign *ra, struct of_ir_constraint *c,
 }
 
 static void
-add_affinity(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2,
+add_affinity(struct of_ir_optimizer *opt, uint16_t var1, uint16_t var2,
 	     unsigned cost)
 {
-	struct of_ir_affinity *a = of_heap_alloc(ra->heap, sizeof(*a));
+	struct of_ir_affinity *a = of_heap_alloc(opt->heap, sizeof(*a));
 
 	a->vars[0] = var1;
 	a->vars[1] = var2;
 	a->cost = cost;
 
-	util_dynarray_append(&ra->affinities, struct of_ir_affinity *, a);
-	++ra->num_affinities;
+	util_dynarray_append(&opt->affinities, struct of_ir_affinity *, a);
+	++opt->num_affinities;
 }
 
 /*
@@ -925,26 +889,26 @@ add_affinity(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2,
  */
 
 static struct of_ir_instruction *
-create_copy(struct of_ir_reg_assign *ra, uint16_t dst_var, uint16_t src_var)
+create_copy(struct of_ir_optimizer *opt, uint16_t dst_var, uint16_t src_var)
 {
 	struct of_ir_register *dst, *src;
 	struct of_ir_instruction *ins;
 
-	ins = of_ir_instr_create(ra->shader, OF_OP_MOV);
+	ins = of_ir_instr_create(opt->shader, OF_OP_MOV);
 
-	dst = of_ir_reg_create(ra->shader, OF_IR_REG_VAR, 0, "x___", 0);
+	dst = of_ir_reg_create(opt->shader, OF_IR_REG_VAR, 0, "x___", 0);
 	of_ir_instr_add_dst(ins, dst);
 	dst->var[0] = dst_var;
 	dst->mask = 1;
 
-	src = of_ir_reg_create(ra->shader, OF_IR_REG_VAR, 0, "xxxx", 0);
+	src = of_ir_reg_create(opt->shader, OF_IR_REG_VAR, 0, "xxxx", 0);
 	of_ir_instr_add_src(ins, src);
 	src->var[0] = src_var;
 	src->mask = 1;
 
 	ins->flags |= OF_IR_INSTR_COPY;
 
-	add_affinity(ra, dst_var, src_var, 1);
+	add_affinity(opt, dst_var, src_var, 1);
 
 	return ins;
 }
@@ -962,7 +926,7 @@ comp_used(struct of_ir_register *reg, unsigned comp)
 }
 
 static void
-split_operand(struct of_ir_reg_assign *ra, struct of_ir_instruction *ins,
+split_operand(struct of_ir_optimizer *opt, struct of_ir_instruction *ins,
 	      struct of_ir_register *reg, bool dst)
 {
 	uint16_t vars[OF_IR_VEC_SIZE];
@@ -986,21 +950,21 @@ split_operand(struct of_ir_reg_assign *ra, struct of_ir_instruction *ins,
 		if (i != cnt)
 			continue;
 
-		tmp = add_var_num(ra);
-		copy = create_copy(ra, tmp, var);
+		tmp = add_var_num(opt);
+		copy = create_copy(opt, tmp, var);
 
 		if (dst)
-			of_ir_instr_insert(ra->shader, NULL, ins, copy);
+			of_ir_instr_insert(opt->shader, NULL, ins, copy);
 		else
-			of_ir_instr_insert_before(ra->shader, NULL, ins, copy);
+			of_ir_instr_insert_before(opt->shader, NULL, ins, copy);
 
-		add_affinity(ra, tmp, var, 20000);
+		add_affinity(opt, tmp, var, 20000);
 		vars[cnt++] = var;
 	}
 }
 
 static void
-split_live_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+split_live_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins, *s;
 
@@ -1009,19 +973,19 @@ split_live_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 		unsigned i;
 
 		if (dst && dst->type == OF_IR_REG_VAR && is_vector(dst))
-			split_operand(ra, ins, dst, true);
+			split_operand(opt, ins, dst, true);
 
 		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
 
 			if (src->type == OF_IR_REG_VAR && is_vector(src))
-				split_operand(ra, ins, src, false);
+				split_operand(opt, ins, src, false);
 		}
 	}
 }
 
 static void
-split_live_phi_src(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
+split_live_phi_src(struct of_ir_optimizer *opt, struct of_ir_ast_node *node,
 		   struct list_head *phis, unsigned arg, bool loop)
 {
 	struct of_ir_ast_node *list = NULL;
@@ -1044,14 +1008,14 @@ split_live_phi_src(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
 				return;
 		}
 
-		tmp = add_var_num(ra);
-		ins = create_copy(ra, tmp, phi->src[arg]);
+		tmp = add_var_num(opt);
+		ins = create_copy(opt, tmp, phi->src[arg]);
 		of_ir_instr_insert(node->shader, list, NULL, ins);
 	}
 }
 
 static void
-split_live_phi_dst(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
+split_live_phi_dst(struct of_ir_optimizer *opt, struct of_ir_ast_node *node,
 		   struct list_head *phis, bool loop)
 {
 	struct of_ir_ast_node *list = NULL;
@@ -1071,39 +1035,39 @@ split_live_phi_dst(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node,
 				return;
 		}
 
-		tmp = add_var_num(ra);
-		ins = create_copy(ra, phi->dst, tmp);
+		tmp = add_var_num(opt);
+		ins = create_copy(opt, phi->dst, tmp);
 		of_ir_instr_insert_before(node->shader, list, NULL, ins);
 		phi->dst = tmp;
 	}
 }
 
 static void
-split_live(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+split_live(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child, *s;
 	struct of_ir_ast_node *region;
 
 	switch (node->type) {
 	case OF_IR_NODE_LIST:
-		return split_live_list(ra, node);
+		return split_live_list(opt, node);
 
 	case OF_IR_NODE_DEPART:
 		region = node->depart_repeat.region;
-		split_live_phi_src(ra, node, &region->ssa.phis,
+		split_live_phi_src(opt, node, &region->ssa.phis,
 					node->ssa.depart_number, false);
 		break;
 
 	case OF_IR_NODE_REPEAT:
 		region = node->depart_repeat.region;
-		split_live_phi_src(ra, node, &region->ssa.loop_phis,
+		split_live_phi_src(opt, node, &region->ssa.loop_phis,
 					node->ssa.repeat_number, true);
 		break;
 
 	case OF_IR_NODE_REGION:
-		split_live_phi_dst(ra, node, &node->ssa.phis, false);
-		split_live_phi_dst(ra, node, &node->ssa.loop_phis, true);
-		split_live_phi_src(ra, node, &node->ssa.loop_phis, 0, true);
+		split_live_phi_dst(opt, node, &node->ssa.phis, false);
+		split_live_phi_dst(opt, node, &node->ssa.loop_phis, true);
+		split_live_phi_src(opt, node, &node->ssa.loop_phis, 0, true);
 		break;
 
 	default:
@@ -1111,7 +1075,7 @@ split_live(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 	}
 
 	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list)
-		split_live(ra, child);
+		split_live(opt, child);
 }
 
 /*
@@ -1120,7 +1084,7 @@ split_live(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
  */
 
 static void
-rename_copies_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+rename_copies_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
 
@@ -1141,8 +1105,8 @@ rename_copies_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 				if (!(src->mask & (1 << comp)))
 					continue;
 
-				if (ra->renames[var])
-					new_src[i][comp] = ra->renames[var];
+				if (opt->renames[var])
+					new_src[i][comp] = opt->renames[var];
 				else
 					new_src[i][comp] = 0;
 			}
@@ -1161,7 +1125,7 @@ rename_copies_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 				if (!(dst->mask & (1 << comp)))
 					continue;
 
-				ra->renames[var] = dst->var[comp];
+				opt->renames[var] = dst->var[comp];
 			}
 		}
 
@@ -1182,7 +1146,7 @@ rename_copies_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 }
 
 static INLINE void
-rename_phi_operand(struct of_ir_reg_assign *ra, unsigned num,
+rename_phi_operand(struct of_ir_optimizer *opt, unsigned num,
 		   struct of_ir_phi *phi, uint16_t *renames)
 {
 	uint16_t var = phi->src[num];
@@ -1191,7 +1155,7 @@ rename_phi_operand(struct of_ir_reg_assign *ra, unsigned num,
 }
 
 static void
-rename_copies(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+rename_copies(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *region;
 	struct of_ir_ast_node *child;
@@ -1200,26 +1164,26 @@ rename_copies(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.loop_phis, list)
-			rename_phi_operand(ra, 0, phi, ra->renames);
+			rename_phi_operand(opt, 0, phi, opt->renames);
 		break;
 
 	case OF_IR_NODE_IF_THEN:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			rename_phi_operand(ra, 0, phi, ra->renames);
+			rename_phi_operand(opt, 0, phi, opt->renames);
 		break;
 
 	case OF_IR_NODE_DEPART:
 	case OF_IR_NODE_REPEAT:
-		ra->renames = of_stack_push_copy(ra->renames_stack);
+		opt->renames = of_stack_push_copy(opt->renames_stack);
 		break;
 
 	case OF_IR_NODE_LIST:
-		rename_copies_list(ra, node);
+		rename_copies_list(opt, node);
 		return;
 	}
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		rename_copies(ra, child);
+		rename_copies(opt, child);
 
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
@@ -1227,25 +1191,25 @@ rename_copies(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 
 	case OF_IR_NODE_IF_THEN:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			rename_phi_operand(ra, 1, phi, ra->renames);
+			rename_phi_operand(opt, 1, phi, opt->renames);
 		break;
 
 	case OF_IR_NODE_DEPART:
 		region = node->depart_repeat.region;
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.phis, list)
-			rename_phi_operand(ra, node->ssa.depart_number, phi,
-						ra->renames);
+			rename_phi_operand(opt, node->ssa.depart_number, phi,
+						opt->renames);
 
-		ra->renames = of_stack_pop(ra->renames_stack);
+		opt->renames = of_stack_pop(opt->renames_stack);
 		break;
 
 	case OF_IR_NODE_REPEAT:
 		region = node->depart_repeat.region;
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.loop_phis, list)
-			rename_phi_operand(ra, node->ssa.repeat_number, phi,
-						ra->renames);
+			rename_phi_operand(opt, node->ssa.repeat_number, phi,
+						opt->renames);
 
-		ra->renames = of_stack_pop(ra->renames_stack);
+		opt->renames = of_stack_pop(opt->renames_stack);
 		break;
 
 	default:
@@ -1258,14 +1222,14 @@ rename_copies(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
  */
 
 static void
-constraint_vector(struct of_ir_reg_assign *ra, struct of_ir_register *reg)
+constraint_vector(struct of_ir_optimizer *opt, struct of_ir_register *reg)
 {
 	uint16_t vars[OF_IR_VEC_SIZE];
 	struct of_ir_constraint *c;
 	unsigned comp;
 	unsigned cnt;
 
-	c = create_constraint(ra, OF_IR_CONSTR_SAME_REG);
+	c = create_constraint(opt, OF_IR_CONSTR_SAME_REG);
 
 	cnt = 0;
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
@@ -1282,13 +1246,13 @@ constraint_vector(struct of_ir_reg_assign *ra, struct of_ir_register *reg)
 		if (i != cnt)
 			continue;
 
-		constraint_add_var(ra, c, var);
+		constraint_add_var(opt, c, var);
 		vars[cnt++] = var;
 	}
 }
 
 static void
-add_constraints_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+add_constraints_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
 
@@ -1309,25 +1273,25 @@ add_constraints_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 					if (!comp_used(dst, comp))
 						continue;
 
-					get_var(ra, var)->comp = (1 << comp);
+					get_var(opt, var)->comp = (1 << comp);
 				}
 			}
 
 			if (is_vector(dst))
-				constraint_vector(ra, dst);
+				constraint_vector(opt, dst);
 		}
 
 		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
 
 			if (src->type == OF_IR_REG_VAR && is_vector(src))
-				constraint_vector(ra, src);
+				constraint_vector(opt, src);
 		}
 	}
 }
 
 static void
-add_constraints_phi(struct of_ir_reg_assign *ra, struct list_head *phis,
+add_constraints_phi(struct of_ir_optimizer *opt, struct list_head *phis,
 		    unsigned num_srcs)
 {
 	struct of_ir_phi *phi;
@@ -1336,34 +1300,34 @@ add_constraints_phi(struct of_ir_reg_assign *ra, struct list_head *phis,
 		struct of_ir_constraint *c;
 		unsigned i;
 
-		c = create_constraint(ra, OF_IR_CONSTR_PHI);
-		constraint_add_var(ra, c, phi->dst);
+		c = create_constraint(opt, OF_IR_CONSTR_PHI);
+		constraint_add_var(opt, c, phi->dst);
 
 		for (i = 0; i < num_srcs; ++i) {
 			if (!phi->src[i])
 				continue;
-			constraint_add_var(ra, c, phi->src[i]);
-			add_affinity(ra, phi->src[i], phi->dst, 30000);
+			constraint_add_var(opt, c, phi->src[i]);
+			add_affinity(opt, phi->src[i], phi->dst, 30000);
 		}
 	}
 }
 
 static void
-add_constraints(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+add_constraints(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child;
 
-	add_constraints_phi(ra, &node->ssa.loop_phis,
+	add_constraints_phi(opt, &node->ssa.loop_phis,
 				node->ssa.repeat_count + 1);
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list) {
 		if (child->type == OF_IR_NODE_LIST)
-			add_constraints_list(ra, child);
+			add_constraints_list(opt, child);
 		else
-			add_constraints(ra, child);
+			add_constraints(opt, child);
 	}
 
-	add_constraints_phi(ra, &node->ssa.phis, node->ssa.depart_count);
+	add_constraints_phi(opt, &node->ssa.phis, node->ssa.depart_count);
 }
 
 /*
@@ -1371,16 +1335,16 @@ add_constraints(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
  */
 
 static void
-color_var(struct of_ir_reg_assign *ra, struct of_ir_variable *v)
+color_var(struct of_ir_optimizer *opt, struct of_ir_variable *v)
 {
 	unsigned comp_mask;
 	unsigned color;
 
-	init_reg_bitmap(ra, &ra->reg_bitmap[0], v->interference);
+	init_reg_bitmap(opt, &opt->reg_bitmap[0], v->interference);
 
 	comp_mask = v->comp ? v->comp : 0xf;
 
-	OF_BITMAP_FOR_EACH_SET_BIT(color, ra->reg_bitmap[0],
+	OF_BITMAP_FOR_EACH_SET_BIT(color, opt->reg_bitmap[0],
 				   OF_REG_BITMAP_BITS) {
 		unsigned comp = color_comp(color);
 
@@ -1393,18 +1357,18 @@ color_var(struct of_ir_reg_assign *ra, struct of_ir_variable *v)
 }
 
 static void
-color_register(struct of_ir_reg_assign *ra, struct of_ir_register *reg)
+color_register(struct of_ir_optimizer *opt, struct of_ir_register *reg)
 {
 	unsigned comp;
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-		struct of_ir_variable *v = get_var(ra, reg->var[comp]);
+		struct of_ir_variable *v = get_var(opt, reg->var[comp]);
 
 		if (!(reg->mask & (1 << comp)))
 			continue;
 
 		if (!v->color)
-			color_var(ra, v);
+			color_var(opt, v);
 
 		reg->var[comp] = v->color;
 	}
@@ -1413,7 +1377,7 @@ color_register(struct of_ir_reg_assign *ra, struct of_ir_register *reg)
 }
 
 static void
-assign_registers_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+assign_registers_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
 
@@ -1421,24 +1385,24 @@ assign_registers_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 		unsigned i;
 
 		if (ins->dst && ins->dst->type == OF_IR_REG_VAR)
-			color_register(ra, ins->dst);
+			color_register(opt, ins->dst);
 
 		for (i = 0; i < ins->num_srcs; ++i)
 			if (ins->srcs[i]->type == OF_IR_REG_VAR)
-				color_register(ra, ins->srcs[i]);
+				color_register(opt, ins->srcs[i]);
 	}
 }
 
 static void
-assign_registers(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+assign_registers(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child;
 
 	if (node->type == OF_IR_NODE_LIST)
-		return assign_registers_list(ra, node);
+		return assign_registers_list(opt, node);
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		assign_registers(ra, child);
+		assign_registers(opt, child);
 }
 
 /*
@@ -1446,7 +1410,7 @@ assign_registers(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
  */
 
 static void
-copy_elimination_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+copy_elimination_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins, *s;
 
@@ -1471,15 +1435,15 @@ copy_elimination_list(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 }
 
 static void
-copy_elimination(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
+copy_elimination(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child, *s;
 
 	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list) {
 		if (child->type == OF_IR_NODE_LIST)
-			copy_elimination_list(ra, child);
+			copy_elimination_list(opt, child);
 		else
-			copy_elimination(ra, child);
+			copy_elimination(opt, child);
 	}
 }
 
@@ -1503,7 +1467,7 @@ dump_phis(struct list_head *list, unsigned count, unsigned level)
 }
 
 static void
-dump_ra_data_pre(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+dump_opt_data_pre(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 		  unsigned level, void *data)
 {
 	if (node->type == OF_IR_NODE_LIST)
@@ -1529,7 +1493,7 @@ dump_ra_data_pre(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 }
 
 static void
-dump_ra_data_post(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+dump_opt_data_post(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 		   unsigned level, void *data)
 {
 	if (!LIST_IS_EMPTY(&node->ssa.phis)) {
@@ -1540,28 +1504,28 @@ dump_ra_data_post(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 }
 
 static void
-dump_ra_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
+dump_opt_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	      unsigned level, bool post, void *data)
 {
 	if (post)
-		dump_ra_data_post(shader, node, level, data);
+		dump_opt_data_post(shader, node, level, data);
 	else
-		dump_ra_data_pre(shader, node, level, data);
+		dump_opt_data_pre(shader, node, level, data);
 }
 
 static void
-dump_interference(struct of_ir_reg_assign *ra)
+dump_interference(struct of_ir_optimizer *opt)
 {
 	unsigned var1, var2;
 
-	for (var1 = 0; var1 < ra->num_vars; ++var1) {
-		struct of_ir_variable *v = get_var(ra, var1);
+	for (var1 = 0; var1 < opt->num_vars; ++var1) {
+		struct of_ir_variable *v = get_var(opt, var1);
 
 		if (!v->interference)
 			continue;
 
 		_debug_printf("@%d: ", var1);
-		OF_BITMAP_FOR_EACH_SET_BIT(var2, v->interference, ra->num_vars)
+		OF_BITMAP_FOR_EACH_SET_BIT(var2, v->interference, opt->num_vars)
 			_debug_printf("@%d ", var2);
 		_debug_printf("\n");
 	}
@@ -1570,64 +1534,64 @@ dump_interference(struct of_ir_reg_assign *ra)
 int
 of_ir_assign_registers(struct of_ir_shader *shader)
 {
-	struct of_ir_reg_assign *ra;
+	struct of_ir_optimizer *opt;
 	struct of_heap *heap;
 
 	heap = of_heap_create();
-	ra = of_heap_alloc(heap, sizeof(*ra));
-	ra->shader = shader;
-	ra->heap = heap;
-	ra->num_vars = shader->stats.num_vars;
-	LIST_INITHEAD(&ra->chunks);
-	util_dynarray_init(&ra->constraints);
-	util_dynarray_init(&ra->affinities);
-	util_dynarray_init(&ra->vars);
-	util_dynarray_resize(&ra->vars, ra->num_vars
+	opt = of_heap_alloc(heap, sizeof(*opt));
+	opt->shader = shader;
+	opt->heap = heap;
+	opt->num_vars = shader->stats.num_vars;
+	LIST_INITHEAD(&opt->chunks);
+	util_dynarray_init(&opt->constraints);
+	util_dynarray_init(&opt->affinities);
+	util_dynarray_init(&opt->vars);
+	util_dynarray_resize(&opt->vars, opt->num_vars
 				* sizeof(struct of_ir_variable));
-	memset(util_dynarray_begin(&ra->vars), 0, ra->num_vars
+	memset(util_dynarray_begin(&opt->vars), 0, opt->num_vars
 				* sizeof(struct of_ir_variable));
-	util_slab_create(&ra->valset_slab, sizeof(struct of_valset_value),
+	util_slab_create(&opt->valset_slab, sizeof(struct of_valset_value),
 				64, UTIL_SLAB_SINGLETHREADED);
 
-	RUN_PASS(shader, ra, split_live);
+	RUN_PASS(shader, opt, split_live);
 	DBG("AST (post-split-live)");
-	of_ir_dump_ast(shader, dump_ra_data, ra);
+	of_ir_dump_ast(shader, dump_opt_data, opt);
 
-	ra->renames_stack = of_stack_create(ra->num_vars
-						* sizeof(*ra->renames), 1);
-	ra->renames = of_stack_top(ra->renames_stack);
-	memset(ra->renames, 0, ra->num_vars * sizeof(*ra->renames));
-	RUN_PASS(shader, ra, rename_copies);
-	of_stack_destroy(ra->renames_stack);
+	opt->renames_stack = of_stack_create(opt->num_vars
+						* sizeof(*opt->renames), 1);
+	opt->renames = of_stack_top(opt->renames_stack);
+	memset(opt->renames, 0, opt->num_vars * sizeof(*opt->renames));
+	RUN_PASS(shader, opt, rename_copies);
+	of_stack_destroy(opt->renames_stack);
 	DBG("AST (post-rename-copies)");
-	of_ir_dump_ast(shader, dump_ra_data, ra);
+	of_ir_dump_ast(shader, dump_opt_data, opt);
 
-	util_slab_create(&ra->live_slab, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars),
+	util_slab_create(&opt->live_slab, OF_BITMAP_BYTES_FOR_BITS(opt->num_vars),
 				32, UTIL_SLAB_SINGLETHREADED);
-	ra->live = util_slab_alloc(&ra->live_slab);
-	of_bitmap_fill(ra->live, 0, ra->num_vars);
-	RUN_PASS(shader, ra, add_constraints);
-	RUN_PASS(shader, ra, liveness);
-	dump_interference(ra);
-	util_slab_destroy(&ra->live_slab);
+	opt->live = util_slab_alloc(&opt->live_slab);
+	of_bitmap_fill(opt->live, 0, opt->num_vars);
+	RUN_PASS(shader, opt, add_constraints);
+	RUN_PASS(shader, opt, liveness);
+	dump_interference(opt);
+	util_slab_destroy(&opt->live_slab);
 
-	util_dynarray_init(&ra->chunk_queue);
-	util_slab_create(&ra->chunk_slab, sizeof(struct of_ir_chunk),
+	util_dynarray_init(&opt->chunk_queue);
+	util_slab_create(&opt->chunk_slab, sizeof(struct of_ir_chunk),
 				32, UTIL_SLAB_SINGLETHREADED);
-	precolor(ra);
-	RUN_PASS(shader, ra, assign_registers);
+	precolor(opt);
+	RUN_PASS(shader, opt, assign_registers);
 	DBG("AST (post-register-assignment)");
 	of_ir_dump_ast(shader, NULL, 0);
 
-	RUN_PASS(shader, ra, copy_elimination);
+	RUN_PASS(shader, opt, copy_elimination);
 	DBG("AST (post-copy-elimination)");
 	of_ir_dump_ast(shader, NULL, 0);
 
-	util_dynarray_fini(&ra->vars);
-	util_dynarray_fini(&ra->affinities);
-	util_dynarray_fini(&ra->constraints);
-	util_slab_destroy(&ra->chunk_slab);
-	util_slab_destroy(&ra->valset_slab);
+	util_dynarray_fini(&opt->vars);
+	util_dynarray_fini(&opt->affinities);
+	util_dynarray_fini(&opt->constraints);
+	util_slab_destroy(&opt->chunk_slab);
+	util_slab_destroy(&opt->valset_slab);
 	of_heap_destroy(heap);
 
 	return 0;

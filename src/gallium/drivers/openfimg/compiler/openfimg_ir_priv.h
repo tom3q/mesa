@@ -24,6 +24,9 @@
 #ifndef OF_IR_PRIV_H_
 #define OF_IR_PRIV_H_
 
+#include <util/u_dynarray.h>
+#include <util/u_slab.h>
+
 #include "openfimg_ir.h"
 #include "openfimg_util.h"
 
@@ -42,6 +45,48 @@
 typedef void (*dump_ast_callback_t)(struct of_ir_shader *,
 				    struct of_ir_ast_node *, unsigned, bool,
 				    void *);
+
+struct of_ir_chunk;
+
+struct of_ir_variable {
+	struct of_ir_chunk *chunk;
+	struct of_ir_instruction *def_ins;
+	struct of_ir_phi *def_phi;
+	uint32_t *interference;
+	unsigned constraints;
+	unsigned color;
+	uint8_t comp;
+	unsigned fixed :1;
+};
+
+struct of_ir_optimizer {
+	struct of_ir_shader *shader;
+	struct of_heap *heap;
+	struct util_dynarray vars;
+	unsigned num_vars;
+	struct of_stack *renames_stack;
+	uint16_t *renames;
+
+	unsigned vars_bitmap_size;
+	struct of_heap *shader_heap;
+	uint16_t last_var;
+
+	unsigned *ref_counts;
+
+	struct util_slab_mempool valset_slab;
+	struct util_slab_mempool live_slab;
+	uint32_t *live;
+	struct util_slab_mempool chunk_slab;
+	struct list_head chunks;
+	struct util_dynarray constraints;
+	unsigned num_constraints;
+	struct util_dynarray affinities;
+	unsigned num_affinities;
+	uint32_t *reg_bitmap[4];
+	uint32_t *chunk_interf;
+	struct util_dynarray chunk_queue;
+	unsigned chunk_queue_len;
+};
 
 struct of_ir_phi {
 	struct list_head list;
