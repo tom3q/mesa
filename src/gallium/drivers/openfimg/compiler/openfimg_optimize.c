@@ -31,14 +31,8 @@
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
-struct of_ir_optimize {
-	struct of_heap *heap;
-	unsigned *ref_counts;
-	unsigned num_vars;
-};
-
 static int
-eliminate_dead_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
+eliminate_dead_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins, *s;
 	int ret = 0;
@@ -96,7 +90,7 @@ has_ref:
 }
 
 static int
-eliminate_dead_phi(struct of_ir_optimize *opt, struct list_head *phis,
+eliminate_dead_phi(struct of_ir_optimizer *opt, struct list_head *phis,
 		   unsigned count)
 {
 	struct of_ir_phi *phi, *s;
@@ -119,7 +113,7 @@ eliminate_dead_phi(struct of_ir_optimize *opt, struct list_head *phis,
 }
 
 static void
-assess_phi(struct of_ir_optimize *opt, struct list_head *phis,
+assess_phi(struct of_ir_optimizer *opt, struct list_head *phis,
 		   unsigned count)
 {
 	struct of_ir_phi *phi, *s;
@@ -133,7 +127,7 @@ assess_phi(struct of_ir_optimize *opt, struct list_head *phis,
 }
 
 static int
-eliminate_dead_pass(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
+eliminate_dead_pass(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child, *s;
 	int ret = 0;
@@ -156,7 +150,7 @@ eliminate_dead_pass(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 }
 
 static void
-eliminate_dead(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
+eliminate_dead(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	unsigned pass = 0;
 	int ret;
@@ -170,7 +164,7 @@ eliminate_dead(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 }
 
 static void
-clean_sources_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
+clean_sources_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
 
@@ -206,7 +200,7 @@ clean_sources_list(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
 }
 
 static void
-clean_sources(struct of_ir_optimize *opt, struct of_ir_ast_node *node)
+clean_sources(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child;
 
@@ -282,7 +276,7 @@ dump_opt_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 int
 of_ir_optimize(struct of_ir_shader *shader)
 {
-	struct of_ir_optimize *opt;
+	struct of_ir_optimizer *opt;
 	struct of_heap *heap;
 
 	heap = of_heap_create();
