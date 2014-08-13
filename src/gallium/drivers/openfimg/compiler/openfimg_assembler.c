@@ -112,6 +112,9 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 
 		if (src2_reg->flags & OF_IR_REG_ABS)
 			dwords[0] |= ALU_WORD0_SRC2_ABS;
+
+		if (src2_reg->num >= 32)
+			dwords[1] |= INSTR_WORD1_SRC_EXTNUM(src2_reg->num / 32);
 	}
 
 	/* Source register 1 */
@@ -128,6 +131,9 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 
 		if (src1_reg->flags & OF_IR_REG_ABS)
 			dwords[1] |= ALU_WORD1_SRC1_ABS;
+
+		if (src1_reg->num >= 32)
+			dwords[1] |= INSTR_WORD1_SRC_EXTNUM(src1_reg->num / 32);
 	}
 
 	/* Source register 0 (always used) */
@@ -145,6 +151,9 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 			dwords[1] |= INSTR_WORD1_SRC0_ABS;
 
 		dwords[2] |= INSTR_WORD2_SRC0_SWIZZLE(src_swiz(src0_reg));
+
+		if (src0_reg->num >= 32)
+			dwords[1] |= INSTR_WORD1_SRC_EXTNUM(src0_reg->num / 32);
 	}
 
 	/* Destination register */
