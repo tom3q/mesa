@@ -45,6 +45,7 @@ typedef void (*dump_ast_callback_t)(struct of_ir_shader *,
 
 struct of_ir_phi {
 	struct list_head list;
+	unsigned dead :1;
 	uint16_t reg;
 	uint16_t dst;
 	uint16_t src[];
@@ -132,8 +133,8 @@ struct of_ir_ast_node {
 	/* Address assigned by assembler. */
 	unsigned address;
 
-	/* Various data for processing algorithms */
-	unsigned long priv_data;
+	uint32_t *livein;
+	uint32_t *liveout;
 };
 
 /** Representation of a shader program. */
