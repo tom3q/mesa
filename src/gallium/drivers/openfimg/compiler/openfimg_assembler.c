@@ -189,6 +189,14 @@ get_bitfield(const uint32_t *instr, const struct of_instr_bitfield *field)
 	return (instr[field->word] & field->mask) >> field->shift;
 }
 
+static INLINE void
+set_bitfield(unsigned val, uint32_t *instr,
+	     const struct of_instr_bitfield *field)
+{
+	instr[field->word] &= ~field->mask;
+	instr[field->word] |= (val << field->shift) & field->mask;
+}
+
 static INLINE unsigned
 get_flags(const uint32_t *instr, const struct of_instr_flag *flags)
 {
@@ -201,6 +209,18 @@ get_flags(const uint32_t *instr, const struct of_instr_flag *flags)
 	}
 
 	return val;
+}
+
+static INLINE void
+set_flags(unsigned val, uint32_t *instr, const struct of_instr_flag *flags)
+{
+	while (flags->instr) {
+		if (val & flags->ir)
+			instr[flags->word] |= flags->instr;
+		else
+			instr[flags->word] &= ~flags->instr;
+		++flags;
+	}
 }
 
 static uint32_t
@@ -259,11 +279,9 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 	   uint32_t *buffer, unsigned pc)
 {
 	uint32_t *dwords = buffer + 4 * pc;
-	const struct of_ir_reg_info *reg;
-	struct of_ir_register *src0_reg;
-	struct of_ir_register *src1_reg;
-	struct of_ir_register *src2_reg;
-	struct of_ir_register *dst_reg;
+	const struct of_ir_reg_info *info;
+	struct of_ir_register *dst;
+	unsigned i;
 
 	memset(dwords, 0, 4 * sizeof(uint32_t));
 
@@ -272,75 +290,31 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 	if (instr->flags & OF_IR_INSTR_NEXT_3SRC)
 		dwords[2] |= INSTR_WORD2_NEXT_3SRC;
 
-	/* Source register 1 */
-	src2_reg = instr->srcs[2];
-	if (src2_reg) {
-		reg = &shader->reg_info[src2_reg->type];
+	for (i = 0; i < instr->num_srcs; ++i) {
+		const struct of_reg_bitfields *bflds = &src_bitfields[i];
+		struct of_ir_register *src = instr->srcs[i];
 
-		dwords[0] |= ALU_WORD0_SRC2_NUM(src2_reg->num) |
-				ALU_WORD0_SRC2_TYPE(reg->src_type) |
-				ALU_WORD0_SRC2_SWIZZLE(src_swiz(src2_reg));
+		info = &shader->reg_info[src->type];
+		set_bitfield(src->num, dwords, &bflds->num);
+		set_bitfield(info->src_type, dwords, &bflds->type);
+		set_bitfield(src_swiz(src), dwords, &bflds->mask);
+		set_flags(src->flags, dwords, bflds->flags);
 
-		if (src2_reg->flags & OF_IR_REG_NEGATE)
-			dwords[0] |= ALU_WORD0_SRC2_NEGATE;
-
-		if (src2_reg->flags & OF_IR_REG_ABS)
-			dwords[0] |= ALU_WORD0_SRC2_ABS;
-
-		if (src2_reg->num >= 32)
-			dwords[1] |= INSTR_WORD1_SRC_EXTNUM(src2_reg->num / 32);
-	}
-
-	/* Source register 1 */
-	src1_reg = instr->srcs[1];
-	if (src1_reg) {
-		reg = &shader->reg_info[src1_reg->type];
-
-		dwords[0] |= ALU_WORD0_SRC1_NUM(src1_reg->num);
-		dwords[1] |= ALU_WORD1_SRC1_TYPE(reg->src_type) |
-				ALU_WORD1_SRC1_SWIZZLE(src_swiz(src1_reg));
-
-		if (src1_reg->flags & OF_IR_REG_NEGATE)
-			dwords[1] |= ALU_WORD1_SRC1_NEGATE;
-
-		if (src1_reg->flags & OF_IR_REG_ABS)
-			dwords[1] |= ALU_WORD1_SRC1_ABS;
-
-		if (src1_reg->num >= 32)
-			dwords[1] |= INSTR_WORD1_SRC_EXTNUM(src1_reg->num / 32);
-	}
-
-	/* Source register 0 (always used) */
-	src0_reg = instr->srcs[0];
-	if (src0_reg) {
-		reg = &shader->reg_info[src0_reg->type];
-
-		dwords[1] |= INSTR_WORD1_SRC0_NUM(src0_reg->num) |
-				INSTR_WORD1_SRC0_TYPE(reg->src_type);
-
-		if (src0_reg->flags & OF_IR_REG_NEGATE)
-			dwords[1] |= INSTR_WORD1_SRC0_NEGATE;
-
-		if (src0_reg->flags & OF_IR_REG_ABS)
-			dwords[1] |= INSTR_WORD1_SRC0_ABS;
-
-		dwords[2] |= INSTR_WORD2_SRC0_SWIZZLE(src_swiz(src0_reg));
-
-		if (src0_reg->num >= 32)
-			dwords[1] |= INSTR_WORD1_SRC_EXTNUM(src0_reg->num / 32);
+		/* Here we rely on the fact that only one source can be
+		 * a const float and this is the only type that has more
+		 * than 32 registers. */
+		if (src->num >= 32)
+			dwords[1] |= INSTR_WORD1_SRC_EXTNUM(src->num / 32);
 	}
 
 	/* Destination register */
-	dst_reg = instr->dst;
-	if (dst_reg) {
-		reg = &shader->reg_info[dst_reg->type];
-
-		dwords[2] |= ALU_WORD2_DST_NUM(dst_reg->num) |
-				ALU_WORD2_DST_TYPE(reg->dst_type) |
-				ALU_WORD2_DST_MASK(dst_mask(dst_reg));
-
-		if (dst_reg->flags & OF_IR_REG_SAT)
-			dwords[2] |= ALU_WORD2_DST_SAT;
+	dst = instr->dst;
+	if (dst) {
+		info = &shader->reg_info[dst->type];
+		set_bitfield(dst->num, dwords, &dst_bitfields.num);
+		set_bitfield(info->src_type, dwords, &dst_bitfields.type);
+		set_bitfield(dst_mask(dst), dwords, &dst_bitfields.mask);
+		set_flags(dst->flags, dwords, dst_bitfields.flags);
 	}
 
 	if (instr->target) {
