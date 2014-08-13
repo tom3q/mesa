@@ -255,6 +255,22 @@ static INLINE void of_bitmap_or(uint32_t *dst, const uint32_t *src1,
 		*(dst++) = *(src1++) | *(src2++);
 }
 
+static INLINE void
+of_bitmap_fill(uint32_t *words, bool val, unsigned size)
+{
+	unsigned bytes = OF_BITMAP_BYTES_FOR_BITS(size);
+
+	memset(words, val ? 0xff : 0, bytes);
+}
+
+static INLINE void
+of_bitmap_copy(uint32_t *dst, uint32_t *src, unsigned size)
+{
+	unsigned bytes = OF_BITMAP_BYTES_FOR_BITS(size);
+
+	memcpy(dst, src, bytes);
+}
+
 /*
  * Simple growing stack
  */
