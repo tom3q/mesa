@@ -839,6 +839,28 @@ format_dst_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 }
 
 static void
+format_target(struct of_ir_shader *shader, char *buf, size_t maxlen,
+	      struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *parent = node->parent;
+
+	assert(parent);
+
+	while (node->parent_list.next == &parent->nodes) {
+		node = node->parent;
+		if (!node) {
+			strncat(buf, "[invalid target]", maxlen);
+			return;
+		}
+	}
+
+	node = LIST_ENTRY(struct of_ir_ast_node, node->parent_list.next,
+				parent_list);
+
+	snprintf(buf, maxlen, "%p", node);
+}
+
+static void
 dump_instruction(struct of_ir_shader *shader, struct of_ir_instruction *ins,
 		 unsigned level)
 {
@@ -852,6 +874,8 @@ dump_instruction(struct of_ir_shader *shader, struct of_ir_instruction *ins,
 	dst = ins->dst;
 	if (dst)
 		format_dst_reg(shader, dst_str, sizeof(dst_str), ins->dst);
+	else if (ins->target)
+		format_target(shader, dst_str, sizeof(dst_str), ins->target);
 	for (reg = 0; reg < 3; ++reg) {
 		src[reg] = ins->srcs[reg];
 		if (src[reg])
@@ -891,33 +915,40 @@ dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
-		_debug_printf("%*sregion %p {\n", level, "", node);
+		_debug_printf("%*s%p: region {\n", level, "", node);
 		break;
 	case OF_IR_NODE_DEPART:
 		if (LIST_IS_EMPTY(&node->nodes))
-			_debug_printf("%*sdepart %p\n",
-					level, "", node->depart_repeat.region);
+			_debug_printf("%*s%p: depart %p\n",
+					level, "", node,
+					node->depart_repeat.region);
 		else
-			_debug_printf("%*sdepart %p after {\n",
-					level, "", node->depart_repeat.region);
+			_debug_printf("%*s%p: depart %p after {\n",
+					level, "", node,
+					node->depart_repeat.region);
 		break;
 	case OF_IR_NODE_IF_THEN: {
 		char condition[16];
 
 		format_src_reg(shader, condition, sizeof(condition),
 				node->if_then.reg);
-		_debug_printf("%*sif %s then {\n", level, "", condition);
+		_debug_printf("%*s%p: if %s then {\n", level, "", node,
+				condition);
 		break; }
 	case OF_IR_NODE_REPEAT:
 		if (LIST_IS_EMPTY(&node->nodes))
-			_debug_printf("%*srepeat %p\n",
-					level, "", node->depart_repeat.region);
+			_debug_printf("%*s%p: repeat %p\n",
+					level, "", node,
+					node->depart_repeat.region);
 		else
-			_debug_printf("%*srepeat %p after {\n",
-					level, "", node->depart_repeat.region);
+			_debug_printf("%*s%p: repeat %p after {\n",
+					level, "", node,
+					node->depart_repeat.region);
 		break;
 	case OF_IR_NODE_LIST:
-		dump_list(shader, node, level);
+		_debug_printf("%*s%p: list {\n", level, "", node);
+		dump_list(shader, node, level + 4);
+		_debug_printf("%*s}\n", level, "");
 		return;
 	default:
 		assert(0);
