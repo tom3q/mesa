@@ -1600,7 +1600,7 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	RUN_PASS(shader, ra, rename_copies);
 	of_stack_destroy(ra->renames_stack);
 	DBG("AST (post-rename-copies)");
-	of_ir_dump_ast(shader, NULL, 0);
+	of_ir_dump_ast(shader, dump_ra_data, ra);
 
 	util_slab_create(&ra->live_slab, OF_BITMAP_BYTES_FOR_BITS(ra->num_vars),
 				32, UTIL_SLAB_SINGLETHREADED);
