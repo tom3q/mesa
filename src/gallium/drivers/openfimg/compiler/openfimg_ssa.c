@@ -392,7 +392,7 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 
 	shader->stats.num_vars = opt->last_var;
 
-	DBG("AST (post-opt/pre-optimize)");
+	DBG("AST (post-ssa/pre-optimize)");
 	of_ir_dump_ast(shader, dump_ssa_data, opt);
 
 	of_stack_destroy(opt->renames_stack);
