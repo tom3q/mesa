@@ -332,7 +332,6 @@ insert_instr(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	const struct of_ir_opc_info *info = of_ir_get_opc_info(instr->opc);
 
 	assert(instr->num_srcs == info->num_srcs);
-	assert(info->type != OF_IR_CF);
 
 	if (instr->dst && instr->dst->type == OF_IR_REG_VAR) {
 		unsigned comp;
@@ -660,7 +659,7 @@ of_ir_node_list_back(struct of_ir_ast_node *node)
  */
 
 struct of_ir_shader *
-of_ir_shader_create(enum of_ir_shader_type type)
+of_ir_shader_create(enum of_shader_type type)
 {
 	struct of_ir_shader *shader;
 
@@ -673,9 +672,9 @@ of_ir_shader_create(enum of_ir_shader_type type)
 
 	LIST_INITHEAD(&shader->root_nodes);
 
-	if (type == OF_IR_SHADER_VERTEX)
+	if (type == OF_SHADER_VERTEX)
 		shader->reg_info = vs_reg_info;
-	else if (type == OF_IR_SHADER_PIXEL)
+	else if (type == OF_SHADER_PIXEL)
 		shader->reg_info = ps_reg_info;
 	else
 		assert(0);

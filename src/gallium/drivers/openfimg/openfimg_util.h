@@ -37,6 +37,7 @@
 #include "util/u_double_list.h"
 #include "util/u_math.h"
 
+#include "openfimg_emit.h"
 #include "fimg_3dse.xml.h"
 
 #define OF_DBG_MSGS		0x1
@@ -118,7 +119,11 @@ enum of_request_type {
 	G3D_REQUEST_VTX_TEXTURE = -1,
 };
 
-
+/* Defined using the same values as kernel interface. */
+enum of_shader_type {
+	OF_SHADER_VERTEX = G3D_SHADER_VERTEX,
+	OF_SHADER_PIXEL = G3D_SHADER_PIXEL
+};
 
 enum fgtu_tex_format of_pipe2texture(enum pipe_format format);
 enum fgpf_color_mode of_pipe2color(enum pipe_format format);
