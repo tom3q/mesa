@@ -67,16 +67,16 @@ struct of_ir_optimizer {
 	struct of_stack *renames_stack;
 	uint16_t *renames;
 	bool want_interference;
+	struct util_slab_mempool live_slab;
+	uint32_t *live;
 
+	/* Fields used by SSA generator. */
 	unsigned vars_bitmap_size;
 	struct of_heap *shader_heap;
 	uint16_t last_var;
 
-	unsigned *ref_counts;
-
+	/* Fields used by register allocator. */
 	struct util_slab_mempool valset_slab;
-	struct util_slab_mempool live_slab;
-	uint32_t *live;
 	struct util_slab_mempool chunk_slab;
 	struct list_head chunks;
 	struct util_dynarray constraints;
@@ -87,6 +87,10 @@ struct of_ir_optimizer {
 	uint32_t *chunk_interf;
 	struct util_dynarray chunk_queue;
 	unsigned chunk_queue_len;
+
+	/* Fields used by assembler. */
+	uint32_t *dwords;
+	unsigned cur_instr;
 };
 
 struct of_ir_phi {
@@ -154,31 +158,28 @@ struct of_ir_ast_node {
 			struct of_ir_ast_node *region;
 		} depart_repeat;
 		struct {
-			unsigned num_instrs;
 			struct list_head instrs;
 		} list;
 	};
 
-	union {
-		struct {
-			uint32_t *vars_defined;
-			unsigned depart_count;
-			unsigned depart_number;
-			unsigned repeat_count;
-			unsigned repeat_number;
-			/** PHI() operators at the end of the block. */
-			struct list_head phis;
-			/** PHI() operators at the beginning of the block. */
-			struct list_head loop_phis;
-		} ssa;
-		/* Data private to single stage of processing. */
-	};
+	struct {
+		uint32_t *vars_defined;
+		unsigned depart_count;
+		unsigned depart_number;
+		unsigned repeat_count;
+		unsigned repeat_number;
+		/** PHI() operators at the end of the block. */
+		struct list_head phis;
+		/** PHI() operators at the beginning of the block. */
+		struct list_head loop_phis;
+	} ssa;
 
 	/** Shader to which the AST node belongs. */
 	struct of_ir_shader *shader;
 
 	/* Address assigned by assembler. */
-	unsigned address;
+	unsigned start_address;
+	unsigned end_address;
 
 	uint32_t *livein;
 	uint32_t *liveout;
@@ -186,8 +187,6 @@ struct of_ir_ast_node {
 
 /** Representation of a shader program. */
 struct of_ir_shader {
-	/** Total number of generated instructions. */
-	unsigned num_instrs;
 	/** List of root AST nodes in the program. */
 	struct list_head root_nodes;
 
@@ -196,9 +195,12 @@ struct of_ir_shader {
 
 	struct {
 		unsigned num_vars;
+		unsigned num_instrs;
 	} stats;
 
 	const struct of_ir_reg_info *reg_info;
+
+	struct pipe_resource *buffer;
 };
 
 void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
@@ -207,6 +209,7 @@ void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 int of_ir_to_ssa(struct of_ir_shader *shader);
 int of_ir_optimize(struct of_ir_shader *shader);
 int of_ir_assign_registers(struct of_ir_shader *shader);
+int of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader);
 
 /* Optimization passes: */
 void liveness(struct of_ir_optimizer *opt, struct of_ir_ast_node *node);

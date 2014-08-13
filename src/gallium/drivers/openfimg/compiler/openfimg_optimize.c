@@ -423,8 +423,6 @@ of_ir_optimize(struct of_ir_shader *shader)
 	opt = of_heap_alloc(heap, sizeof(*opt));
 	opt->heap = heap;
 	opt->num_vars = shader->stats.num_vars;
-	opt->ref_counts = of_heap_alloc(heap, opt->num_vars
-					* sizeof(*opt->ref_counts));
 	util_slab_create(&opt->live_slab, OF_BITMAP_BYTES_FOR_BITS(opt->num_vars),
 				32, UTIL_SLAB_SINGLETHREADED);
 	opt->live = util_slab_alloc(&opt->live_slab);
