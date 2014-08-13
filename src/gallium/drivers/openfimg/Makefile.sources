@@ -12,6 +12,7 @@ C_SOURCES := \
 	openfimg_vertex.c
 
 COMPILER_SOURCES := \
+	compiler/openfimg_assembler.c \
 	compiler/openfimg_compiler.c \
 	compiler/openfimg_disasm.c \
 	compiler/openfimg_ir.c \
