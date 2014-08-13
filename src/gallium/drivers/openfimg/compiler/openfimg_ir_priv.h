@@ -66,6 +66,7 @@ struct of_ir_optimizer {
 	unsigned num_vars;
 	struct of_stack *renames_stack;
 	uint16_t *renames;
+	bool want_interference;
 
 	unsigned vars_bitmap_size;
 	struct of_heap *shader_heap;
@@ -106,6 +107,7 @@ struct of_ir_register {
 	uint16_t var[OF_IR_VEC_SIZE];
 	/* Component mask. */
 	uint8_t mask;
+	uint8_t deadmask;
 	/* Register channel swizzle(map)/mask. */
 	char swizzle[4];
 	/* Register type. */
@@ -205,5 +207,43 @@ void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 int of_ir_to_ssa(struct of_ir_shader *shader);
 int of_ir_optimize(struct of_ir_shader *shader);
 int of_ir_assign_registers(struct of_ir_shader *shader);
+
+/* Optimization passes: */
+void liveness(struct of_ir_optimizer *opt, struct of_ir_ast_node *node);
+void cleanup(struct of_ir_optimizer *opt, struct of_ir_ast_node *node);
+
+/*
+ * Variable management.
+ */
+
+static INLINE uint16_t
+var_num(struct of_ir_optimizer *opt, struct of_ir_variable *var)
+{
+	struct of_ir_variable *vars = util_dynarray_begin(&opt->vars);
+	return var - vars;
+}
+
+static INLINE struct of_ir_variable *
+get_var(struct of_ir_optimizer *opt, uint16_t var)
+{
+	assert(var < opt->num_vars);
+	return util_dynarray_element(&opt->vars, struct of_ir_variable, var);
+}
+
+static INLINE struct of_ir_variable *
+add_var(struct of_ir_optimizer *opt)
+{
+	static const struct of_ir_variable v = { 0, };
+
+	util_dynarray_append(&opt->vars, struct of_ir_variable, v);
+	++opt->num_vars;
+	return util_dynarray_top_ptr(&opt->vars, struct of_ir_variable);
+}
+
+static INLINE uint16_t
+add_var_num(struct of_ir_optimizer *opt)
+{
+	return var_num(opt, add_var(opt));
+}
 
 #endif /* OF_IR_PRIV_H_ */
