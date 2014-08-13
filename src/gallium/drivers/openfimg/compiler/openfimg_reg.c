@@ -1108,8 +1108,9 @@ static INLINE void
 rename_phi_operand(struct of_ir_reg_assign *ra, unsigned num,
 		   struct of_ir_phi *phi, uint16_t *renames)
 {
-	if (renames[phi->reg])
-		phi->src[num] = renames[phi->reg];
+	uint16_t var = phi->src[num];
+	if (renames[var])
+		phi->src[num] = renames[var];
 }
 
 static void
