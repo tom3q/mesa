@@ -52,7 +52,8 @@ override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
 	size_t ret;
 
 	snprintf(path, sizeof(path), "%s_%08x.bin",
-			(so->type == SHADER_VERTEX) ? "vs" : "fs", so->hash);
+			(so->type == OF_SHADER_VERTEX) ? "vs" : "fs",
+			so->hash);
 
 	DBG("%s: looking for replacement shader in '%s'", __func__, path);
 
@@ -188,8 +189,8 @@ assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 overridden:
 	if (of_mesa_debug & OF_DBG_DISASM) {
 		DBG("disassemble: type=%d", so->type);
-		disasm_fimg_3dse(ctx, so->buffer, 4 * so->num_instrs,
-					0, so->type);
+		of_ir_shader_disassemble(ctx, so->buffer, 4 * so->num_instrs,
+						so->type);
 	}
 
 	return 0;
@@ -213,7 +214,7 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 		}
 	}
 
-	if (so->type == SHADER_FRAGMENT) {
+	if (so->type == OF_SHADER_PIXEL) {
 		/* Workaround for HW bug. */
 		num_attribs = 8;
 	} else {
@@ -235,7 +236,7 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
  */
 static struct of_shader_stateobj *
 create_shader(struct of_context *ctx, const struct pipe_shader_state *cso,
-	      enum shader_t type)
+	      enum of_shader_type type)
 {
 	struct of_shader_stateobj *so;
 	unsigned n;
@@ -257,7 +258,7 @@ of_fp_state_create(struct pipe_context *pctx,
 		const struct pipe_shader_state *cso)
 {
 	struct of_context *ctx = of_context(pctx);
-	return create_shader(ctx, cso, SHADER_FRAGMENT);
+	return create_shader(ctx, cso, OF_SHADER_PIXEL);
 }
 
 static void
@@ -271,7 +272,7 @@ of_vp_state_create(struct pipe_context *pctx,
 		const struct pipe_shader_state *cso)
 {
 	struct of_context *ctx = of_context(pctx);
-	return create_shader(ctx, cso, SHADER_VERTEX);
+	return create_shader(ctx, cso, OF_SHADER_VERTEX);
 }
 
 static void

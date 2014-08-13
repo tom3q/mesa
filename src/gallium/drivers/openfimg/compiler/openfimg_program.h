@@ -29,10 +29,10 @@
 #include "openfimg_context.h"
 
 #include "openfimg_ir.h"
-#include "openfimg_disasm.h"
+#include "openfimg_emit.h"
 
 struct of_shader_stateobj {
-	enum shader_t type;
+	enum of_shader_type type;
 
 	struct pipe_resource *buffer;
 	unsigned num_instrs;
