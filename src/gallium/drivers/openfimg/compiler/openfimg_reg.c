@@ -338,6 +338,8 @@ prepare_chunks(struct of_ir_reg_assign *ra)
 		struct of_ir_variable *v0 = get_var(ra, a->vars[0]);
 		struct of_ir_variable *v1 = get_var(ra, a->vars[1]);
 
+		DBG("v0 = %u, v1 = %u", a->vars[0], a->vars[1]);
+
 		if (!v0->chunk)
 			create_chunk(ra, v0);
 
@@ -396,7 +398,7 @@ prepare_constraints(struct of_ir_reg_assign *ra)
 		struct of_ir_constraint *c = array[i];
 		unsigned long *num;
 
-		if (c->type != OF_IR_CONSTR_SAME_REG)
+		if (c->type != OF_IR_CONSTR_SAME_REG || c->num_vars <= 1)
 			continue;
 
 		OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
@@ -572,9 +574,11 @@ color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
 	unsigned comp_mask = 0;
 	uint8_t swz[OF_IR_VEC_SIZE] = {0, 1, 2, 3};
 	unsigned long *num;
-	unsigned num_vars;
 	unsigned reg;
 	unsigned i;
+
+	if (c->num_vars <= 1)
+		return 0;
 
 	i = 0;
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
@@ -597,23 +601,22 @@ color_reg_constraint(struct of_ir_reg_assign *ra, struct of_ir_constraint *c)
 		init_reg_bitmap_for_chunk(ra, &ra->reg_bitmap[i], ch[i]);
 		++i;
 	}
-	num_vars = i;
 
 	do {
-		for (i = 0; i < num_vars; ++i)
+		for (i = 0; i < c->num_vars; ++i)
 			if (ch[i]->comp && ch[i]->comp != (1 << swz[i]))
 				break;
-		if (i != num_vars)
+		if (i != c->num_vars)
 			continue;
 
 		for (reg = 0; reg < OF_NUM_REGS - 1; ++reg) {
-			for (i = 0; i < num_vars; ++i) {
+			for (i = 0; i < c->num_vars; ++i) {
 				unsigned color = make_color(reg, swz[i]);
 
 				if (!of_bitmap_get(ra->reg_bitmap[i], color))
 					break;
 			}
-			if (i == num_vars)
+			if (i == c->num_vars)
 				goto done;
 		}
 	} while (next_swizzle(swz));
@@ -631,12 +634,6 @@ done:
 		unsigned color = make_color(reg, swz[i]);
 		struct of_ir_chunk *cc = ch[i];
 
-		if (v->color) {
-			/* FIXME: Do not allow duplicates in constraints. */
-			++i;
-			continue;
-		}
-
 		if (cc->fixed) {
 			if (cc->color == color) {
 				++i;
@@ -648,6 +645,7 @@ done:
 		color_chunk(ra, cc, color);
 		cc->fixed = 1;
 		cc->prealloc = 1;
+		cc->comp = (1 << swz[i]);
 		++i;
 	}
 
@@ -798,6 +796,7 @@ constraint_add_var(struct of_ir_reg_assign *ra, struct of_ir_constraint *c,
 
 	of_valset_add(&c->vars, var);
 	v->constraints |= c->type;
+	++c->num_vars;
 }
 
 static void
@@ -857,24 +856,37 @@ static void
 split_operand(struct of_ir_reg_assign *ra, struct of_ir_instruction *ins,
 	      struct of_ir_register *reg, bool dst)
 {
+	uint16_t vars[OF_IR_VEC_SIZE];
 	unsigned comp;
+	unsigned cnt;
 
+	cnt = 0;
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 		struct of_ir_instruction *copy;
+		uint16_t var;
 		uint16_t tmp;
+		unsigned i;
 
 		if (!comp_used(reg, comp))
 			continue;
 
+		var = reg->var[comp];
+		for (i = 0; i < cnt; ++i)
+			if (vars[i] == var)
+				break;
+		if (i != cnt)
+			continue;
+
 		tmp = add_var_num(ra);
-		copy = create_copy(ra->shader, tmp, reg->var[comp]);
+		copy = create_copy(ra->shader, tmp, var);
 
 		if (dst)
 			of_ir_instr_insert(ra->shader, NULL, ins, copy);
 		else
 			of_ir_instr_insert_before(ra->shader, NULL, ins, copy);
 
-		add_affinity(ra, tmp, reg->var[comp], 20000);
+		add_affinity(ra, tmp, var, 20000);
+		vars[cnt++] = var;
 	}
 }
 
@@ -1170,16 +1182,30 @@ rename_copies(struct of_ir_reg_assign *ra, struct of_ir_ast_node *node)
 static void
 constraint_vector(struct of_ir_reg_assign *ra, struct of_ir_register *reg)
 {
+	uint16_t vars[OF_IR_VEC_SIZE];
 	struct of_ir_constraint *c;
 	unsigned comp;
+	unsigned cnt;
 
 	c = create_constraint(ra, OF_IR_CONSTR_SAME_REG);
 
+	cnt = 0;
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		uint16_t var;
+		unsigned i;
+
 		if (!comp_used(reg, comp))
 			continue;
 
-		constraint_add_var(ra, c, reg->var[comp]);
+		var = reg->var[comp];
+		for (i = 0; i < cnt; ++i)
+			if (vars[i] == var)
+				break;
+		if (i != cnt)
+			continue;
+
+		constraint_add_var(ra, c, var);
+		vars[cnt++] = var;
 	}
 }
 
