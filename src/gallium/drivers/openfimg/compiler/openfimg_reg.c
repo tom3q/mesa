@@ -155,7 +155,7 @@ add_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
 					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 
 	if (!v2->interference)
-		v2->interference = of_heap_alloc(ra->heap, sizeof(uint32_t) *
+		v2->interference = of_heap_alloc(ra->heap,
 					OF_BITMAP_BYTES_FOR_BITS(ra->num_vars));
 
 	of_bitmap_set(v1->interference, var2);
