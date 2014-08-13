@@ -31,19 +31,8 @@
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
-struct of_ir_ssa {
-	struct of_ir_shader *shader;
-	unsigned vars_bitmap_size;
-	unsigned num_vars;
-	struct of_heap *heap;
-	struct of_heap *shader_heap;
-	struct of_stack *renames_stack;
-	uint16_t *renames;
-	uint16_t last_var;
-};
-
 static void
-variables_defined_list(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+variables_defined_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
 
@@ -64,16 +53,16 @@ variables_defined_list(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 }
 
 static void
-variables_defined(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+variables_defined(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child, *parent;
 	uint32_t *vars_defined;
 
-	vars_defined = of_heap_alloc(ssa->heap, ssa->vars_bitmap_size);
+	vars_defined = of_heap_alloc(opt->heap, opt->vars_bitmap_size);
 	node->ssa.vars_defined = vars_defined;
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		variables_defined(ssa, child);
+		variables_defined(opt, child);
 
 	switch (node->type) {
 	case OF_IR_NODE_DEPART:
@@ -81,7 +70,7 @@ variables_defined(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 		parent = node->depart_repeat.region;
 		break;
 	case OF_IR_NODE_LIST:
-		variables_defined_list(ssa, node);
+		variables_defined_list(opt, node);
 		/* Intentional fall-through. */
 	case OF_IR_NODE_REGION:
 		parent = node->parent;
@@ -92,12 +81,12 @@ variables_defined(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 
 	if (parent)
 		of_bitmap_or(parent->ssa.vars_defined, parent->ssa.vars_defined,
-				vars_defined, ssa->num_vars);
+				vars_defined, opt->num_vars);
 
 	switch (node->type) {
 	case OF_IR_NODE_DEPART:
 	case OF_IR_NODE_REPEAT:
-		memset(vars_defined, 0, ssa->vars_bitmap_size);
+		memset(vars_defined, 0, opt->vars_bitmap_size);
 		break;
 	default:
 		break;
@@ -105,12 +94,12 @@ variables_defined(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 }
 
 static void
-dep_rep_count(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+dep_rep_count(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child;
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		dep_rep_count(ssa, child);
+		dep_rep_count(opt, child);
 
 	switch (node->type) {
 	case OF_IR_NODE_DEPART:
@@ -130,15 +119,15 @@ dep_rep_count(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 }
 
 static void
-make_trivials(struct of_ir_ssa *ssa, struct list_head *list, uint32_t *vars,
+make_trivials(struct of_ir_optimizer *opt, struct list_head *list, uint32_t *vars,
 	      unsigned count)
 {
 	struct of_ir_phi *phi;
 	unsigned bit;
 	unsigned src;
 
-	OF_BITMAP_FOR_EACH_SET_BIT(bit, vars, ssa->num_vars) {
-		phi = of_heap_alloc(ssa->shader_heap, sizeof(*phi)
+	OF_BITMAP_FOR_EACH_SET_BIT(bit, vars, opt->num_vars) {
+		phi = of_heap_alloc(opt->shader_heap, sizeof(*phi)
 					+ count * sizeof(*phi->src));
 		phi->reg = bit;
 		phi->dst = bit;
@@ -149,41 +138,41 @@ make_trivials(struct of_ir_ssa *ssa, struct list_head *list, uint32_t *vars,
 }
 
 static void
-insert_phi(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+insert_phi(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child;
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		insert_phi(ssa, child);
+		insert_phi(opt, child);
 
 	/* Handles if_then and region nodes. */
 	if (node->ssa.depart_count > 1)
-		make_trivials(ssa, &node->ssa.phis,
+		make_trivials(opt, &node->ssa.phis,
 				node->ssa.vars_defined, node->ssa.depart_count);
 
 	/* Handles region nodes with repeat subnodes. */
 	if (node->ssa.repeat_count)
-		make_trivials(ssa, &node->ssa.loop_phis,
+		make_trivials(opt, &node->ssa.loop_phis,
 				node->ssa.vars_defined,
 				node->ssa.repeat_count + 1);
 }
 
 static void
-rename_phi_operand(struct of_ir_ssa *ssa, unsigned num, struct of_ir_phi *phi,
+rename_phi_operand(struct of_ir_optimizer *opt, unsigned num, struct of_ir_phi *phi,
 		   uint16_t *renames)
 {
 	phi->src[num] = renames[phi->reg];
 }
 
 static void
-rename_lhs(struct of_ir_ssa *ssa, struct of_ir_phi *phi, uint16_t *renames)
+rename_lhs(struct of_ir_optimizer *opt, struct of_ir_phi *phi, uint16_t *renames)
 {
-	phi->dst = ssa->last_var++;
-	ssa->renames[phi->reg] = phi->dst;
+	phi->dst = opt->last_var++;
+	opt->renames[phi->reg] = phi->dst;
 }
 
 static void
-rename_operands(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+rename_operands(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
 
@@ -201,7 +190,7 @@ rename_operands(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 				if (!(src->mask & (1 << comp)))
 					continue;
-				src->var[comp] = ssa->renames[src->var[comp]];
+				src->var[comp] = opt->renames[src->var[comp]];
 			}
 		}
 
@@ -214,14 +203,14 @@ rename_operands(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 			if (!(dst->mask & (1 << comp)))
 				continue;
 
-			dst->var[comp] = ssa->last_var++;
-			ssa->renames[var] = dst->var[comp];
+			dst->var[comp] = opt->last_var++;
+			opt->renames[var] = dst->var[comp];
 		}
 	}
 }
 
 static void
-make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+make_ssa(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *region;
 	struct of_ir_ast_node *child;
@@ -230,58 +219,58 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.loop_phis, list) {
-			rename_phi_operand(ssa, 0, phi, ssa->renames);
-			rename_lhs(ssa, phi, ssa->renames);
+			rename_phi_operand(opt, 0, phi, opt->renames);
+			rename_lhs(opt, phi, opt->renames);
 		}
 		break;
 
 	case OF_IR_NODE_IF_THEN:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			rename_phi_operand(ssa, 0, phi, ssa->renames);
+			rename_phi_operand(opt, 0, phi, opt->renames);
 		break;
 
 	case OF_IR_NODE_DEPART:
 	case OF_IR_NODE_REPEAT:
-		ssa->renames = of_stack_push_copy(ssa->renames_stack);
+		opt->renames = of_stack_push_copy(opt->renames_stack);
 		break;
 
 	case OF_IR_NODE_LIST:
-		rename_operands(ssa, node);
+		rename_operands(opt, node);
 		return;
 	}
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		make_ssa(ssa, child);
+		make_ssa(opt, child);
 
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			rename_lhs(ssa, phi, ssa->renames);
+			rename_lhs(opt, phi, opt->renames);
 		break;
 
 	case OF_IR_NODE_IF_THEN:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list) {
-			rename_phi_operand(ssa, 1, phi, ssa->renames);
-			rename_lhs(ssa, phi, ssa->renames);
+			rename_phi_operand(opt, 1, phi, opt->renames);
+			rename_lhs(opt, phi, opt->renames);
 		}
 		break;
 
 	case OF_IR_NODE_DEPART:
 		region = node->depart_repeat.region;
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.phis, list)
-			rename_phi_operand(ssa, node->ssa.depart_number, phi,
-						ssa->renames);
+			rename_phi_operand(opt, node->ssa.depart_number, phi,
+						opt->renames);
 
-		ssa->renames = of_stack_pop(ssa->renames_stack);
+		opt->renames = of_stack_pop(opt->renames_stack);
 		break;
 
 	case OF_IR_NODE_REPEAT:
 		region = node->depart_repeat.region;
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.loop_phis, list)
-			rename_phi_operand(ssa, node->ssa.repeat_number, phi,
-						ssa->renames);
+			rename_phi_operand(opt, node->ssa.repeat_number, phi,
+						opt->renames);
 
-		ssa->renames = of_stack_pop(ssa->renames_stack);
+		opt->renames = of_stack_pop(opt->renames_stack);
 		break;
 
 	default:
@@ -290,7 +279,7 @@ make_ssa(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 }
 
 static void
-init_nodes(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
+init_nodes(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child;
 
@@ -300,7 +289,7 @@ init_nodes(struct of_ir_ssa *ssa, struct of_ir_ast_node *node)
 	LIST_INITHEAD(&node->ssa.loop_phis);
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		init_nodes(ssa, child);
+		init_nodes(opt, child);
 }
 
 static void
@@ -322,7 +311,7 @@ static void
 dump_ssa_data_pre(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 		  unsigned level, void *data)
 {
-	struct of_ir_ssa *ssa = data;
+	struct of_ir_optimizer *opt = data;
 	unsigned bit;
 
 	if (node->type == OF_IR_NODE_LIST)
@@ -330,7 +319,7 @@ dump_ssa_data_pre(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 
 	_debug_printf("%*s# vars_defined:", level, "");
 	OF_BITMAP_FOR_EACH_SET_BIT(bit, node->ssa.vars_defined,
-				   ssa->num_vars) {
+				   opt->num_vars) {
 		_debug_printf(" @%d", bit);
 	}
 	_debug_printf("\n");
@@ -378,35 +367,35 @@ dump_ssa_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 int
 of_ir_to_ssa(struct of_ir_shader *shader)
 {
-	struct of_ir_ssa *ssa;
+	struct of_ir_optimizer *opt;
 	struct of_heap *heap;
 
 	heap = of_heap_create();
-	ssa = of_heap_alloc(heap, sizeof(*ssa));
-	ssa->heap = heap;
-	ssa->shader = shader;
-	ssa->num_vars = shader->stats.num_vars;
-	ssa->vars_bitmap_size = OF_BITMAP_WORDS_FOR_BITS(ssa->num_vars)
+	opt = of_heap_alloc(heap, sizeof(*opt));
+	opt->heap = heap;
+	opt->shader = shader;
+	opt->num_vars = shader->stats.num_vars;
+	opt->vars_bitmap_size = OF_BITMAP_WORDS_FOR_BITS(opt->num_vars)
 				* sizeof(uint32_t);
-	ssa->renames_stack = of_stack_create(ssa->num_vars
-						* sizeof(*ssa->renames), 16);
-	ssa->renames = of_stack_top(ssa->renames_stack);
-	memset(ssa->renames, 0, ssa->num_vars * sizeof(*ssa->renames));
-	ssa->shader_heap = shader->heap;
-	ssa->last_var = 1;
+	opt->renames_stack = of_stack_create(opt->num_vars
+						* sizeof(*opt->renames), 16);
+	opt->renames = of_stack_top(opt->renames_stack);
+	memset(opt->renames, 0, opt->num_vars * sizeof(*opt->renames));
+	opt->shader_heap = shader->heap;
+	opt->last_var = 1;
 
-	RUN_PASS(shader, ssa, init_nodes);
-	RUN_PASS(shader, ssa, variables_defined);
-	RUN_PASS(shader, ssa, dep_rep_count);
-	RUN_PASS(shader, ssa, insert_phi);
-	RUN_PASS(shader, ssa, make_ssa);
+	RUN_PASS(shader, opt, init_nodes);
+	RUN_PASS(shader, opt, variables_defined);
+	RUN_PASS(shader, opt, dep_rep_count);
+	RUN_PASS(shader, opt, insert_phi);
+	RUN_PASS(shader, opt, make_ssa);
 
-	shader->stats.num_vars = ssa->last_var;
+	shader->stats.num_vars = opt->last_var;
 
-	DBG("AST (post-ssa/pre-optimize)");
-	of_ir_dump_ast(shader, dump_ssa_data, ssa);
+	DBG("AST (post-opt/pre-optimize)");
+	of_ir_dump_ast(shader, dump_ssa_data, opt);
 
-	of_stack_destroy(ssa->renames_stack);
+	of_stack_destroy(opt->renames_stack);
 	of_heap_destroy(heap);
 
 	return 0;
