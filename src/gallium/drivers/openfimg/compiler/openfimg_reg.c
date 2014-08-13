@@ -106,6 +106,7 @@ var_num(struct of_ir_reg_assign *ra, struct of_ir_variable *var)
 static INLINE struct of_ir_variable *
 get_var(struct of_ir_reg_assign *ra, uint16_t var)
 {
+	assert(var < ra->num_vars);
 	return util_dynarray_element(&ra->vars, struct of_ir_variable, var);
 }
 
@@ -134,6 +135,9 @@ vars_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
 {
 	struct of_ir_variable *v1 = get_var(ra, var1);
 
+	assert(var1 < ra->num_vars);
+	assert(var2 < ra->num_vars);
+
 	return v1->interference && of_bitmap_get(v1->interference, var2);
 }
 
@@ -142,6 +146,9 @@ add_interference(struct of_ir_reg_assign *ra, uint16_t var1, uint16_t var2)
 {
 	struct of_ir_variable *v1 = get_var(ra, var1);
 	struct of_ir_variable *v2 = get_var(ra, var2);
+
+	assert(var1 < ra->num_vars);
+	assert(var2 < ra->num_vars);
 
 	if (!v1->interference)
 		v1->interference = of_heap_alloc(ra->heap,
