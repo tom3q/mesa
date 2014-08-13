@@ -42,11 +42,6 @@ enum {
 	OF_IR_VEC_SIZE = 4,
 };
 
-enum of_ir_shader_type {
-	OF_IR_SHADER_VERTEX,
-	OF_IR_SHADER_PIXEL,
-};
-
 enum of_ir_reg_type {
 	/** Temporary register. */
 	OF_IR_REG_R,
@@ -218,9 +213,11 @@ struct of_ir_ast_node *of_ir_node_list_front(struct of_ir_ast_node *node);
 struct of_ir_ast_node *of_ir_node_list_back(struct of_ir_ast_node *node);
 struct of_ir_ast_node *of_ir_node_list_after(struct of_ir_ast_node *node);
 
-struct of_ir_shader *of_ir_shader_create(enum of_ir_shader_type type);
+struct of_ir_shader *of_ir_shader_create(enum of_shader_type type);
 void of_ir_shader_destroy(struct of_ir_shader *shader);
 int of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 			  struct of_shader_stateobj *so);
+int of_ir_shader_disassemble(struct of_context *ctx, struct pipe_resource *buffer,
+			     unsigned sizedwords, enum of_shader_type type);
 
 #endif /* OF_IR_H_ */
