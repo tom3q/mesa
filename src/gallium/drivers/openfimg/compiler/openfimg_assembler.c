@@ -299,7 +299,7 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 		const struct of_reg_bitfields *bflds = &src_bitfields[i];
 		struct of_ir_register *src = instr->srcs[i];
 
-		info = &shader->reg_info[src->type];
+		info = of_ir_get_reg_info(shader, src->type);
 		set_bitfield(src->num, dwords, &bflds->num);
 		set_bitfield(info->src_type, dwords, &bflds->type);
 		set_bitfield(src_swiz(src), dwords, &bflds->mask);
@@ -315,7 +315,7 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 	/* Destination register */
 	dst = instr->dst;
 	if (dst) {
-		info = &shader->reg_info[dst->type];
+		info = of_ir_get_reg_info(shader, dst->type);
 		set_bitfield(dst->num, dwords, &dst_bitfields.num);
 		set_bitfield(info->src_type, dwords, &dst_bitfields.type);
 		set_bitfield(dst_mask(dst), dwords, &dst_bitfields.mask);
