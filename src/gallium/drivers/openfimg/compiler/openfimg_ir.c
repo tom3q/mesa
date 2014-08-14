@@ -101,7 +101,7 @@ static const dst_map_t full_dst_map[] = {
 };
 
 const struct of_ir_opc_info of_ir_opc_info[] = {
-	OF_IR_OPC(NOP, ALU, 0),
+	OF_IR_OPC(NOP, SUB, 0), /* Not really SUB, but emitted the same way. */
 	OF_IR_OPC(MOV, ALU, 1),
 	OF_IR_OPC(MOVA, ALU, 1),
 	OF_IR_OPC(MOVC, ALU, 2),
@@ -145,7 +145,7 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 	OF_IR_OPC(BZP, CF, 1),
 	OF_IR_OPC(CALL, SUB, 0),
 	OF_IR_OPC(CALLNZ, SUB, 1),
-	OF_IR_OPC(RET, ALU, 0), /* Not really ALU, but emitted the same way. */
+	OF_IR_OPC(RET, SUB, 0),
 };
 
 #define OF_IR_REG_RW(_reg, _num_regs, _a0_addr, _al_addr, _num_reads)	\
