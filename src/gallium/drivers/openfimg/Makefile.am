@@ -7,6 +7,7 @@ noinst_LTLIBRARIES = libopenfimg.la
 
 AM_CFLAGS = \
 	-Wno-packed-bitfield-compat \
+	-Werror \
 	-I$(top_srcdir)/src/gallium/drivers \
 	$(GALLIUM_CFLAGS) \
 	$(OPENFIMG_CFLAGS) \
