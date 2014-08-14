@@ -765,42 +765,54 @@ clean_ast(struct of_ir_shader *shader)
  */
 
 static void
+lsnprintf(char **buf, size_t *maxlen, const char *format, ...)
+{
+	va_list ap;
+	size_t len;
+
+	va_start(ap, format);
+	len = vsnprintf(*buf, *maxlen, format, ap);
+	va_end(ap);
+
+	if (len + 1 > *maxlen)
+		len = *maxlen - 1;
+
+	*maxlen -= len;
+	*buf += len;
+}
+
+static void
 format_src_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 	       struct of_ir_register *reg)
 {
 	const struct of_ir_reg_info *info;
-	char comp_str[16];
 	unsigned comp;
 
 	info = of_ir_get_reg_info(shader, reg->type);
 
+	lsnprintf(&buf, &maxlen, "%s%s",
+			reg->flags & OF_IR_REG_NEGATE ? "-" : " ",
+			reg->flags & OF_IR_REG_ABS ? "|" : "[");
+
 	comp = 0;
-	buf[0] = '\0';
-	strncat(buf, "[", maxlen);
 	do {
-		if (!(reg->mask & (1 << comp))) {
-			strncat(buf, "-", maxlen);
-		} else if (reg->type == OF_IR_REG_VAR
-			   || reg->type == OF_IR_REG_VARC) {
-			snprintf(comp_str, sizeof(comp_str), "%s%s%s%d%s",
-				reg->flags & OF_IR_REG_NEGATE ? "-" : "",
-				reg->flags & OF_IR_REG_ABS ? "|" : "",
-				info->name, reg->var[comp],
-				reg->flags & OF_IR_REG_ABS ? "|" : "");
-			strncat(buf, comp_str, maxlen);
-		} else {
-			snprintf(comp_str, sizeof(comp_str), "%s%s%s%d.%c%s",
-				reg->flags & OF_IR_REG_NEGATE ? "-" : "",
-				reg->flags & OF_IR_REG_ABS ? "|" : "",
-				info->name, reg->num, reg->swizzle[comp],
-				reg->flags & OF_IR_REG_ABS ? "|" : "");
-			strncat(buf, comp_str, maxlen);
-		}
+		if (!(reg->mask & (1 << comp)))
+			lsnprintf(&buf, &maxlen, "_______");
+		else if (reg->type == OF_IR_REG_VAR
+			   || reg->type == OF_IR_REG_VARC)
+			lsnprintf(&buf, &maxlen, "%2s%03d  ", info->name,
+					reg->var[comp]);
+		else
+			lsnprintf(&buf, &maxlen, "%2s%03d.%c", info->name,
+					reg->num, reg->swizzle[comp]);
+
 		if (++comp == OF_IR_VEC_SIZE)
 			break;
-		strncat(buf, ", ", maxlen);
+
+		lsnprintf(&buf, &maxlen, ", ");
 	} while (1);
-	strncat(buf, "]", maxlen);
+
+	lsnprintf(&buf, &maxlen, "%s", reg->flags & OF_IR_REG_ABS ? "|" : "]");
 }
 
 static void
@@ -808,33 +820,32 @@ format_dst_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 	       struct of_ir_register *reg)
 {
 	const struct of_ir_reg_info *info;
-	char comp_str[16];
 	unsigned comp;
 
 	info = of_ir_get_reg_info(shader, reg->type);
 
+	lsnprintf(&buf, &maxlen, "[");
+
 	comp = 0;
-	buf[0] = '\0';
-	strncat(buf, "[", maxlen);
 	do {
-		if (!(reg->mask & (1 << comp))) {
-			strncat(buf, "-", maxlen);
-		} else if (reg->type == OF_IR_REG_VAR
-			   || reg->type == OF_IR_REG_VARC) {
-			snprintf(comp_str, sizeof(comp_str), "%s%d",
+		if (!(reg->mask & (1 << comp)))
+			lsnprintf(&buf, &maxlen, "_______");
+		else if (reg->type == OF_IR_REG_VAR
+			   || reg->type == OF_IR_REG_VARC)
+			lsnprintf(&buf, &maxlen, "%2s%03d  ",
 					info->name, reg->var[comp]);
-			strncat(buf, comp_str, maxlen);
-		} else {
-			snprintf(comp_str, sizeof(comp_str), "%s%d.%c",
+		else
+			lsnprintf(&buf, &maxlen, "%2s%03d.%c",
 					info->name, reg->num,
 					reg->swizzle[comp]);
-			strncat(buf, comp_str, maxlen);
-		}
+
 		if (++comp == OF_IR_VEC_SIZE)
 			break;
-		strncat(buf, ", ", maxlen);
+
+		lsnprintf(&buf, &maxlen, ", ");
 	} while (1);
-	strncat(buf, "]", maxlen);
+
+	lsnprintf(&buf, &maxlen, "]");
 }
 
 static void
@@ -848,7 +859,7 @@ format_target(struct of_ir_shader *shader, char *buf, size_t maxlen,
 	while (node->parent_list.next == &parent->nodes) {
 		node = node->parent;
 		if (!node) {
-			strncat(buf, "[invalid target]", maxlen);
+			snprintf(buf, maxlen, "[invalid target]");
 			return;
 		}
 	}
@@ -864,31 +875,31 @@ dump_instruction(struct of_ir_shader *shader, struct of_ir_instruction *ins,
 		 unsigned level)
 {
 	const struct of_ir_opc_info *opc_info;
-	struct of_ir_register *dst, *src[3];
-	char dst_str[64], src_str[3][64];
+	struct of_ir_register *dst;
+	char tmp[64] = "";
+	char op[16];
 	unsigned reg;
 
 	opc_info = of_ir_get_opc_info(ins->opc);
 
 	dst = ins->dst;
 	if (dst)
-		format_dst_reg(shader, dst_str, sizeof(dst_str), ins->dst);
+		format_dst_reg(shader, tmp, sizeof(tmp), dst);
 	else if (ins->target)
-		format_target(shader, dst_str, sizeof(dst_str), ins->target);
-	for (reg = 0; reg < 3; ++reg) {
-		src[reg] = ins->srcs[reg];
-		if (src[reg])
-			format_src_reg(shader, src_str[reg],
-					sizeof(src_str[reg]), src[reg]);
+		format_target(shader, tmp, sizeof(tmp), ins->target);
+
+	snprintf(op, sizeof(op), "%s%s", opc_info->name,
+			(dst && dst->flags & OF_IR_REG_SAT) ? "_sat" : "");
+
+	_debug_printf("%*s%-11s %36s%s", level, "",
+			op, tmp, tmp[0] ? ", " : "  ");
+
+	for (reg = 0; reg < ins->num_srcs; ++reg) {
+		format_src_reg(shader, tmp, sizeof(tmp), ins->srcs[reg]);
+		_debug_printf("%s%s", reg ? ", " : "", tmp);
 	}
 
-	_debug_printf("%*s%s%s " "%s%s" "%s" "%s%s" "%s%s\n",
-			level, "", opc_info->name,
-			(dst && dst->flags & OF_IR_REG_SAT) ? "_sat" : "",
-			dst ? dst_str : "", dst ? ", " : "",
-			src[0] ? src_str[0] : "",
-			src[1] ? ", " : "", src[1] ? src_str[1] : "",
-			src[2] ? ", " : "", src[2] ? src_str[2] : "");
+	_debug_printf("\n");
 }
 
 static void
