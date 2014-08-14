@@ -92,6 +92,10 @@ liveness_src(struct of_ir_optimizer *opt, struct of_ir_register *dst,
 		if (src->type != OF_IR_REG_VAR)
 			continue;
 
+		alive = of_bitmap_get(opt->live, src->var[scomp]);
+		if (alive)
+			continue;
+
 		if (opt->want_interference)
 			OF_BITMAP_FOR_EACH_SET_BIT(var, opt->live,
 						   opt->num_vars)
@@ -181,17 +185,22 @@ liveness_phi_src(struct of_ir_optimizer *opt, struct list_head *phis,
 	struct of_ir_phi *phi, *s;
 
 	LIST_FOR_EACH_ENTRY_SAFE_REV(phi, s, phis, list) {
+		unsigned alive;
 		unsigned var;
 
 		if (phi->dead)
 			continue;
 
-		of_bitmap_set(opt->live, phi->src[src]);
+		alive = of_bitmap_get(opt->live, phi->src[src]);
+		if (alive)
+			continue;
 
 		if (opt->want_interference)
 			OF_BITMAP_FOR_EACH_SET_BIT(var, opt->live,
 						   opt->num_vars)
 				add_interference(opt, phi->src[src], var);
+
+		of_bitmap_set(opt->live, phi->src[src]);
 	}
 }
 
