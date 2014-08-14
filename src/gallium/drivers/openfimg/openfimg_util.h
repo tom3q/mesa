@@ -67,6 +67,8 @@ extern int of_mesa_debug;
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #define ROUND_UP(val, to)	(((val) + (to) - 1) & ~((to) - 1))
 
+#define BIT(bit)	(1UL << (bit))
+
 #define min(a, b)	((a) < (b) ? (a) : (b))
 #define max(a, b)	((a) > (b) ? (a) : (b))
 
