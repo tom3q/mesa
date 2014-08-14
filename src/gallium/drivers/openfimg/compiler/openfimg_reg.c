@@ -729,7 +729,7 @@ split_live_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		if (dst && dst->type == OF_IR_REG_VAR && is_vector(dst))
 			split_operand(opt, ins, dst, true);
 
-		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
+		for (i = 0; i < ins->num_srcs; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
 
 			if (src->type == OF_IR_REG_VAR && is_vector(src))
@@ -1035,7 +1035,7 @@ add_constraints_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 				constraint_vector(opt, dst);
 		}
 
-		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
+		for (i = 0; i < ins->num_srcs; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
 
 			if (src->type == OF_IR_REG_VAR && is_vector(src))
