@@ -181,7 +181,7 @@ rename_operands(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		unsigned comp;
 		unsigned i;
 
-		for (i = 0; i < OF_IR_NUM_SRCS && ins->srcs[i]; ++i) {
+		for (i = 0; i < ins->num_srcs; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
 
 			if (src->type != OF_IR_REG_VAR)
