@@ -1085,7 +1085,7 @@ add_constraints(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 }
 
 /*
- * Register assignment.
+ * Color assignment.
  */
 
 static void
@@ -1111,7 +1111,7 @@ color_var(struct of_ir_optimizer *opt, struct of_ir_variable *v)
 }
 
 static void
-color_register(struct of_ir_optimizer *opt, struct of_ir_register *reg)
+color_operand(struct of_ir_optimizer *opt, struct of_ir_register *reg)
 {
 	unsigned comp;
 
@@ -1131,7 +1131,7 @@ color_register(struct of_ir_optimizer *opt, struct of_ir_register *reg)
 }
 
 static void
-assign_registers_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+assign_colors_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
 
@@ -1139,24 +1139,24 @@ assign_registers_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		unsigned i;
 
 		if (ins->dst && ins->dst->type == OF_IR_REG_VAR)
-			color_register(opt, ins->dst);
+			color_operand(opt, ins->dst);
 
 		for (i = 0; i < ins->num_srcs; ++i)
 			if (ins->srcs[i]->type == OF_IR_REG_VAR)
-				color_register(opt, ins->srcs[i]);
+				color_operand(opt, ins->srcs[i]);
 	}
 }
 
 static void
-assign_registers(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+assign_colors(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child;
 
 	if (node->type == OF_IR_NODE_LIST)
-		return assign_registers_list(opt, node);
+		return assign_colors_list(opt, node);
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		assign_registers(opt, child);
+		assign_colors(opt, child);
 }
 
 /*
@@ -1199,6 +1199,132 @@ copy_elimination(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		else
 			copy_elimination(opt, child);
 	}
+}
+
+/*
+ * Register assignment.
+ */
+
+static void
+remap_sources(struct of_ir_instruction *ins, const uint8_t *map)
+{
+	unsigned i;
+
+	for (i = 0; i < ins->num_srcs; ++i) {
+		struct of_ir_register *src = ins->srcs[i];
+		char swizzle[4];
+		unsigned comp;
+
+		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp)
+			swizzle[comp] = src->swizzle[map[comp]];
+
+		memcpy(src->swizzle, swizzle, sizeof(src->swizzle));
+	}
+}
+
+static void
+assign_destination(struct of_ir_instruction *ins, struct of_ir_register *dst)
+{
+	const struct of_ir_opc_info *info;
+	uint8_t chan_map[4] = {0, 1, 2, 3};
+	bool need_remap = false;
+	unsigned mask = 0;
+	unsigned comp;
+
+	info = of_ir_get_opc_info(ins->opc);
+
+	memset(dst->swizzle, '_', sizeof(dst->swizzle));
+
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		uint16_t reg = color_reg(dst->var[comp]);
+		uint16_t chan = color_comp(dst->var[comp]);
+
+		if (!(dst->mask & (1 << comp)))
+			continue;
+
+		if (chan != comp) {
+			assert(!info->fix_comp
+				&& "swizzling with fixed components");
+			need_remap = true;
+			chan_map[chan] = comp;
+		}
+
+		dst->num = reg;
+		dst->swizzle[chan] = "xyzw"[chan];
+		assert(!(mask & (1 << chan)) && "duplicate channel in dst?");
+		mask |= (1 << chan);
+	}
+
+	if (need_remap)
+		remap_sources(ins, chan_map);
+
+	dst->type = OF_IR_REG_R;
+	dst->mask = mask;
+}
+
+static void
+assign_source(struct of_ir_register *src)
+{
+	char safe_chan = 'x';
+	unsigned comp;
+
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		uint16_t reg = color_reg(src->var[comp]);
+		uint16_t chan = color_comp(src->var[comp]);
+
+		if (!(src->mask & (1 << comp)))
+			continue;
+
+		src->num = reg;
+		safe_chan = src->swizzle[comp] = "xyzw"[chan];
+	}
+
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		if (src->mask & (1 << comp)) {
+			uint16_t reg = color_reg(src->var[comp]);
+
+			assert(src->num == reg
+				&& "different registers in single operand");
+			continue;
+		}
+		src->swizzle[comp] = safe_chan;
+	}
+
+	src->type = OF_IR_REG_R;
+}
+
+static void
+assign_registers_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins;
+
+	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
+		struct of_ir_register *dst = ins->dst;
+		unsigned i;
+
+		for (i = 0; i < ins->num_srcs; ++i) {
+			struct of_ir_register *src = ins->srcs[i];
+
+			if (src->type == OF_IR_REG_VARC)
+				assign_source(src);
+			src->mask = 0xf;
+		}
+
+		if (dst && dst->type == OF_IR_REG_VARC)
+			assign_destination(ins, dst);
+	}
+}
+
+static void
+assign_registers(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child;
+
+	if (node->type == OF_IR_NODE_LIST)
+		return assign_registers_list(opt, node);
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		assign_registers(opt, child);
 }
 
 /*
@@ -1335,12 +1461,16 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	util_slab_create(&opt->chunk_slab, sizeof(struct of_ir_chunk),
 				32, UTIL_SLAB_SINGLETHREADED);
 	precolor(opt);
-	RUN_PASS(shader, opt, assign_registers);
-	DBG("AST (post-register-assignment)");
+	RUN_PASS(shader, opt, assign_colors);
+	DBG("AST (post-color-assignment)");
 	of_ir_dump_ast(shader, NULL, 0);
 
 	RUN_PASS(shader, opt, copy_elimination);
 	DBG("AST (post-copy-elimination)");
+	of_ir_dump_ast(shader, NULL, 0);
+
+	RUN_PASS(shader, opt, assign_registers);
+	DBG("AST (post-register-assignment)");
 	of_ir_dump_ast(shader, NULL, 0);
 
 	util_dynarray_fini(&opt->vars);
