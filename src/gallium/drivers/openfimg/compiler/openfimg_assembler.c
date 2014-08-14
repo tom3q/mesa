@@ -317,7 +317,7 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 	if (dst) {
 		info = of_ir_get_reg_info(shader, dst->type);
 		set_bitfield(dst->num, dwords, &dst_bitfields.num);
-		set_bitfield(info->src_type, dwords, &dst_bitfields.type);
+		set_bitfield(info->dst_type, dwords, &dst_bitfields.type);
 		set_bitfield(dst_mask(dst), dwords, &dst_bitfields.mask);
 		set_flags(dst->flags, dwords, dst_bitfields.flags);
 	}
