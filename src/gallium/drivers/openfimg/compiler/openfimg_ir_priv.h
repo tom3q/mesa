@@ -55,6 +55,7 @@ struct of_ir_variable {
 	uint32_t *interference;
 	unsigned constraints;
 	unsigned color;
+	uint8_t parity;
 	uint8_t comp;
 	unsigned fixed :1;
 };
@@ -87,6 +88,7 @@ struct of_ir_optimizer {
 	uint32_t *chunk_interf;
 	struct util_dynarray chunk_queue;
 	unsigned chunk_queue_len;
+	unsigned parity :1;
 
 	/* Fields used by assembler. */
 	uint32_t *dwords;
