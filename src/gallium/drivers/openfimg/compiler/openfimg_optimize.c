@@ -351,6 +351,84 @@ cleanup(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		cleanup_phis(opt, &node->ssa.loop_phis);
 }
 
+/*
+ * Validation pass. Enforces hardware constraints not related to temporary
+ * variables.
+ *
+ * TODO: Analyse usage of non-temporary registers and preload those that
+ * can be reused further in the code. Also try to not preload the same
+ * register multiple times.
+ */
+
+static void
+assign_to_tmp(struct of_ir_optimizer *opt, struct of_ir_instruction *ins,
+	      struct of_ir_register *reg)
+{
+	struct of_ir_register *dst, *src;
+	struct of_ir_instruction *copy;
+	unsigned comp;
+
+	copy = of_ir_instr_create(opt->shader, OF_OP_MOV);
+	dst = of_ir_reg_create(opt->shader, OF_IR_REG_VAR, 0, "xyzw", 0);
+	of_ir_instr_add_dst(copy, dst);
+	src = of_ir_reg_clone(opt->shader, reg);
+	of_ir_instr_add_src(copy, src);
+
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		if (!(reg->mask & (1 << comp)))
+			continue;
+
+		dst->var[comp] = reg->var[comp] = add_var_num(opt);
+	}
+
+	dst->mask = reg->mask;
+	src->mask = reg->mask;
+	src->flags = 0;
+	reg->type = OF_IR_REG_VAR;
+
+	of_ir_instr_insert_before(opt->shader, NULL, ins, copy);
+}
+
+static void
+validate_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins;
+	uint8_t reg_count[OF_IR_NUM_REG_TYPES];
+
+	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
+		unsigned i;
+
+		memset(reg_count, 0, sizeof(reg_count));
+
+		for (i = 0; i < ins->num_srcs; ++i) {
+			struct of_ir_register *src = ins->srcs[i];
+
+			if (src->type == OF_IR_REG_VAR)
+				continue;
+
+			if (++reg_count[src->type] > 1)
+				assign_to_tmp(opt, ins, src);
+		}
+	}
+}
+
+static void
+validate(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child;
+
+	if (node->type == OF_IR_NODE_LIST)
+		return validate_list(opt, node);
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		validate(opt, child);
+}
+
+/*
+ * Optimize-specific data dumping.
+ * TODO: Probably some code could be shared with register allocation.
+ */
+
 static void
 dump_phis(struct list_head *list, unsigned count, unsigned level)
 {
@@ -413,6 +491,11 @@ dump_opt_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 		dump_opt_data_pre(shader, node, level, data);
 }
 
+/*
+ * Optimizer entry point.
+ * NOTE: Expects the IR to be already in SSA form. Leaves the IR in SSA form.
+ */
+
 int
 of_ir_optimize(struct of_ir_shader *shader)
 {
@@ -421,6 +504,7 @@ of_ir_optimize(struct of_ir_shader *shader)
 
 	heap = of_heap_create();
 	opt = of_heap_alloc(heap, sizeof(*opt));
+	opt->shader = shader;
 	opt->heap = heap;
 	opt->num_vars = shader->stats.num_vars;
 	util_slab_create(&opt->live_slab, OF_BITMAP_BYTES_FOR_BITS(opt->num_vars),
@@ -435,10 +519,12 @@ of_ir_optimize(struct of_ir_shader *shader)
 
 	RUN_PASS(shader, opt, liveness);
 	RUN_PASS(shader, opt, cleanup);
+	RUN_PASS(shader, opt, validate);
 
 	DBG("AST (post-optimize/pre-register-assignment)");
 	of_ir_dump_ast(shader, dump_opt_data, opt);
 
+	shader->stats.num_vars = opt->num_vars;
 	util_dynarray_fini(&opt->vars);
 	util_slab_destroy(&opt->live_slab);
 	of_heap_destroy(heap);
