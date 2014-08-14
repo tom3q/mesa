@@ -287,8 +287,13 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 
 	dwords[2] |= INSTR_WORD2_OPCODE(instr->opc);
 
-	if (instr->flags & OF_IR_INSTR_NEXT_3SRC)
-		dwords[2] |= INSTR_WORD2_NEXT_3SRC;
+	/* We rely on the fact that we insert NOPs on the beginning of
+	 * every list which begins with a 3-source operation. */
+	if (instr->num_srcs == 3) {
+		uint32_t *prev = buffer + 4 * (pc - 1);
+
+		prev[2] |= INSTR_WORD2_NEXT_3SRC;
+	}
 
 	for (i = 0; i < instr->num_srcs; ++i) {
 		const struct of_reg_bitfields *bflds = &src_bitfields[i];
@@ -341,6 +346,16 @@ generate_code(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list) {
 		switch (child->type) {
 		case OF_IR_NODE_LIST:
+			if (!LIST_IS_EMPTY(&child->list.instrs)) {
+				ins = LIST_ENTRY(struct of_ir_instruction,
+						child->list.instrs.next, list);
+				if (ins->num_srcs == 3) {
+					ins = of_ir_instr_create(opt->shader,
+								OF_OP_NOP);
+					instr_emit(opt->shader, ins,
+						opt->dwords, opt->cur_instr++);
+				}
+			}
 			LIST_FOR_EACH_ENTRY(ins, &child->list.instrs, list)
 				instr_emit(opt->shader, ins, opt->dwords,
 						opt->cur_instr++);
@@ -395,6 +410,12 @@ collect_stats(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		case OF_IR_NODE_LIST: {
 			struct of_ir_instruction *ins;
 
+			if (!LIST_IS_EMPTY(&child->list.instrs)) {
+				ins = LIST_ENTRY(struct of_ir_instruction,
+						child->list.instrs.next, list);
+				if (ins->num_srcs == 3)
+					++opt->shader->stats.num_instrs;
+			}
 			LIST_FOR_EACH_ENTRY(ins, &child->list.instrs, list)
 				++opt->shader->stats.num_instrs;
 
