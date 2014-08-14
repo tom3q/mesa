@@ -532,7 +532,7 @@ disassemble_code(uint32_t *dwords, unsigned num_dwords,
 			flags = get_flags(instr, dst_bitfields.flags);
 
 			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-				unsigned idx = 2 * comp + (mask & (1 << comp));
+				unsigned idx = 2 * comp + ((mask >> comp) & 1);
 
 				mask_str[comp] = mask_templ[idx];
 			}
