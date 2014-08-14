@@ -363,6 +363,7 @@ generate_code(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 
 		case OF_IR_NODE_IF_THEN:
 			ins = of_ir_instr_create(opt->shader, OF_OP_BF);
+			of_ir_instr_add_src(ins, child->if_then.reg);
 			ins->target = child;
 			instr_emit(opt->shader, ins, opt->dwords,
 					opt->cur_instr++);
