@@ -40,6 +40,7 @@ struct of_ir_chunk {
 	unsigned num_vars;
 	unsigned cost;
 	unsigned color;
+	uint8_t parity;
 	uint8_t comp;
 	unsigned fixed :1;
 	unsigned prealloc :1;
@@ -105,6 +106,7 @@ create_chunk(struct of_ir_optimizer *opt, struct of_ir_variable *var)
 
 	c->num_vars = 1;
 	c->comp = var->comp;
+	c->parity = var->parity;
 	var->chunk = c;
 
 	return c;
@@ -126,6 +128,9 @@ try_to_merge_chunks(struct of_ir_optimizer *opt, struct of_ir_affinity *a,
 	if (c0->comp && c1->comp && c0->comp != c1->comp)
 		return;
 
+	if ((c0->parity | c1->parity) == 0x3)
+		return;
+
 	OF_VALSET_FOR_EACH_VAL(num0, &c0->vars) {
 		OF_VALSET_FOR_EACH_VAL(num1, &c1->vars) {
 			if (*num0 == *num1)
@@ -137,6 +142,7 @@ try_to_merge_chunks(struct of_ir_optimizer *opt, struct of_ir_affinity *a,
 
 	c0->num_vars += c1->num_vars;
 	c0->comp |= c1->comp;
+	c0->parity |= c1->parity;
 	c0->cost += a->cost;
 
 	OF_VALSET_FOR_EACH_VAL(num1, &c1->vars) {
@@ -398,6 +404,7 @@ color_reg_constraint(struct of_ir_optimizer *opt, struct of_ir_constraint *c)
 	struct of_ir_chunk *ch[OF_IR_VEC_SIZE];
 	unsigned comp_mask = 0;
 	uint8_t swz[OF_IR_VEC_SIZE] = {0, 1, 2, 3};
+	unsigned parity_mask = 0;
 	unsigned long *num;
 	unsigned reg;
 	unsigned i;
@@ -413,6 +420,7 @@ color_reg_constraint(struct of_ir_optimizer *opt, struct of_ir_constraint *c)
 			create_chunk(opt, v);
 
 		ch[i] = v->chunk;
+		parity_mask |= ch[i]->parity;
 
 		if (v->chunk->comp) {
 			if (v->chunk->comp & comp_mask) {
@@ -427,6 +435,8 @@ color_reg_constraint(struct of_ir_optimizer *opt, struct of_ir_constraint *c)
 		++i;
 	}
 
+	assert(parity_mask != 0x3);
+
 	do {
 		for (i = 0; i < c->num_vars; ++i)
 			if (ch[i]->comp && ch[i]->comp != (1 << swz[i]))
@@ -435,6 +445,8 @@ color_reg_constraint(struct of_ir_optimizer *opt, struct of_ir_constraint *c)
 			continue;
 
 		for (reg = 0; reg < OF_NUM_REGS - 1; ++reg) {
+			if (parity_mask & BIT(reg % 2))
+				continue;
 			for (i = 0; i < c->num_vars; ++i) {
 				unsigned color = make_color(reg, swz[i]);
 
@@ -565,6 +577,9 @@ color_chunks(struct of_ir_optimizer *opt)
 		init_reg_bitmap_for_chunk(opt, &opt->reg_bitmap[0], c);
 
 		for (reg = 0; reg < OF_NUM_REGS; ++reg) {
+			if (c->parity & BIT(reg % 2))
+				continue;
+
 			comp_mask = c->comp ? c->comp : 0xf;
 
 			while (comp_mask) {
@@ -724,6 +739,8 @@ split_live_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY_SAFE(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
+		unsigned tmp_srcs = 0;
+		unsigned split = 0x7;
 		unsigned i;
 
 		if (dst && dst->type == OF_IR_REG_VAR && is_vector(dst))
@@ -732,8 +749,24 @@ split_live_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		for (i = 0; i < ins->num_srcs; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
 
-			if (src->type == OF_IR_REG_VAR && is_vector(src))
-				split_operand(opt, ins, src, false);
+			if (src->type == OF_IR_REG_VAR) {
+				if (is_vector(src)) {
+					split_operand(opt, ins, src, false);
+					split &= ~(1 << i);
+				}
+				++tmp_srcs;
+			}
+		}
+
+		if (tmp_srcs != 3)
+			continue;
+
+		/* NOTE: 3-source operations with 3 temporary operands must be
+		 * also constrained and so range must be split for operands
+		 * which were not handled by the loop above. */
+		while (split) {
+			i = u_bit_scan(&split);
+			split_operand(opt, ins, ins->srcs[i], false);
 		}
 	}
 }
@@ -1013,14 +1046,14 @@ add_constraints_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
 		const struct of_ir_opc_info *info;
+		unsigned tmp_srcs = 0;
+		unsigned comp;
 		unsigned i;
 
 		if (dst && dst->type == OF_IR_REG_VAR) {
 			info = of_ir_get_opc_info(ins->opc);
 
 			if (info->fix_comp) {
-				unsigned comp;
-
 				for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 					uint16_t var = dst->var[comp];
 
@@ -1038,8 +1071,29 @@ add_constraints_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		for (i = 0; i < ins->num_srcs; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
 
-			if (src->type == OF_IR_REG_VAR && is_vector(src))
-				constraint_vector(opt, src);
+			if (src->type == OF_IR_REG_VAR) {
+				if (is_vector(src))
+					constraint_vector(opt, src);
+				++tmp_srcs;
+			}
+		}
+
+		if (tmp_srcs != 3)
+			continue;
+
+		for (i = 0; i < ins->num_srcs; ++i) {
+			struct of_ir_register *src = ins->srcs[i];
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				uint16_t var = src->var[comp];
+
+				if (!comp_used(src, comp))
+					continue;
+
+				get_var(opt, var)->parity = BIT(opt->parity);
+			}
+
+			opt->parity ^= 1;
 		}
 	}
 }
@@ -1101,6 +1155,10 @@ color_var(struct of_ir_optimizer *opt, struct of_ir_variable *v)
 	OF_BITMAP_FOR_EACH_SET_BIT(color, opt->reg_bitmap[0],
 				   OF_REG_BITMAP_BITS) {
 		unsigned comp = color_comp(color);
+		unsigned reg = color_reg(color);
+
+		if (v->parity & BIT(reg % 2))
+			continue;
 
 		if (comp_mask & (1 << comp))
 			break;
