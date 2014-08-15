@@ -402,9 +402,9 @@ generate_code(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 static void
 collect_stats(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
-	struct of_ir_ast_node *child;
+	struct of_ir_ast_node *child, *s;
 
-	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list) {
+	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list) {
 		node->start_address = opt->shader->stats.num_instrs;
 
 		switch (child->type) {
@@ -416,6 +416,9 @@ collect_stats(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 						child->list.instrs.next, list);
 				if (ins->num_srcs == 3)
 					++opt->shader->stats.num_instrs;
+			} else {
+				list_del(&child->parent_list);
+				continue;
 			}
 			LIST_FOR_EACH_ENTRY(ins, &child->list.instrs, list)
 				++opt->shader->stats.num_instrs;
@@ -437,7 +440,10 @@ collect_stats(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		case OF_IR_NODE_REPEAT:
 			++opt->shader->stats.num_instrs;
 			break;
-
+		case OF_IR_NODE_REGION:
+			if (LIST_IS_EMPTY(&child->nodes))
+				list_del(&child->parent_list);
+			break;
 		default:
 			break;
 		}
@@ -465,6 +471,8 @@ of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader)
 
 	shader->stats.num_instrs = 0;
 	RUN_PASS(shader, opt, collect_stats);
+	DBG("AST (pre-assembler)");
+	of_ir_dump_ast(shader, NULL, 0);
 
 	shader->buffer = pipe_buffer_create(ctx->base.screen,
 					PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
