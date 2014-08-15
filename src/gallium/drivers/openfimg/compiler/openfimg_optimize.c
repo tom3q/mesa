@@ -435,6 +435,131 @@ validate(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 }
 
 /*
+ * A pass to delete moves between variables, which are not necessary in
+ * SSA form, since any assignment creates new variable.
+ */
+
+static void
+delete_moves_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE(ins, s, &node->list.instrs, list) {
+		struct of_ir_register *dst, *src;
+		unsigned comp;
+		unsigned i;
+
+		for (i = 0; i < ins->num_srcs; ++i) {
+			src = ins->srcs[i];
+			if (src->type != OF_IR_REG_VAR)
+				continue;
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				uint16_t var = src->var[comp];
+
+				if (!reg_comp_used(src, comp))
+					continue;
+
+				if (opt->renames[var])
+					src->var[comp] = opt->renames[var];
+			}
+		}
+
+		dst = ins->dst;
+		src = ins->srcs[0];
+
+		if (ins->opc != OF_OP_MOV
+		    || src->type != OF_IR_REG_VAR || src->flags
+		    || dst->type != OF_IR_REG_VAR || dst->flags)
+			continue;
+
+		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+			uint16_t srcv = src->var[comp];
+			uint16_t dstv = dst->var[comp];
+
+			if (!reg_comp_used(dst, comp))
+				continue;
+
+			opt->renames[dstv] = srcv;
+		}
+
+		list_del(&ins->list);
+	}
+}
+
+static INLINE void
+rename_phi_operand(struct of_ir_optimizer *opt, unsigned num,
+		   struct of_ir_phi *phi, uint16_t *renames)
+{
+	uint16_t var = phi->src[num];
+	if (renames[var])
+		phi->src[num] = renames[var];
+}
+
+static void
+delete_moves(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *region;
+	struct of_ir_ast_node *child;
+	struct of_ir_phi *phi;
+
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		LIST_FOR_EACH_ENTRY(phi, &node->ssa.loop_phis, list)
+			rename_phi_operand(opt, 0, phi, opt->renames);
+		break;
+
+	case OF_IR_NODE_IF_THEN:
+		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
+			rename_phi_operand(opt, 0, phi, opt->renames);
+		break;
+
+	case OF_IR_NODE_DEPART:
+	case OF_IR_NODE_REPEAT:
+		opt->renames = of_stack_push_copy(opt->renames_stack);
+		break;
+
+	case OF_IR_NODE_LIST:
+		delete_moves_list(opt, node);
+		return;
+	}
+
+	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
+		delete_moves(opt, child);
+
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		break;
+
+	case OF_IR_NODE_IF_THEN:
+		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
+			rename_phi_operand(opt, 1, phi, opt->renames);
+		break;
+
+	case OF_IR_NODE_DEPART:
+		region = node->depart_repeat.region;
+		LIST_FOR_EACH_ENTRY(phi, &region->ssa.phis, list)
+			rename_phi_operand(opt, node->ssa.depart_number, phi,
+						opt->renames);
+
+		opt->renames = of_stack_pop(opt->renames_stack);
+		break;
+
+	case OF_IR_NODE_REPEAT:
+		region = node->depart_repeat.region;
+		LIST_FOR_EACH_ENTRY(phi, &region->ssa.loop_phis, list)
+			rename_phi_operand(opt, node->ssa.repeat_number, phi,
+						opt->renames);
+
+		opt->renames = of_stack_pop(opt->renames_stack);
+		break;
+
+	default:
+		break;
+	}
+}
+
+/*
  * Optimize-specific data dumping.
  * TODO: Probably some code could be shared with register allocation.
  */
@@ -526,15 +651,21 @@ of_ir_optimize(struct of_ir_shader *shader)
 				* sizeof(struct of_ir_variable));
 	memset(util_dynarray_begin(&opt->vars), 0, opt->num_vars
 				* sizeof(struct of_ir_variable));
+	opt->renames_stack = of_stack_create(opt->num_vars
+						* sizeof(*opt->renames), 1);
+	opt->renames = of_stack_top(opt->renames_stack);
+	memset(opt->renames, 0, opt->num_vars * sizeof(*opt->renames));
 
 	RUN_PASS(shader, opt, liveness);
 	RUN_PASS(shader, opt, cleanup);
+	RUN_PASS(shader, opt, delete_moves);
 	RUN_PASS(shader, opt, validate);
 
 	DBG("AST (post-optimize/pre-register-assignment)");
 	of_ir_dump_ast(shader, dump_opt_data, opt);
 
 	shader->stats.num_vars = opt->num_vars;
+	of_stack_destroy(opt->renames_stack);
 	util_dynarray_fini(&opt->vars);
 	util_slab_destroy(&opt->live_slab);
 	of_heap_destroy(heap);
