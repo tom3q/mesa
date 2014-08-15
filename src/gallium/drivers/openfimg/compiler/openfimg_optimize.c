@@ -83,7 +83,8 @@ liveness_src(struct of_ir_optimizer *opt, struct of_ir_register *dst,
 			}
 		}
 
-		if (!alive) {
+		if (!alive
+		    || (src->type == OF_IR_REG_VAR && !src->var[scomp])) {
 			src->deadmask |= BIT(scomp);
 			continue;
 		}
@@ -188,7 +189,7 @@ liveness_phi_src(struct of_ir_optimizer *opt, struct list_head *phis,
 		unsigned alive;
 		unsigned var;
 
-		if (phi->dead)
+		if (phi->dead || !phi->src[src])
 			continue;
 
 		alive = of_bitmap_get(opt->live, phi->src[src]);
