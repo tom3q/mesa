@@ -325,7 +325,7 @@ color_chunk(struct of_ir_optimizer *opt, struct of_ir_chunk *c, unsigned color)
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
 		struct of_ir_variable *v = get_var(opt, *num);
 
-		if (v->comp && v->comp != color_comp(color)) {
+		if (v->comp && !(v->comp & BIT(comp))) {
 			create_chunk(opt, v);
 			continue;
 		}
