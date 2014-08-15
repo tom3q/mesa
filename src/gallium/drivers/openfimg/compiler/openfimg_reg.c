@@ -269,8 +269,8 @@ dump_constraints(struct of_ir_optimizer *opt)
 static bool
 next_swizzle(uint8_t swz[4])
 {
-	unsigned i;
 	int k = -1, l = -1;
+	unsigned i;
 
 	for (i = 0; i < 4 - 1; ++i) {
 		if (swz[i] < swz[i + 1]) {
@@ -401,10 +401,10 @@ init_reg_bitmap_for_chunk(struct of_ir_optimizer *opt, uint32_t **regs,
 static int
 color_reg_constraint(struct of_ir_optimizer *opt, struct of_ir_constraint *c)
 {
-	struct of_ir_chunk *ch[OF_IR_VEC_SIZE];
-	unsigned comp_mask = 0;
 	uint8_t swz[OF_IR_VEC_SIZE] = {0, 1, 2, 3};
+	struct of_ir_chunk *ch[OF_IR_VEC_SIZE];
 	unsigned parity_mask = 0;
+	unsigned comp_mask = 0;
 	unsigned long *num;
 	unsigned reg;
 	unsigned i;
@@ -521,8 +521,8 @@ chunk_compare(const void *a, const void *b)
 static void
 prepare_chunk_queue(struct of_ir_optimizer *opt)
 {
-	unsigned num_chunks;
 	struct of_ir_chunk *c;
+	unsigned num_chunks;
 
 	num_chunks = 0;
 	LIST_FOR_EACH_ENTRY(c, &opt->chunks, list) {
@@ -1271,8 +1271,8 @@ remap_sources(struct of_ir_instruction *ins, const uint8_t *map)
 static void
 assign_destination(struct of_ir_instruction *ins, struct of_ir_register *dst)
 {
-	const struct of_ir_opc_info *info;
 	uint8_t chan_map[4] = {0, 1, 2, 3};
+	const struct of_ir_opc_info *info;
 	bool need_remap = false;
 	unsigned mask = 0;
 	unsigned comp;
