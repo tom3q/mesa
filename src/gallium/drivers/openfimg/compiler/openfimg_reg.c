@@ -1269,7 +1269,7 @@ copy_elimination_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		unsigned comp;
 
 		if (ins->opc != OF_OP_MOV || src->type != OF_IR_REG_VARC
-		    || dst->type != OF_IR_REG_VARC)
+		    || dst->type != OF_IR_REG_VARC || src->flags || dst->flags)
 			continue;
 
 		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
