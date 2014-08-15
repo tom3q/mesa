@@ -196,7 +196,8 @@ dump_chunks(struct of_ir_optimizer *opt)
 	LIST_FOR_EACH_ENTRY(c, &opt->chunks, list) {
 		unsigned long *num;
 
-		_debug_printf("{cost = %u, comp = %u}: ", c->cost, c->comp);
+		_debug_printf("{cost = %u, comp = %x, parity = %x}: ",
+				c->cost, c->comp, c->parity);
 
 		OF_VALSET_FOR_EACH_VAL(num, &c->vars)
 			_debug_printf("%lu ", *num);
@@ -422,16 +423,17 @@ color_reg_constraint(struct of_ir_optimizer *opt, struct of_ir_constraint *c)
 			create_chunk(opt, v);
 
 		ch[i] = v->chunk;
-		parity_mask |= ch[i]->parity;
 
-		if (v->chunk->comp) {
-			if (v->chunk->comp & comp_mask) {
-				ch[i] = create_chunk(opt, v);
-				assert(!ch[i]->comp);
-			} else {
-				comp_mask |= v->chunk->comp;
-			}
+		if ((parity_mask | ch[i]->parity) == 0x3) {
+			ch[i] = create_chunk(opt, v);
+			assert(!ch[i]->parity);
+		} else if (v->chunk->comp & comp_mask) {
+			ch[i] = create_chunk(opt, v);
+			assert(!ch[i]->comp);
 		}
+
+		comp_mask |= v->chunk->comp;
+		parity_mask |= ch[i]->parity;
 
 		init_reg_bitmap_for_chunk(opt, &opt->reg_bitmap[i], ch[i]);
 		++i;
