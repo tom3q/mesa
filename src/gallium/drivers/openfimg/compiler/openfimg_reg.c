@@ -73,6 +73,21 @@ vars_interference(struct of_ir_optimizer *opt, uint16_t var1, uint16_t var2)
 	return v1->interference && of_bitmap_get(v1->interference, var2);
 }
 
+static void
+remove_interference(struct of_ir_optimizer *opt, uint16_t var1, uint16_t var2)
+{
+	struct of_ir_variable *v1 = get_var(opt, var1);
+	struct of_ir_variable *v2 = get_var(opt, var2);
+
+	if (!v1->interference)
+		return;
+
+	assert(v2->interference);
+
+	of_bitmap_clear(v1->interference, var2);
+	of_bitmap_clear(v2->interference, var1);
+}
+
 /*
  * Variable coalescing
  */
@@ -691,6 +706,7 @@ split_operand(struct of_ir_optimizer *opt, struct of_ir_instruction *ins,
 	      struct of_ir_register *reg, bool dst)
 {
 	uint16_t vars[OF_IR_VEC_SIZE];
+	uint16_t copies[OF_IR_VEC_SIZE];
 	unsigned comp;
 	unsigned cnt;
 
@@ -705,21 +721,40 @@ split_operand(struct of_ir_optimizer *opt, struct of_ir_instruction *ins,
 			continue;
 
 		var = reg->var[comp];
+
+		if (!var)
+			continue;
+
 		for (i = 0; i < cnt; ++i)
 			if (vars[i] == var)
 				break;
-		if (i != cnt)
+		if (i != cnt) {
+			reg->var[comp] = copies[i];
 			continue;
+		}
 
-		tmp = add_var_num(opt);
-		copy = create_copy(opt, tmp, var);
-
-		if (dst)
+		if (dst) {
+			tmp = add_var_num(opt);
+			copy = create_copy(opt, tmp, var);
 			of_ir_instr_insert(opt->shader, NULL, ins, copy);
-		else
-			of_ir_instr_insert_before(opt->shader, NULL, ins, copy);
+			add_affinity(opt, tmp, var, 20000);
+		} else {
+			uint16_t tmp2;
 
-		add_affinity(opt, tmp, var, 20000);
+			tmp = add_var_num(opt);
+			copy = create_copy(opt, tmp, var);
+			of_ir_instr_insert_before(opt->shader, NULL, ins, copy);
+			add_affinity(opt, tmp, var, 20000);
+
+			tmp2 = add_var_num(opt);
+			copy = create_copy(opt, tmp2, tmp);
+			of_ir_instr_insert(opt->shader, NULL, ins, copy);
+			add_affinity(opt, var, tmp2, 20000);
+
+			reg->var[comp] = tmp;
+		}
+
+		copies[cnt] = tmp;
 		vars[cnt++] = var;
 	}
 }
@@ -1038,9 +1073,24 @@ add_constraints_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
 		const struct of_ir_opc_info *info;
+		struct of_ir_register *src;
 		unsigned tmp_srcs = 0;
 		unsigned comp;
 		unsigned i;
+
+		if (ins->flags & OF_IR_INSTR_COPY) {
+			assert(dst && dst->type == OF_IR_REG_VAR);
+			assert(ins->num_srcs == 1);
+			src = ins->srcs[0];
+			assert(src && src->type == OF_IR_REG_VAR);
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				if (!reg_comp_used(dst, comp))
+					continue;
+				remove_interference(opt, src->var[comp],
+							dst->var[comp]);
+			}
+		}
 
 		if (dst && dst->type == OF_IR_REG_VAR) {
 			info = of_ir_get_opc_info(ins->opc);
@@ -1061,8 +1111,7 @@ add_constraints_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		}
 
 		for (i = 0; i < ins->num_srcs; ++i) {
-			struct of_ir_register *src = ins->srcs[i];
-
+			src = ins->srcs[i];
 			if (src->type == OF_IR_REG_VAR) {
 				if (reg_is_vector(src))
 					constraint_vector(opt, src);
