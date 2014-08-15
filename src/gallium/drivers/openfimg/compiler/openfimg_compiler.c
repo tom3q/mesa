@@ -303,7 +303,7 @@ get_immediate(struct of_compile_context *ctx, unsigned dim, const float *vals)
 	unsigned offset = ctx->num_immediates % 4;
 	unsigned free_in_slot = 4 - offset;
 	unsigned ptr = ctx->num_immediates;
-	char swizzle[4];
+	char swizzle[4] = "xxxx";
 	unsigned i;
 
 	assert(dim <= 4);
@@ -317,7 +317,7 @@ get_immediate(struct of_compile_context *ctx, unsigned dim, const float *vals)
 	ctx->num_immediates = ptr + dim;
 
 	for (i = 0; i < dim; ++i)
-		swizzle[i] = 'x' + offset + i;
+		swizzle[i] = "xyzw"[offset + i];
 	for (i = dim; i < 4; ++i)
 		swizzle[i] = swizzle[dim - 1];
 
