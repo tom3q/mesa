@@ -108,6 +108,8 @@ struct of_ir_opc_info {
 	unsigned num_srcs;
 	const dst_map_t *dst_map;
 	bool fix_comp;
+	bool replicated;
+	bool tex;
 };
 
 struct of_ir_instr_template {
