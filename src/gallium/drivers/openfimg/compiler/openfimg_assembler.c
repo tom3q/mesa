@@ -224,52 +224,13 @@ set_flags(unsigned val, uint32_t *instr, const struct of_instr_flag *flags)
 }
 
 static uint32_t
-dst_mask(struct of_ir_register *reg)
-{
-	uint32_t swiz = 0x0;
-	int i;
-
-	DEBUG_MSG("alu dst R%d.%s", reg->num, reg->swizzle);
-
-	if (!reg->swizzle)
-		return 0xf;
-
-	for (i = 3; i >= 0; i--) {
-		swiz <<= 1;
-		if (reg->swizzle[i] == "xyzw"[i]) {
-			swiz |= 0x1;
-		} else if (reg->swizzle[i] != '_') {
-			ERROR_MSG("invalid dst swizzle: %s", reg->swizzle);
-			break;
-		}
-	}
-
-	return swiz;
-}
-
-static uint32_t
 src_swiz(struct of_ir_register *reg)
 {
 	uint32_t swiz = 0x00;
 	int i;
 
-	DEBUG_MSG("vector src R%d.%s", reg->num, reg->swizzle);
-
-	if (!reg->swizzle)
-		return 0xe4;
-
-	for (i = 0; i < 4; ++i) {
-		swiz >>= 2;
-		switch (reg->swizzle[i]) {
-		case 'x': swiz |= 0x0 << 6; break;
-		case 'y': swiz |= 0x1 << 6; break;
-		case 'z': swiz |= 0x2 << 6; break;
-		case 'w': swiz |= 0x3 << 6; break;
-		default:
-			ERROR_MSG("invalid vector src swizzle: %s",
-					reg->swizzle);
-		}
-	}
+	for (i = 0; i < 4; ++i)
+		swiz |= reg->swizzle[i] << 2 * i;
 
 	return swiz;
 }
@@ -318,7 +279,7 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 		info = of_ir_get_reg_info(shader, dst->type);
 		set_bitfield(dst->num, dwords, &dst_bitfields.num);
 		set_bitfield(info->dst_type, dwords, &dst_bitfields.type);
-		set_bitfield(dst_mask(dst), dwords, &dst_bitfields.mask);
+		set_bitfield(dst->mask, dwords, &dst_bitfields.mask);
 		set_flags(dst->flags, dwords, dst_bitfields.flags);
 	}
 

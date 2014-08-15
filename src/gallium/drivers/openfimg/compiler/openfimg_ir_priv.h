@@ -115,7 +115,7 @@ struct of_ir_register {
 	uint8_t mask;
 	uint8_t deadmask;
 	/* Register channel swizzle(map)/mask. */
-	char swizzle[4];
+	uint8_t swizzle[4];
 	/* Register type. */
 	enum of_ir_reg_type type;
 };

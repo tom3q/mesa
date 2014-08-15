@@ -1335,8 +1335,6 @@ assign_destination(struct of_ir_instruction *ins, struct of_ir_register *dst)
 
 	info = of_ir_get_opc_info(ins->opc);
 
-	memset(dst->swizzle, '_', sizeof(dst->swizzle));
-
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 		uint16_t reg = color_reg(dst->var[comp]);
 		uint16_t chan = color_comp(dst->var[comp]);
@@ -1352,7 +1350,6 @@ assign_destination(struct of_ir_instruction *ins, struct of_ir_register *dst)
 		}
 
 		dst->num = reg;
-		dst->swizzle[chan] = "xyzw"[chan];
 		assert(!(mask & BIT(chan)) && "duplicate channel in dst?");
 		mask |= BIT(chan);
 	}
@@ -1367,7 +1364,7 @@ assign_destination(struct of_ir_instruction *ins, struct of_ir_register *dst)
 static void
 assign_source(struct of_ir_register *src)
 {
-	char safe_chan = 'x';
+	char safe_chan = 0;
 	unsigned comp;
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
@@ -1378,7 +1375,7 @@ assign_source(struct of_ir_register *src)
 			continue;
 
 		src->num = reg;
-		safe_chan = src->swizzle[comp] = "xyzw"[chan];
+		safe_chan = src->swizzle[comp] = chan;
 	}
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
