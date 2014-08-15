@@ -207,6 +207,7 @@ struct of_ir_shader {
 
 void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 		    void *extra_data);
+void of_ir_merge_flags(struct of_ir_register *reg, enum of_ir_reg_flags flags);
 
 int of_ir_to_ssa(struct of_ir_shader *shader);
 int of_ir_optimize(struct of_ir_shader *shader);
