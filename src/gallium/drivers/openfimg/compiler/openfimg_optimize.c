@@ -67,14 +67,14 @@ liveness_src(struct of_ir_optimizer *opt, struct of_ir_register *dst,
 		unsigned dcomp;
 		unsigned var;
 
-		if (!(src->mask & (1 << scomp)))
+		if (!reg_comp_used(src, scomp))
 			continue;
 
 		for (dcomp = 0; dcomp < OF_IR_VEC_SIZE; ++dcomp) {
 			const char *mask = (*dst_map)[dcomp];
 
-			if (!(dst->mask & (1 << dcomp))
-			    || (dst->deadmask & (1 << dcomp)))
+			if (!reg_comp_used(dst, dcomp)
+			    || (dst->deadmask & BIT(dcomp)))
 				continue;
 
 			if (mask[scomp] == "xyzw"[scomp]) {
@@ -84,10 +84,10 @@ liveness_src(struct of_ir_optimizer *opt, struct of_ir_register *dst,
 		}
 
 		if (!alive) {
-			src->deadmask |= 1 << scomp;
+			src->deadmask |= BIT(scomp);
 			continue;
 		}
-		src->deadmask &= ~(1 << scomp);
+		src->deadmask &= ~BIT(scomp);
 
 		if (src->type != OF_IR_REG_VAR)
 			continue;
@@ -124,7 +124,7 @@ liveness_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 			uint16_t var = dst->var[comp];
 			unsigned comp_alive;
 
-			if (!(dst->mask & (1 << comp)))
+			if (!reg_comp_used(dst, comp))
 				continue;
 
 			get_var(opt, var)->def_ins = ins;
@@ -133,9 +133,9 @@ liveness_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 			alive |= comp_alive;
 
 			if (!comp_alive)
-				dst->deadmask |= 1 << comp;
+				dst->deadmask |= BIT(comp);
 			else
-				dst->deadmask &= ~(1 << comp);
+				dst->deadmask &= ~BIT(comp);
 		}
 
 		if (!alive) {
@@ -384,7 +384,7 @@ assign_to_tmp(struct of_ir_optimizer *opt, struct of_ir_instruction *ins,
 	of_ir_instr_add_src(copy, src);
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-		if (!(reg->mask & (1 << comp)))
+		if (!reg_comp_used(reg, comp))
 			continue;
 
 		dst->var[comp] = reg->var[comp] = add_var_num(opt);
