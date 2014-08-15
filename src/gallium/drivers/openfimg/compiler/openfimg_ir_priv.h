@@ -251,4 +251,20 @@ add_var_num(struct of_ir_optimizer *opt)
 	return var_num(opt, add_var(opt));
 }
 
+/*
+ * Register helpers.
+ */
+
+static INLINE bool
+reg_is_vector(struct of_ir_register *reg)
+{
+	return reg->mask & (reg->mask - 1);
+}
+
+static INLINE bool
+reg_comp_used(struct of_ir_register *reg, unsigned comp)
+{
+	return reg->mask & BIT(comp);
+}
+
 #endif /* OF_IR_PRIV_H_ */
