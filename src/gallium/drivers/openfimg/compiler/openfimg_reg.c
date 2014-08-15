@@ -1555,6 +1555,8 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	RUN_PASS(shader, opt, add_constraints);
 	dump_interference(opt);
 	util_slab_destroy(&opt->live_slab);
+	DBG("AST (post-liveness2)");
+	of_ir_dump_ast(shader, NULL, 0);
 
 	util_dynarray_init(&opt->chunk_queue);
 	util_slab_create(&opt->chunk_slab, sizeof(struct of_ir_chunk),
