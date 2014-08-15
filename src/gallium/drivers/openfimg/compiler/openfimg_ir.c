@@ -441,15 +441,18 @@ merge_swizzle(struct of_ir_register *reg, const char *swizzle)
 	memcpy(reg->swizzle, result, sizeof(reg->swizzle));
 }
 
-static void
-merge_flags(struct of_ir_register *reg, enum of_ir_reg_flags flags)
+void
+of_ir_merge_flags(struct of_ir_register *reg, enum of_ir_reg_flags flags)
 {
-	/* Exclusive flags */
-	if (reg->flags & OF_IR_REG_NEGATE && flags & OF_IR_REG_ABS)
+	/* Absolute on top of negate === absolute alone. */
+	if (flags & OF_IR_REG_ABS)
 		reg->flags &= ~OF_IR_REG_NEGATE;
 
-	/* Additive flags */
-	reg->flags |= flags;
+	/* Negating negation === no negation. */
+	reg->flags ^= flags & OF_IR_REG_NEGATE;
+
+	/* Saturation and absolute are additive. */
+	reg->flags |= flags & (OF_IR_REG_SAT | OF_IR_REG_ABS);
 }
 
 void
@@ -469,7 +472,7 @@ of_ir_instr_insert_templ(struct of_ir_shader *shader,
 			if (instrs->dst.mask)
 				merge_mask(instrs->dst.reg, instrs->dst.mask);
 
-			merge_flags(instrs->dst.reg, instrs->dst.flags);
+			of_ir_merge_flags(instrs->dst.reg, instrs->dst.flags);
 			of_ir_instr_add_dst(instr, instrs->dst.reg);
 		}
 
@@ -481,8 +484,8 @@ of_ir_instr_insert_templ(struct of_ir_shader *shader,
 				merge_swizzle(instrs->src[src].reg,
 						instrs->src[src].swizzle);
 
-			merge_flags(instrs->src[src].reg,
-					instrs->src[src].flags);
+			of_ir_merge_flags(instrs->src[src].reg,
+						instrs->src[src].flags);
 			of_ir_instr_add_src(instr, instrs->src[src].reg);
 		}
 
@@ -519,7 +522,7 @@ of_ir_node_if_then(struct of_ir_shader *shader, struct of_ir_register *reg,
 	node->type = OF_IR_NODE_IF_THEN;
 	node->if_then.reg = reg;
 	merge_swizzle(reg, swizzle);
-	merge_flags(reg, flags);
+	of_ir_merge_flags(reg, flags);
 
 	return node;
 }
