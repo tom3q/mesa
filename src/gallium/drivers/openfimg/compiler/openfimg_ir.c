@@ -253,12 +253,41 @@ of_ir_reg_create(struct of_ir_shader *shader, enum of_ir_reg_type type,
 		 unsigned num, const char *swizzle, unsigned flags)
 {
 	struct of_ir_register *reg = of_heap_alloc(shader->heap, sizeof(*reg));
+	unsigned comp;
 
 	DEBUG_MSG("%x, %d, %s", flags, num, swizzle);
 	reg->flags = flags;
 	reg->type = type;
 	reg->num = num;
-	memcpy(reg->swizzle, swizzle, sizeof(reg->swizzle));
+	reg->mask = 0xf;
+
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		switch (swizzle[comp]) {
+		case 'x':
+			reg->swizzle[comp] = 0;
+			break;
+		case 'y':
+			reg->swizzle[comp] = 1;
+			break;
+		case 'z':
+			reg->swizzle[comp] = 2;
+			break;
+		case 'w':
+			reg->swizzle[comp] = 3;
+			break;
+		case '_':
+			reg->swizzle[comp] = comp;
+			reg->mask &= ~BIT(comp);
+			break;
+		default:
+			ERROR_MSG("invalid vector swizzle/mask: %s", swizzle);
+			assert(0);
+		}
+
+		if (reg->type == OF_IR_REG_VAR)
+			reg->var[comp] = OF_IR_VEC_SIZE * num
+						+ reg->swizzle[comp];
+	}
 
 	return reg;
 }
@@ -300,39 +329,15 @@ of_ir_instr_add_dst(struct of_ir_instruction *instr, struct of_ir_register *reg)
 	instr->dst = reg;
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp)
-		if (reg->swizzle[comp] == "xyzw"[comp]) {
-			reg->mask |= (1 << comp);
-			if (reg->type == OF_IR_REG_VAR)
-				reg->var[comp] = OF_IR_VEC_SIZE * reg->num
-									+ comp;
-		}
+		reg->swizzle[comp] = comp;
 }
 
 void
 of_ir_instr_add_src(struct of_ir_instruction *instr, struct of_ir_register *reg)
 {
-	unsigned comp;
-
 	assert(instr->num_srcs < ARRAY_SIZE(instr->srcs));
 	instr->srcs[instr->num_srcs++] = reg;
-
-	reg->mask = (1 << OF_IR_VEC_SIZE) - 1;
-
-	if (reg->type != OF_IR_REG_VAR)
-		return;
-
-	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-		switch (reg->swizzle[comp]) {
-		case 'x': reg->var[comp] = OF_IR_VEC_SIZE * reg->num + 0; break;
-		case 'y': reg->var[comp] = OF_IR_VEC_SIZE * reg->num + 1; break;
-		case 'z': reg->var[comp] = OF_IR_VEC_SIZE * reg->num + 2; break;
-		case 'w': reg->var[comp] = OF_IR_VEC_SIZE * reg->num + 3; break;
-		default:
-			ERROR_MSG("invalid vector src swizzle: %s",
-					reg->swizzle);
-			assert(0);
-		}
-	}
+	reg->mask = 0xf;
 }
 
 static void
@@ -410,9 +415,9 @@ merge_mask(struct of_ir_register *reg, const char *mask)
 {
 	unsigned comp;
 
-	for (comp = 0; comp < ARRAY_SIZE(reg->swizzle); ++comp)
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp)
 		if (mask[comp] != "xyzw"[comp])
-			reg->swizzle[comp] = '_';
+			reg->mask &= ~BIT(comp);
 }
 
 static void
@@ -421,7 +426,7 @@ merge_swizzle(struct of_ir_register *reg, const char *swizzle)
 	unsigned comp;
 	char result[4];
 
-	for (comp = 0; comp < ARRAY_SIZE(reg->swizzle); ++comp) {
+	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 		switch (swizzle[comp]) {
 		case 'x': result[comp] = reg->swizzle[0]; break;
 		case 'y': result[comp] = reg->swizzle[1]; break;
@@ -814,7 +819,7 @@ format_src_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 					reg->var[comp]);
 		else
 			lsnprintf(&buf, &maxlen, "%2s%03d.%c", info->name,
-					reg->num, reg->swizzle[comp]);
+					reg->num, "xyzw"[reg->swizzle[comp]]);
 
 		if (++comp == OF_IR_VEC_SIZE)
 			break;
@@ -847,7 +852,7 @@ format_dst_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 		else
 			lsnprintf(&buf, &maxlen, "%2s%03d.%c",
 					info->name, reg->num,
-					reg->swizzle[comp]);
+					"xyzw"[reg->swizzle[comp]]);
 
 		if (++comp == OF_IR_VEC_SIZE)
 			break;
