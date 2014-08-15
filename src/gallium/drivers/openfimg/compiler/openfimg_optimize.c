@@ -73,8 +73,8 @@ liveness_src(struct of_ir_optimizer *opt, struct of_ir_register *dst,
 		for (dcomp = 0; dcomp < OF_IR_VEC_SIZE; ++dcomp) {
 			const char *mask = (*dst_map)[dcomp];
 
-			if (!reg_comp_used(dst, dcomp)
-			    || (dst->deadmask & BIT(dcomp)))
+			if (dst && (!reg_comp_used(dst, dcomp)
+			    || (dst->deadmask & BIT(dcomp))))
 				continue;
 
 			if (mask[scomp] == "xyzw"[scomp]) {
