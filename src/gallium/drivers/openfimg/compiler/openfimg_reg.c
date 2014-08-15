@@ -30,8 +30,8 @@
 #include "openfimg_util.h"
 
 enum of_ir_constraint_type {
-	OF_IR_CONSTR_SAME_REG = (1 << 0),
-	OF_IR_CONSTR_PHI = (1 << 1),
+	OF_IR_CONSTR_SAME_REG = BIT(0),
+	OF_IR_CONSTR_PHI = BIT(1),
 };
 
 struct of_ir_chunk {
@@ -439,7 +439,7 @@ color_reg_constraint(struct of_ir_optimizer *opt, struct of_ir_constraint *c)
 
 	do {
 		for (i = 0; i < c->num_vars; ++i)
-			if (ch[i]->comp && ch[i]->comp != (1 << swz[i]))
+			if (ch[i]->comp && ch[i]->comp != BIT(swz[i]))
 				break;
 		if (i != c->num_vars)
 			continue;
@@ -482,7 +482,7 @@ done:
 		color_chunk(opt, cc, color);
 		cc->fixed = 1;
 		cc->prealloc = 1;
-		cc->comp = (1 << swz[i]);
+		cc->comp = BIT(swz[i]);
 		++i;
 	}
 
@@ -682,18 +682,6 @@ create_copy(struct of_ir_optimizer *opt, uint16_t dst_var, uint16_t src_var)
 	return ins;
 }
 
-static INLINE bool
-is_vector(struct of_ir_register *reg)
-{
-	return reg->mask & (reg->mask - 1);
-}
-
-static INLINE bool
-comp_used(struct of_ir_register *reg, unsigned comp)
-{
-	return reg->mask & (1 << comp);
-}
-
 static void
 split_operand(struct of_ir_optimizer *opt, struct of_ir_instruction *ins,
 	      struct of_ir_register *reg, bool dst)
@@ -709,7 +697,7 @@ split_operand(struct of_ir_optimizer *opt, struct of_ir_instruction *ins,
 		uint16_t tmp;
 		unsigned i;
 
-		if (!comp_used(reg, comp))
+		if (!reg_comp_used(reg, comp))
 			continue;
 
 		var = reg->var[comp];
@@ -743,16 +731,16 @@ split_live_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		unsigned split = 0x7;
 		unsigned i;
 
-		if (dst && dst->type == OF_IR_REG_VAR && is_vector(dst))
+		if (dst && dst->type == OF_IR_REG_VAR && reg_is_vector(dst))
 			split_operand(opt, ins, dst, true);
 
 		for (i = 0; i < ins->num_srcs; ++i) {
 			struct of_ir_register *src = ins->srcs[i];
 
 			if (src->type == OF_IR_REG_VAR) {
-				if (is_vector(src)) {
+				if (reg_is_vector(src)) {
 					split_operand(opt, ins, src, false);
-					split &= ~(1 << i);
+					split &= ~BIT(i);
 				}
 				++tmp_srcs;
 			}
@@ -889,7 +877,7 @@ rename_copies_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 				uint16_t var = src->var[comp];
 
-				if (!(src->mask & (1 << comp)))
+				if (!reg_comp_used(src, comp))
 					continue;
 
 				if (opt->renames[var])
@@ -909,7 +897,7 @@ rename_copies_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 				uint16_t var = src->var[comp];
 
-				if (!(dst->mask & (1 << comp)))
+				if (!reg_comp_used(dst, comp))
 					continue;
 
 				opt->renames[var] = dst->var[comp];
@@ -922,7 +910,7 @@ rename_copies_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 				continue;
 
 			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-				if (!(src->mask & (1 << comp)))
+				if (!reg_comp_used(src, comp))
 					continue;
 
 				if (new_src[i][comp])
@@ -1023,7 +1011,7 @@ constraint_vector(struct of_ir_optimizer *opt, struct of_ir_register *reg)
 		uint16_t var;
 		unsigned i;
 
-		if (!comp_used(reg, comp))
+		if (!reg_comp_used(reg, comp))
 			continue;
 
 		var = reg->var[comp];
@@ -1057,14 +1045,14 @@ add_constraints_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 				for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 					uint16_t var = dst->var[comp];
 
-					if (!comp_used(dst, comp))
+					if (!reg_comp_used(dst, comp))
 						continue;
 
-					get_var(opt, var)->comp = (1 << comp);
+					get_var(opt, var)->comp = BIT(comp);
 				}
 			}
 
-			if (is_vector(dst))
+			if (reg_is_vector(dst))
 				constraint_vector(opt, dst);
 		}
 
@@ -1072,7 +1060,7 @@ add_constraints_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 			struct of_ir_register *src = ins->srcs[i];
 
 			if (src->type == OF_IR_REG_VAR) {
-				if (is_vector(src))
+				if (reg_is_vector(src))
 					constraint_vector(opt, src);
 				++tmp_srcs;
 			}
@@ -1087,7 +1075,7 @@ add_constraints_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 				uint16_t var = src->var[comp];
 
-				if (!comp_used(src, comp))
+				if (!reg_comp_used(src, comp))
 					continue;
 
 				get_var(opt, var)->parity = BIT(opt->parity);
@@ -1160,7 +1148,7 @@ color_var(struct of_ir_optimizer *opt, struct of_ir_variable *v)
 		if (v->parity & BIT(reg % 2))
 			continue;
 
-		if (comp_mask & (1 << comp))
+		if (comp_mask & BIT(comp))
 			break;
 	}
 
@@ -1176,7 +1164,7 @@ color_operand(struct of_ir_optimizer *opt, struct of_ir_register *reg)
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 		struct of_ir_variable *v = get_var(opt, reg->var[comp]);
 
-		if (!(reg->mask & (1 << comp)))
+		if (!reg_comp_used(reg, comp))
 			continue;
 
 		if (!v->color)
@@ -1235,7 +1223,7 @@ copy_elimination_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 			continue;
 
 		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-			if (!(dst->mask & (1 << comp)))
+			if (!reg_comp_used(dst, comp))
 				continue;
 			if (src->var[comp] != dst->var[comp])
 				break;
@@ -1297,7 +1285,7 @@ assign_destination(struct of_ir_instruction *ins, struct of_ir_register *dst)
 		uint16_t reg = color_reg(dst->var[comp]);
 		uint16_t chan = color_comp(dst->var[comp]);
 
-		if (!(dst->mask & (1 << comp)))
+		if (!reg_comp_used(dst, comp))
 			continue;
 
 		if (chan != comp) {
@@ -1309,8 +1297,8 @@ assign_destination(struct of_ir_instruction *ins, struct of_ir_register *dst)
 
 		dst->num = reg;
 		dst->swizzle[chan] = "xyzw"[chan];
-		assert(!(mask & (1 << chan)) && "duplicate channel in dst?");
-		mask |= (1 << chan);
+		assert(!(mask & BIT(chan)) && "duplicate channel in dst?");
+		mask |= BIT(chan);
 	}
 
 	if (need_remap)
@@ -1330,7 +1318,7 @@ assign_source(struct of_ir_register *src)
 		uint16_t reg = color_reg(src->var[comp]);
 		uint16_t chan = color_comp(src->var[comp]);
 
-		if (!(src->mask & (1 << comp)))
+		if (!reg_comp_used(src, comp))
 			continue;
 
 		src->num = reg;
@@ -1338,7 +1326,7 @@ assign_source(struct of_ir_register *src)
 	}
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-		if (src->mask & (1 << comp)) {
+		if (reg_comp_used(src, comp)) {
 			uint16_t reg = color_reg(src->var[comp]);
 
 			assert(src->num == reg
