@@ -29,6 +29,16 @@
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
+#define VERBOSE_DUMP	0
+
+#if VERBOSE_DUMP
+#define VERBOSE(code)	do {			\
+		code;					\
+	} while(0)
+#else
+#define VERBOSE(code)
+#endif
+
 enum of_ir_constraint_type {
 	OF_IR_CONSTR_SAME_REG = BIT(0),
 	OF_IR_CONSTR_PHI = BIT(1),
@@ -184,7 +194,7 @@ prepare_chunks(struct of_ir_optimizer *opt)
 		struct of_ir_variable *v0 = get_var(opt, a->vars[0]);
 		struct of_ir_variable *v1 = get_var(opt, a->vars[1]);
 
-		DBG("v0 = %u, v1 = %u", a->vars[0], a->vars[1]);
+		VERBOSE(DBG("v0 = %u, v1 = %u", a->vars[0], a->vars[1]));
 
 		if (!v0->chunk)
 			create_chunk(opt, v0);
@@ -201,6 +211,7 @@ prepare_chunks(struct of_ir_optimizer *opt)
 	}
 }
 
+#if VERBOSE_DUMP
 static void
 dump_chunks(struct of_ir_optimizer *opt)
 {
@@ -220,6 +231,7 @@ dump_chunks(struct of_ir_optimizer *opt)
 		_debug_printf("\n");
 	}
 }
+#endif
 
 static int
 constraint_compare(const void *a, const void *b)
@@ -261,6 +273,7 @@ prepare_constraints(struct of_ir_optimizer *opt)
 	qsort(array, opt->num_constraints, sizeof(*array), constraint_compare);
 }
 
+#if VERBOSE_DUMP
 static void
 dump_constraints(struct of_ir_optimizer *opt)
 {
@@ -281,6 +294,7 @@ dump_constraints(struct of_ir_optimizer *opt)
 		_debug_printf("\n");
 	}
 }
+#endif
 
 static bool
 next_swizzle(uint8_t swz[4])
@@ -355,8 +369,8 @@ color_chunk(struct of_ir_optimizer *opt, struct of_ir_chunk *c, unsigned color)
 			c->fixed = 1;
 		}
 
-		DBG("assigned R%u.%c to @%u",
-			color_reg(color), "xyzw"[comp], *num);
+		VERBOSE(DBG("assigned R%u.%c to @%u",
+			color_reg(color), "xyzw"[comp], *num));
 	}
 
 	c->color = color;
@@ -481,8 +495,8 @@ color_reg_constraint(struct of_ir_optimizer *opt, struct of_ir_constraint *c)
 	return -1;
 
 done:
-	DBG("reg = %u, swz = (%d,%d,%d,%d)",
-		reg, swz[0], swz[1], swz[2], swz[3]);
+	VERBOSE(DBG("reg = %u, swz = (%d,%d,%d,%d)",
+		reg, swz[0], swz[1], swz[2], swz[3]));
 
 	i = 0;
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
@@ -557,6 +571,7 @@ prepare_chunk_queue(struct of_ir_optimizer *opt)
 	opt->chunk_queue_len = num_chunks;
 }
 
+#if VERBOSE_DUMP
 static void
 dump_chunk_queue(struct of_ir_optimizer *opt)
 {
@@ -577,6 +592,7 @@ dump_chunk_queue(struct of_ir_optimizer *opt)
 		_debug_printf("\n");
 	}
 }
+#endif
 
 static void
 color_chunks(struct of_ir_optimizer *opt)
@@ -624,12 +640,12 @@ static void
 precolor(struct of_ir_optimizer *opt)
 {
 	prepare_chunks(opt);
-	dump_chunks(opt);
+	VERBOSE(dump_chunks(opt));
 	prepare_constraints(opt);
-	dump_constraints(opt);
+	VERBOSE(dump_constraints(opt));
 	color_constraints(opt);
 	prepare_chunk_queue(opt);
-	dump_chunk_queue(opt);
+	VERBOSE(dump_chunk_queue(opt));
 	color_chunks(opt);
 }
 
@@ -1429,7 +1445,7 @@ assign_registers(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 /*
  * AST dumping.
  */
-
+#if VERBOSE_DUMP
 static void
 dump_phis(struct list_head *list, unsigned count, unsigned level)
 {
@@ -1509,6 +1525,7 @@ dump_interference(struct of_ir_optimizer *opt)
 		_debug_printf("\n");
 	}
 }
+#endif
 
 int
 of_ir_assign_registers(struct of_ir_shader *shader)
@@ -1533,8 +1550,8 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 				64, UTIL_SLAB_SINGLETHREADED);
 
 	RUN_PASS(shader, opt, split_live);
-	DBG("AST (post-split-live)");
-	of_ir_dump_ast(shader, dump_opt_data, opt);
+	VERBOSE(DBG("AST (post-split-live)"));
+	VERBOSE(of_ir_dump_ast(shader, dump_opt_data, opt));
 
 	opt->renames_stack = of_stack_create(opt->num_vars
 						* sizeof(*opt->renames), 1);
@@ -1542,8 +1559,8 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	memset(opt->renames, 0, opt->num_vars * sizeof(*opt->renames));
 	RUN_PASS(shader, opt, rename_copies);
 	of_stack_destroy(opt->renames_stack);
-	DBG("AST (post-rename-copies)");
-	of_ir_dump_ast(shader, dump_opt_data, opt);
+	VERBOSE(DBG("AST (post-rename-copies)"));
+	VERBOSE(of_ir_dump_ast(shader, dump_opt_data, opt));
 
 	util_slab_create(&opt->live_slab, OF_BITMAP_BYTES_FOR_BITS(opt->num_vars),
 				32, UTIL_SLAB_SINGLETHREADED);
@@ -1553,18 +1570,18 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	RUN_PASS(shader, opt, liveness);
 	RUN_PASS(shader, opt, cleanup);
 	RUN_PASS(shader, opt, add_constraints);
-	dump_interference(opt);
+	VERBOSE(dump_interference(opt));
 	util_slab_destroy(&opt->live_slab);
-	DBG("AST (post-liveness2)");
-	of_ir_dump_ast(shader, NULL, 0);
+	VERBOSE(DBG("AST (post-liveness2)"));
+	VERBOSE(of_ir_dump_ast(shader, NULL, 0));
 
 	util_dynarray_init(&opt->chunk_queue);
 	util_slab_create(&opt->chunk_slab, sizeof(struct of_ir_chunk),
 				32, UTIL_SLAB_SINGLETHREADED);
 	precolor(opt);
 	RUN_PASS(shader, opt, assign_colors);
-	DBG("AST (post-color-assignment)");
-	of_ir_dump_ast(shader, NULL, 0);
+	VERBOSE(DBG("AST (post-color-assignment)"));
+	VERBOSE(of_ir_dump_ast(shader, NULL, 0));
 
 	RUN_PASS(shader, opt, copy_elimination);
 	DBG("AST (post-copy-elimination)");
