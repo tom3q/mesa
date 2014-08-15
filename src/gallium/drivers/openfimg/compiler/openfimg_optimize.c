@@ -435,69 +435,138 @@ validate(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 }
 
 /*
- * A pass to delete moves between variables, which are not necessary in
- * SSA form, since any assignment creates new variable.
+ * Forward propagation of MOV sources.
+ *
+ * This pass tries to eliminate any register moves in the code by tracking
+ * contents of variables affected by them and replacing, if possible, source
+ * operands of instructions accessing them with sources of respective move.
+ *
+ * For non-temp (inputs, constants) to temp (variables) moves, due to HW
+ * design, source registers and flags must be the same for all components of
+ * the vector. For temp to temp moves, since registers are not assigned yet,
+ * we require just the flags to match. In addition, flags of MOV source may
+ * be different than those of affected instructions, because they can be
+ * merged together forming new set of flags.
  */
 
-static void
-delete_moves_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
-{
-	struct of_ir_instruction *ins, *s;
+struct of_ir_var_map {
+	enum of_ir_reg_flags flags;
+	enum of_ir_reg_type type;
+	uint16_t reg;
+	uint8_t comp;
+};
 
-	LIST_FOR_EACH_ENTRY_SAFE(ins, s, &node->list.instrs, list) {
+static INLINE void
+make_map(struct of_ir_var_map *map, struct of_ir_register *reg, unsigned comp)
+{
+	map->type = reg->type;
+	map->flags = reg->flags;
+
+	if (reg->type == OF_IR_REG_VAR) {
+		map->reg = reg->var[comp];
+		map->comp = comp;
+	} else {
+		map->reg = reg->num;
+		map->comp = reg->swizzle[comp];
+	}
+}
+
+static bool
+maps_compatible(struct of_ir_var_map *m1, struct of_ir_var_map *m2)
+{
+	if (!m2->type)
+		return false;
+	if (!m1)
+		return true;
+	if (m1->type != m2->type)
+		return false;
+	if (m1->type != OF_IR_REG_VAR && m1->reg != m2->reg)
+		return false;
+	return m1->flags == m2->flags;
+}
+
+static void
+src_propagation_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_instruction *ins;
+
+	LIST_FOR_EACH_ENTRY(ins, &node->list.instrs, list) {
 		struct of_ir_register *dst, *src;
 		unsigned comp;
+		uint16_t var;
 		unsigned i;
 
 		for (i = 0; i < ins->num_srcs; ++i) {
+			struct of_ir_var_map *map = NULL;
+
 			src = ins->srcs[i];
 			if (src->type != OF_IR_REG_VAR)
 				continue;
 
 			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-				uint16_t var = src->var[comp];
+				struct of_ir_var_map *map_next;
 
-				if (!reg_comp_used(src, comp))
+				var = src->var[comp];
+				if (!reg_comp_used(src, comp) || !var)
 					continue;
 
-				if (opt->renames[var])
-					src->var[comp] = opt->renames[var];
+				map_next = &opt->maps[var];
+				if (!maps_compatible(map, map_next))
+					break;
+
+				map = map_next;
 			}
+			if (comp != OF_IR_VEC_SIZE)
+				continue;
+
+			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+				var = src->var[comp];
+				if (!reg_comp_used(src, comp) || !var)
+					continue;
+
+				map = &opt->maps[var];
+				src->swizzle[comp] = map->comp;
+				src->var[comp] = map->reg;
+			}
+
+			src->num = map->reg;
+			src->type = map->type;
+			of_ir_merge_flags(src, map->flags);
 		}
 
 		dst = ins->dst;
 		src = ins->srcs[0];
 
 		if (ins->opc != OF_OP_MOV
-		    || src->type != OF_IR_REG_VAR || src->flags
 		    || dst->type != OF_IR_REG_VAR || dst->flags)
 			continue;
 
 		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-			uint16_t srcv = src->var[comp];
 			uint16_t dstv = dst->var[comp];
 
 			if (!reg_comp_used(dst, comp))
 				continue;
 
-			opt->renames[dstv] = srcv;
+			make_map(&opt->maps[dstv], src, comp);
 		}
-
-		list_del(&ins->list);
 	}
 }
 
 static INLINE void
-rename_phi_operand(struct of_ir_optimizer *opt, unsigned num,
-		   struct of_ir_phi *phi, uint16_t *renames)
+src_propagation_phi(struct of_ir_optimizer *opt, unsigned src,
+		    struct of_ir_phi *phi)
 {
-	uint16_t var = phi->src[num];
-	if (renames[var])
-		phi->src[num] = renames[var];
+	uint16_t var = phi->src[src];
+	struct of_ir_var_map *map = &opt->maps[var];
+
+	if (map->type != OF_IR_REG_VAR || map->flags)
+		return;
+
+	phi->src[src] = map->reg;
 }
 
 static void
-delete_moves(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+src_propagation(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *region;
 	struct of_ir_ast_node *child;
@@ -506,26 +575,26 @@ delete_moves(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.loop_phis, list)
-			rename_phi_operand(opt, 0, phi, opt->renames);
+			src_propagation_phi(opt, 0, phi);
 		break;
 
 	case OF_IR_NODE_IF_THEN:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			rename_phi_operand(opt, 0, phi, opt->renames);
+			src_propagation_phi(opt, 0, phi);
 		break;
 
 	case OF_IR_NODE_DEPART:
 	case OF_IR_NODE_REPEAT:
-		opt->renames = of_stack_push_copy(opt->renames_stack);
+		opt->maps = of_stack_push_copy(opt->maps_stack);
 		break;
 
 	case OF_IR_NODE_LIST:
-		delete_moves_list(opt, node);
+		src_propagation_list(opt, node);
 		return;
 	}
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
-		delete_moves(opt, child);
+		src_propagation(opt, child);
 
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
@@ -533,25 +602,23 @@ delete_moves(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 
 	case OF_IR_NODE_IF_THEN:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			rename_phi_operand(opt, 1, phi, opt->renames);
+			src_propagation_phi(opt, 1, phi);
 		break;
 
 	case OF_IR_NODE_DEPART:
 		region = node->depart_repeat.region;
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.phis, list)
-			rename_phi_operand(opt, node->ssa.depart_number, phi,
-						opt->renames);
+			src_propagation_phi(opt, node->ssa.depart_number, phi);
 
-		opt->renames = of_stack_pop(opt->renames_stack);
+		opt->maps = of_stack_pop(opt->maps_stack);
 		break;
 
 	case OF_IR_NODE_REPEAT:
 		region = node->depart_repeat.region;
 		LIST_FOR_EACH_ENTRY(phi, &region->ssa.loop_phis, list)
-			rename_phi_operand(opt, node->ssa.repeat_number, phi,
-						opt->renames);
+			src_propagation_phi(opt, node->ssa.repeat_number, phi);
 
-		opt->renames = of_stack_pop(opt->renames_stack);
+		opt->maps = of_stack_pop(opt->maps_stack);
 		break;
 
 	default:
@@ -651,21 +718,25 @@ of_ir_optimize(struct of_ir_shader *shader)
 				* sizeof(struct of_ir_variable));
 	memset(util_dynarray_begin(&opt->vars), 0, opt->num_vars
 				* sizeof(struct of_ir_variable));
-	opt->renames_stack = of_stack_create(opt->num_vars
-						* sizeof(*opt->renames), 1);
-	opt->renames = of_stack_top(opt->renames_stack);
-	memset(opt->renames, 0, opt->num_vars * sizeof(*opt->renames));
+
+	opt->maps_stack = of_stack_create(opt->num_vars
+						* sizeof(*opt->maps), 1);
+	opt->maps = of_stack_top(opt->maps_stack);
+	memset(opt->maps, 0, opt->num_vars * sizeof(*opt->maps));
+	RUN_PASS(shader, opt, src_propagation);
+	of_stack_destroy(opt->maps_stack);
+
+	DBG("AST (post-src-propagation)");
+	of_ir_dump_ast(shader, dump_opt_data, opt);
 
 	RUN_PASS(shader, opt, liveness);
 	RUN_PASS(shader, opt, cleanup);
-	RUN_PASS(shader, opt, delete_moves);
 	RUN_PASS(shader, opt, validate);
 
 	DBG("AST (post-optimize/pre-register-assignment)");
 	of_ir_dump_ast(shader, dump_opt_data, opt);
 
 	shader->stats.num_vars = opt->num_vars;
-	of_stack_destroy(opt->renames_stack);
 	util_dynarray_fini(&opt->vars);
 	util_slab_destroy(&opt->live_slab);
 	of_heap_destroy(heap);

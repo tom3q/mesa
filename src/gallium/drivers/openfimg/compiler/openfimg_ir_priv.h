@@ -60,6 +60,8 @@ struct of_ir_variable {
 	unsigned fixed :1;
 };
 
+struct of_ir_var_map;
+
 struct of_ir_optimizer {
 	struct of_ir_shader *shader;
 	struct of_heap *heap;
@@ -75,6 +77,10 @@ struct of_ir_optimizer {
 	unsigned vars_bitmap_size;
 	struct of_heap *shader_heap;
 	uint16_t last_var;
+
+	/* Fields used by optimizer. */
+	struct of_stack *maps_stack;
+	struct of_ir_var_map *maps;
 
 	/* Fields used by register allocator. */
 	struct util_slab_mempool valset_slab;
