@@ -1574,8 +1574,6 @@ of_ir_assign_registers(struct of_ir_shader *shader)
 	of_ir_dump_ast(shader, NULL, 0);
 
 	RUN_PASS(shader, opt, assign_registers);
-	DBG("AST (post-register-assignment)");
-	of_ir_dump_ast(shader, NULL, 0);
 
 	util_dynarray_fini(&opt->vars);
 	util_dynarray_fini(&opt->affinities);
