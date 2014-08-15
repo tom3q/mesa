@@ -713,6 +713,7 @@ split_operand(struct of_ir_optimizer *opt, struct of_ir_instruction *ins,
 	cnt = 0;
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 		struct of_ir_instruction *copy;
+		uint16_t tmp2;
 		uint16_t var;
 		uint16_t tmp;
 		unsigned i;
@@ -733,27 +734,23 @@ split_operand(struct of_ir_optimizer *opt, struct of_ir_instruction *ins,
 			continue;
 		}
 
-		if (dst) {
-			tmp = add_var_num(opt);
-			copy = create_copy(opt, tmp, var);
-			of_ir_instr_insert(opt->shader, NULL, ins, copy);
-			add_affinity(opt, tmp, var, 20000);
-		} else {
-			uint16_t tmp2;
+		tmp = add_var_num(opt);
+		add_affinity(opt, tmp, var, 20000);
 
-			tmp = add_var_num(opt);
+		if (dst) {
+			copy = create_copy(opt, var, tmp);
+			of_ir_instr_insert(opt->shader, NULL, ins, copy);
+		} else {
 			copy = create_copy(opt, tmp, var);
 			of_ir_instr_insert_before(opt->shader, NULL, ins, copy);
-			add_affinity(opt, tmp, var, 20000);
 
 			tmp2 = add_var_num(opt);
 			copy = create_copy(opt, tmp2, tmp);
 			of_ir_instr_insert(opt->shader, NULL, ins, copy);
 			add_affinity(opt, var, tmp2, 20000);
-
-			reg->var[comp] = tmp;
 		}
 
+		reg->var[comp] = tmp;
 		copies[cnt] = tmp;
 		vars[cnt++] = var;
 	}
