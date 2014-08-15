@@ -1302,7 +1302,8 @@ copy_elimination(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
  */
 
 static void
-remap_sources(struct of_ir_instruction *ins, const uint8_t *map)
+remap_sources(struct of_ir_instruction *ins, const struct of_ir_opc_info *info,
+	      const uint8_t *map)
 {
 	unsigned i;
 
@@ -1310,6 +1311,11 @@ remap_sources(struct of_ir_instruction *ins, const uint8_t *map)
 		struct of_ir_register *src = ins->srcs[i];
 		char swizzle[4];
 		unsigned comp;
+
+		/* NOTE: Texture components can be shuffled using swizzle
+		 * bits of sampler source register which is always src 1. */
+		if (info->tex && i != 1)
+			continue;
 
 		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp)
 			swizzle[comp] = src->swizzle[map[comp]];
@@ -1338,7 +1344,7 @@ assign_destination(struct of_ir_instruction *ins, struct of_ir_register *dst)
 		if (!reg_comp_used(dst, comp))
 			continue;
 
-		if (chan != comp) {
+		if (!info->replicated && chan != comp) {
 			assert(!info->fix_comp
 				&& "swizzling with fixed components");
 			need_remap = true;
@@ -1352,7 +1358,7 @@ assign_destination(struct of_ir_instruction *ins, struct of_ir_register *dst)
 	}
 
 	if (need_remap)
-		remap_sources(ins, chan_map);
+		remap_sources(ins, info, chan_map);
 
 	dst->type = OF_IR_REG_R;
 	dst->mask = mask;
