@@ -320,12 +320,14 @@ static void
 color_chunk(struct of_ir_optimizer *opt, struct of_ir_chunk *c, unsigned color)
 {
 	uint8_t comp = color_comp(color);
+	uint16_t reg = color_reg(color);
 	unsigned long *num;
 
 	OF_VALSET_FOR_EACH_VAL(num, &c->vars) {
 		struct of_ir_variable *v = get_var(opt, *num);
 
-		if (v->comp && !(v->comp & BIT(comp))) {
+		if ((v->parity & BIT(reg % 2))
+		    || (v->comp && !(v->comp & BIT(comp)))) {
 			create_chunk(opt, v);
 			continue;
 		}
