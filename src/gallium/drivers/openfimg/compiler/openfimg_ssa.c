@@ -44,7 +44,7 @@ variables_defined_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 			continue;
 
 		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-			if (!(dst->mask & (1 << comp)))
+			if (!reg_comp_used(dst, comp))
 				continue;
 
 			of_bitmap_set(node->ssa.vars_defined, dst->var[comp]);
@@ -188,7 +188,7 @@ rename_operands(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 				continue;
 
 			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-				if (!(src->mask & (1 << comp)))
+				if (!reg_comp_used(src, comp))
 					continue;
 				src->var[comp] = opt->renames[src->var[comp]];
 			}
@@ -200,7 +200,7 @@ rename_operands(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 			uint16_t var = dst->var[comp];
 
-			if (!(dst->mask & (1 << comp)))
+			if (!reg_comp_used(dst, comp))
 				continue;
 
 			dst->var[comp] = opt->last_var++;
