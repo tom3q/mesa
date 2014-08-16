@@ -108,7 +108,7 @@ override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
 			goto fail;
 		}
 
-		ret = fread(so->immediates, 16, hdr.const_float_size, file);
+		ret = fread(immediates, 16, hdr.const_float_size, file);
 		if (ret != hdr.const_float_size) {
 			DBG("truncated shader binary file");
 			goto fail;
@@ -116,7 +116,7 @@ override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
 
 		FREE(so->immediates);
 		so->immediates = immediates;
-		so->num_immediates = hdr.const_float_size;
+		so->num_immediates = 4 * hdr.const_float_size;
 	}
 
 	so->buffer = buffer;
