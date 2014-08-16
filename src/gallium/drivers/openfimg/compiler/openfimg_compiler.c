@@ -1578,12 +1578,11 @@ of_compile_shader(struct of_shader_stateobj *so)
 			ARRAY_SIZE(compile_token_handlers));
 
 	so->ir = ctx->shader;
-	ctx->num_immediates = ROUND_UP(ctx->num_immediates, 4);
-	so->immediates = MALLOC(ctx->num_immediates * sizeof(uint32_t));
-	so->num_immediates = ctx->num_immediates;
+	so->num_immediates = ROUND_UP(ctx->num_immediates, 4);
+	so->immediates = MALLOC(so->num_immediates * sizeof(uint32_t));
 	so->first_immediate = ctx->num_regs[TGSI_FILE_CONSTANT];
 	memcpy(so->immediates, ctx->immediates,
-		ctx->num_immediates * sizeof(uint32_t));
+		so->num_immediates * sizeof(uint32_t));
 
 	so->num_inputs = ctx->num_regs[TGSI_FILE_INPUT];
 
