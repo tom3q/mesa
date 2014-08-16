@@ -102,7 +102,6 @@ struct of_vertex_info {
 	unsigned num_draws;
 
 	unsigned mode;
-	unsigned index_size;
 	unsigned count;
 	u_translate_func trans_func;
 	u_generate_func gen_func;
