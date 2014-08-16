@@ -48,7 +48,7 @@ emit_constants(struct fd_ringbuffer *ring,
 	       struct of_constbuf_stateobj *constbuf, bool emit_immediates,
 	       struct of_shader_stateobj *shader)
 {
-	uint32_t enabled_mask = constbuf->enabled_mask;
+	unsigned enabled_mask = constbuf->enabled_mask;
 	uint32_t base = 0;
 	uint32_t *pkt;
 	unsigned i;
@@ -59,7 +59,7 @@ emit_constants(struct fd_ringbuffer *ring,
 
 	/* emit user constants: */
 	while (enabled_mask) {
-		unsigned index = ffs(enabled_mask) - 1;
+		unsigned index = u_bit_scan(&enabled_mask);
 		struct pipe_constant_buffer *cb = &constbuf->cb[index];
 		unsigned size = align(cb->buffer_size, 4) / 4; /* size in dwords */
 
@@ -96,7 +96,6 @@ emit_constants(struct fd_ringbuffer *ring,
 		}
 
 		base += size;
-		enabled_mask &= ~(1 << index);
 	}
 
 	/* emit shader immediates: */
