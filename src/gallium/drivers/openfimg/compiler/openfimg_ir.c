@@ -425,20 +425,27 @@ merge_swizzle(struct of_ir_register *reg, const char *swizzle)
 {
 	unsigned comp;
 	char result[4];
+	uint16_t var[4];
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+		unsigned chan;
+
 		switch (swizzle[comp]) {
-		case 'x': result[comp] = reg->swizzle[0]; break;
-		case 'y': result[comp] = reg->swizzle[1]; break;
-		case 'z': result[comp] = reg->swizzle[2]; break;
-		case 'w': result[comp] = reg->swizzle[3]; break;
+		case 'x': chan = 0; break;
+		case 'y': chan = 1; break;
+		case 'z': chan = 2; break;
+		case 'w': chan = 3; break;
 		default:
 			ERROR_MSG("invalid vector src swizzle: %s", swizzle);
 			assert(0);
 		}
+
+		result[comp] = reg->swizzle[chan];
+		var[comp] = reg->var[chan];
 	}
 
 	memcpy(reg->swizzle, result, sizeof(reg->swizzle));
+	memcpy(reg->var, var, sizeof(reg->var));
 }
 
 void
