@@ -38,12 +38,6 @@
 
 #include <util/u_double_list.h>
 
-struct of_transfer_data {
-	uint8_t *buf;
-	const void *pointer;
-	unsigned stride;
-};
-
 /**
  * Structure describing requirements of primitive mode regarding
  * geometry format.

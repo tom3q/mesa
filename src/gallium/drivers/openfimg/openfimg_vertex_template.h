@@ -49,31 +49,29 @@
  * @return Size (in bytes) of packed data.
  */
 static unsigned
-PACK_ATTRIBUTE(const struct of_transfer_data *t,
-	       const struct of_vertex_transfer *xfer,
-	       INDEX_TYPE idx, unsigned cnt)
+PACK_ATTRIBUTE(uint8_t *dst, const void *src, unsigned stride,
+	       uint8_t src_width, INDEX_TYPE idx, unsigned cnt)
 {
-	uint8_t *buf = t->buf;
 	const uint8_t *data;
 	unsigned size;
 	unsigned width;
 
 	/* Vertices must be word aligned */
 #ifdef SEQUENTIAL
-	data = CBUF_ADDR_8(t->pointer, idx * t->stride);
+	data = CBUF_ADDR_8(src, idx * stride);
 #endif
-	width = ROUND_UP(xfer->width, 4);
+	width = ROUND_UP(src_width, 4);
 	size = width * cnt;
 
 	while (cnt--) {
-		unsigned len = xfer->width;
+		unsigned len = src_width;
 #ifndef SEQUENTIAL
-		data = CBUF_ADDR_8(t->pointer, *(idx++) * t->stride);
+		data = CBUF_ADDR_8(src, *(idx++) * stride);
 #endif
-		small_memcpy(buf, data, len);
-		buf += width;
+		small_memcpy(dst, data, len);
+		dst += width;
 #ifdef SEQUENTIAL
-		data += t->stride;
+		data += stride;
 #endif
 	}
 
@@ -122,11 +120,10 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 	for (i = 0, t = vtx->transfers; i < vtx->num_transfers; ++t, ++i) {
 		unsigned pipe_idx = t->vertex_buffer_index;
 		unsigned buf_idx = vtx->vb_map[pipe_idx];
-		struct of_transfer_data xfer = {
-			.stride = draw->vb_strides[buf_idx],
-			.pointer = vdata->transfers[i],
-			.buf = BUF_ADDR_8(dst, t->offset),
-		};
+		unsigned stride = draw->vb_strides[buf_idx];
+		const void *pointer = vdata->transfers[i];
+		uint8_t *buf = BUF_ADDR_8(dst, t->offset);
+		uint8_t width = t->width;
 
 		buffer = CALLOC_STRUCT(of_vertex_buffer);
 		assert(buffer);
@@ -139,50 +136,53 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 		LIST_ADDTAIL(&buffer->list, &vertex->buffers);
 
 #ifdef SEQUENTIAL
-		if (ROUND_UP(t->width, 4) == xfer.stride) {
+		if (ROUND_UP(width, 4) == stride) {
 			if (prim_data->repeat_first) {
-				memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
-					indices * xfer.stride), t->width);
-				xfer.buf += xfer.stride;
-				memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
-					indices * xfer.stride), t->width);
-				xfer.buf += xfer.stride;
-				memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
-					indices * xfer.stride), t->width);
-				xfer.buf += xfer.stride;
+				memcpy(buf, CBUF_ADDR_8(pointer,
+					indices * stride), width);
+				buf += stride;
+				memcpy(buf, CBUF_ADDR_8(pointer,
+					indices * stride), width);
+				buf += stride;
+				memcpy(buf, CBUF_ADDR_8(pointer,
+					indices * stride), width);
+				buf += stride;
 			}
 
-			memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
-				(indices + pos) * xfer.stride),
-				count * xfer.stride);
-			xfer.buf += count * xfer.stride;
+			memcpy(buf, CBUF_ADDR_8(pointer,
+				(indices + pos) * stride),
+				count * stride);
+			buf += count * stride;
 
 			if (prim_data->repeat_last) {
-				memcpy(xfer.buf, CBUF_ADDR_8(xfer.pointer,
-					(indices + pos + count - 1) * xfer.stride),
-					t->width);
-				xfer.buf += xfer.stride;
+				memcpy(buf, CBUF_ADDR_8(pointer,
+					(indices + pos + count - 1) * stride),
+					width);
+				buf += stride;
 			}
 
-			buffer->length = ROUND_UP(xfer.buf -
+			buffer->length = ROUND_UP(buf -
 						BUF_ADDR_8(dst, t->offset), 32);
 			continue;
 		}
 #endif
 		if (prim_data->repeat_first) {
-			xfer.buf += PACK_ATTRIBUTE(&xfer, t, indices, 1);
-			xfer.buf += PACK_ATTRIBUTE(&xfer, t, indices, 1);
-			xfer.buf += PACK_ATTRIBUTE(&xfer, t, indices, 1);
+			buf += PACK_ATTRIBUTE(buf, pointer, stride, width,
+						indices, 1);
+			buf += PACK_ATTRIBUTE(buf, pointer, stride, width,
+						indices, 1);
+			buf += PACK_ATTRIBUTE(buf, pointer, stride, width,
+						indices, 1);
 		}
 
-		xfer.buf += PACK_ATTRIBUTE(&xfer, t, indices + pos, count);
+		buf += PACK_ATTRIBUTE(buf, pointer, stride, width,
+					indices + pos, count);
 
 		if (prim_data->repeat_last)
-			xfer.buf += PACK_ATTRIBUTE(&xfer, t,
-					indices + pos + count - 1, 1);
+			buf += PACK_ATTRIBUTE(buf, pointer, stride, width,
+						indices + pos + count - 1, 1);
 
-		buffer->length = ROUND_UP(xfer.buf -
-						BUF_ADDR_8(dst, t->offset), 32);
+		buffer->length = ROUND_UP(buf - BUF_ADDR_8(dst, t->offset), 32);
 	}
 
 	buffer = CALLOC_STRUCT(of_vertex_buffer);
