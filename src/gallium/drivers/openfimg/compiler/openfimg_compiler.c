@@ -666,14 +666,14 @@ translate_lit(struct of_compile_context *ctx,
 	instrs[1].src[1].flags = OF_IR_REG_NEGATE;
 
 	/* tmp.y = log(tmp.y) */
-	instrs[2].opc = OF_OP_LOG_LIT;
+	instrs[2].opc = OF_OP_LOG;
 	instrs[2].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[2].dst.mask = "_y__";
 	instrs[2].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[2].src[0].swizzle = "yyyy";
 
 	/* tmp.y = tmp.y * tmp.w */
-	instrs[3].opc = OF_OP_MUL_LIT;
+	instrs[3].opc = OF_OP_MUL;
 	instrs[3].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[3].dst.mask = "_y__";
 	instrs[3].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
@@ -682,7 +682,7 @@ translate_lit(struct of_compile_context *ctx,
 	instrs[3].src[1].swizzle = "yyyy";
 
 	/* tmp.y = exp(tmp.y) */
-	instrs[4].opc = OF_OP_EXP_LIT;
+	instrs[4].opc = OF_OP_EXP;
 	instrs[4].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[4].dst.mask = "_y__";
 	instrs[4].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
