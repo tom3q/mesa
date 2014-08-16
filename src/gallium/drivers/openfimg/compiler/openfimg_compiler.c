@@ -644,6 +644,9 @@ translate_lit(struct of_compile_context *ctx,
 
 	memset(instrs, 0, sizeof(instrs));
 
+	/* tmp.x = max(src0.x, 0.0)
+	 * tmp.y = max(src0.y, 0.0)
+	 * tmp.w = max(src0.w, -128.0) */
 	instrs[0].opc = OF_OP_MAX;
 	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].dst.mask = "xy_w";
@@ -652,6 +655,7 @@ translate_lit(struct of_compile_context *ctx,
 	instrs[0].src[1].reg = consts1 = get_immediate(ctx, 2, constvals1);
 	instrs[0].src[1].swizzle = "xxxy";
 
+	/* tmp.w = min(tmp.w, 128.0) */
 	instrs[1].opc = OF_OP_MIN;
 	instrs[1].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[1].dst.mask = "___w";
@@ -661,12 +665,14 @@ translate_lit(struct of_compile_context *ctx,
 	instrs[1].src[1].swizzle = "yyyy";
 	instrs[1].src[1].flags = OF_IR_REG_NEGATE;
 
+	/* tmp.y = log(tmp.y) */
 	instrs[2].opc = OF_OP_LOG_LIT;
 	instrs[2].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[2].dst.mask = "_y__";
 	instrs[2].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[2].src[0].swizzle = "yyyy";
 
+	/* tmp.y = tmp.y * tmp.w */
 	instrs[3].opc = OF_OP_MUL_LIT;
 	instrs[3].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[3].dst.mask = "_y__";
@@ -675,12 +681,15 @@ translate_lit(struct of_compile_context *ctx,
 	instrs[3].src[1].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[3].src[1].swizzle = "yyyy";
 
+	/* tmp.y = exp(tmp.y) */
 	instrs[4].opc = OF_OP_EXP_LIT;
 	instrs[4].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[4].dst.mask = "_y__";
 	instrs[4].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[4].src[0].swizzle = "yyyy";
 
+	/* dst.y = -tmp.x < 0.0 ? tmp.x : 0.0
+	 * dst.z = -tmp.x < 0.0 ? tmp.y : 0.0 */
 	instrs[5].opc = OF_OP_CMP;
 	instrs[5].dst.reg = get_dst_reg(ctx, inst);
 	instrs[5].dst.mask = "_yz_";
@@ -692,6 +701,7 @@ translate_lit(struct of_compile_context *ctx,
 	instrs[5].src[2].reg = of_ir_reg_clone(ctx->shader, consts1);
 	instrs[5].src[2].swizzle = "xxxx";
 
+	/* dst.xw = (1.0, 1.0) */
 	instrs[6].opc = OF_OP_SGE;
 	instrs[6].dst.reg = get_dst_reg(ctx, inst);
 	instrs[6].dst.mask = "x__w";
