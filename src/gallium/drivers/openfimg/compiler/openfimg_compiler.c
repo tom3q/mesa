@@ -181,6 +181,8 @@ get_dst_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst)
 	case TGSI_FILE_OUTPUT:
 		type = OF_IR_REG_O;
 		num = dst->Index;
+		if (ctx->type == TGSI_PROCESSOR_FRAGMENT)
+			flags |= OF_IR_REG_SAT;
 		break;
 
 	case TGSI_FILE_TEMPORARY:
