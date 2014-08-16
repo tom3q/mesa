@@ -32,7 +32,7 @@
 #include "openfimg_util.h"
 
 enum fgtu_tex_format
-of_pipe2texture(enum pipe_format format)
+of_pipe2texture(enum pipe_format format, bool *is_rgba)
 {
 	switch (format) {
 	/* 8-bit buffers. */
@@ -53,6 +53,7 @@ of_pipe2texture(enum pipe_format format)
 	case PIPE_FORMAT_R8_SNORM:
 	case PIPE_FORMAT_R8_UINT:
 	case PIPE_FORMAT_R8_SINT:
+		*is_rgba = false;
 		return TEX_FMT_8;
 
 	/* 16-bit buffers. */
@@ -75,25 +76,33 @@ of_pipe2texture(enum pipe_format format)
 	case PIPE_FORMAT_R8G8_SNORM:
 	case PIPE_FORMAT_R8G8_UINT:
 	case PIPE_FORMAT_R8G8_SINT:
+		*is_rgba = false;
 		return TEX_FMT_88;
 
 	/* 32-bit buffers. */
 	case PIPE_FORMAT_A8B8G8R8_SRGB:
 	case PIPE_FORMAT_A8B8G8R8_UNORM:
+	case PIPE_FORMAT_X8B8G8R8_UNORM:
+		*is_rgba = true;
+		return TEX_FMT_8888;
+
 	case PIPE_FORMAT_B8G8R8A8_SRGB:
 	case PIPE_FORMAT_B8G8R8A8_UNORM:
 	case PIPE_FORMAT_B8G8R8X8_UNORM:
-	case PIPE_FORMAT_X8B8G8R8_UNORM:
+		*is_rgba = false;
 		return TEX_FMT_8888;
 
 	/* YUV buffers. */
 	case PIPE_FORMAT_UYVY:
+		*is_rgba = false;
 		return TEX_FMT_UY1VY0;
 	case PIPE_FORMAT_YUYV:
+		*is_rgba = false;
 		return TEX_FMT_Y1UY0V;
 
 	/* compressed formats */
 	case PIPE_FORMAT_DXT1_RGB:
+		*is_rgba = false;
 		return TEX_FMT_DXT1;
 
 	default:
