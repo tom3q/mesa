@@ -250,6 +250,9 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_GLSL_FEATURE_LEVEL:
 		return 120;
 
+        case PIPE_CAP_MAX_VIEWPORTS:
+                return 1;
+
 	/* Stream output. */
 	case PIPE_CAP_MAX_STREAM_OUTPUT_BUFFERS:
 	case PIPE_CAP_STREAM_OUTPUT_PAUSE_RESUME:
