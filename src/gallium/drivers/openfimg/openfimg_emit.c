@@ -63,16 +63,23 @@ emit_constants(struct fd_ringbuffer *ring,
 		struct pipe_constant_buffer *cb = &constbuf->cb[index];
 		unsigned size = align(cb->buffer_size, 4) / 4; /* size in dwords */
 
-		/* hmm, sometimes we still seem to end up with consts bound,
-		 * even if shader isn't using them, which ends up overwriting
-		 * const reg's used for immediates.. this is a hack to work
-		 * around that:
+		/* I expect that size should be a multiple of vec4's: */
+		assert(size == align(size, 4));
+
+		/* gallium could leave const buffers bound above what the
+		 * current shader uses.. don't let that confuse us.
 		 */
 		if (base >= (shader->first_immediate * 4))
 			break;
 
 		if (constbuf->dirty_mask & (1 << index)) {
 			const uint32_t *dwords;
+
+			/* and even if the start of the const buffer is before
+			 * first_immediate, the end may not be:
+			 */
+			if (base + size >= 4 * shader->first_immediate)
+				size = (4 * shader->first_immediate) - base;
 
 			if (cb->user_buffer) {
 				dwords = cb->user_buffer;
