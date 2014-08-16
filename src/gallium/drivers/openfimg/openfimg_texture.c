@@ -226,6 +226,7 @@ of_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 {
 	struct of_pipe_sampler_view *so = CALLOC_STRUCT(of_pipe_sampler_view);
 	struct of_resource *rsc = of_resource(prsc);
+	bool is_rgba = false;
 
 	if (!so)
 		return NULL;
@@ -237,8 +238,10 @@ of_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.context = pctx;
 
 	so->tex_resource =  rsc;
-	so->tsta = TSTA_FORMAT(of_pipe2texture(cso->format))
+	so->tsta = TSTA_FORMAT(of_pipe2texture(cso->format, &is_rgba))
 			| TSTA_TYPE(TEX_TYPE_2D);
+	if (is_rgba)
+		so->tsta |= TSTA_RGBA;
 	so->width = prsc->width0;
 	so->height = prsc->height0;
 
