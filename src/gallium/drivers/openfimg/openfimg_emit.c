@@ -132,6 +132,8 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
 	view = of_pipe_sampler_view(tex->textures[samp_id]);
 
+	of_reference_draw_buffer(ctx, &view->tex_resource->base.b);
+
 	pkt = OUT_PKT(ring, G3D_REQUEST_TEXTURE);
 	OUT_RING(ring, sampler->tsta | view->tsta);
 	OUT_RING(ring, view->width);
@@ -166,6 +168,8 @@ emit_vtx_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
 	view = of_pipe_sampler_view(tex->textures[samp_id]);
+
+	of_reference_draw_buffer(ctx, &view->tex_resource->base.b);
 
 	pkt = OUT_PKT(ring, G3D_REQUEST_VTX_TEXTURE);
 	OUT_RING(ring, sampler->vtx_tsta | view->vtx_tsta);
@@ -215,10 +219,13 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		struct of_framebuffer_stateobj *fb = &ctx->framebuffer;
 		struct of_resource *rsc;
 
-		if (fb->base.cbufs[0])
+		if (fb->base.cbufs[0]) {
+			of_reference_draw_buffer(ctx,
+						fb->base.cbufs[0]->texture);
 			rsc = of_resource(fb->base.cbufs[0]->texture);
-		else
+		} else {
 			rsc = NULL;
+		}
 
 		pkt = OUT_PKT(ring, G3D_REQUEST_COLORBUFFER);
 		OUT_RING(ring, fb->fgpf_fbctl);
@@ -228,10 +235,12 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		OUT_RING(ring, rsc ? 0 : G3D_CBUFFER_DETACH);
 		END_PKT(ring, pkt);
 
-		if (fb->base.zsbuf)
+		if (fb->base.zsbuf) {
+			of_reference_draw_buffer(ctx, fb->base.zsbuf->texture);
 			rsc = of_resource(fb->base.zsbuf->texture);
-		else
+		} else {
 			rsc = NULL;
+		}
 
 		pkt = OUT_PKT(ring, G3D_REQUEST_DEPTHBUFFER);
 		OUT_RING(ring, 0);

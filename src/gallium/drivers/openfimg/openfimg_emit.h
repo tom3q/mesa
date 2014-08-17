@@ -30,8 +30,7 @@
 
 #include "pipe/p_context.h"
 
-#include "openfimg_context.h"
-
+struct of_context;
 struct fd_ringbuffer;
 
 struct of_vertex_buf {
