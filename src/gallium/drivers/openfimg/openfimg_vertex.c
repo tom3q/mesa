@@ -151,7 +151,7 @@ emit_transfers(struct of_vertex_info *vertex, uint32_t offset, uint32_t count,
 				+ vb->stride * dst_offset;
 		buf->cmd = G3D_REQUEST_VERTEX_BUFFER;
 
-		LIST_ADDTAIL(&buf->list, &vertex->buffers);
+		of_draw_add_buffer(buf, vertex);
 	}
 }
 
@@ -196,7 +196,7 @@ of_prepare_draw_direct(struct of_vertex_data *vdata)
 		buf->length = count;
 		buf->cmd = G3D_REQUEST_DRAW;
 
-		LIST_ADDTAIL(&buf->list, &vertex->buffers);
+		of_draw_add_buffer(buf, vertex);
 
 		remaining -= count - prim->overlap;
 		offset += count - prim->overlap;
@@ -311,7 +311,7 @@ of_prepare_draw_direct_wa(struct of_vertex_data *vdata)
 		buf->handle = ib_handle;
 		buf->offset = ib_offset;
 		buf->ctrl_dst_offset = G3D_DRAW_INDEXED;
-		LIST_ADDTAIL(&buf->list, &vertex->buffers);
+		of_draw_add_buffer(buf, vertex);
 
 		if (count == remaining)
 			break;
@@ -518,7 +518,7 @@ of_prepare_draw_direct_indices(struct of_vertex_data *vdata,
 			}
 
 			buf->cmd = G3D_REQUEST_INDEX_BUFFER;
-			LIST_ADDTAIL(&buf->list, &vertex->buffers);
+			of_draw_add_buffer(buf, vertex);
 
 			max_vtx = 0;
 			min_vtx = 0xffffffff;
