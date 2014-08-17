@@ -187,6 +187,7 @@ of_build_vertex_data_repack(struct of_context *ctx,
 							vb->buffer,
 							PIPE_TRANSFER_READ,
 							&vb_transfer[buf_idx]);
+			vb_ptr[buf_idx] += vb->buffer_offset;
 		}
 
 		vdata->transfers[i] = CBUF_ADDR_8(vb_ptr[buf_idx],
