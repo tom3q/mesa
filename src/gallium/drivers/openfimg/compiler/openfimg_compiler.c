@@ -46,6 +46,7 @@ struct of_compile_context {
 	enum of_shader_type type;
 
 	uint8_t num_regs[TGSI_FILE_COUNT];
+	uint8_t ps_output_temp;
 
 	int position;
 	int psize;
@@ -179,10 +180,16 @@ get_dst_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst)
 
 	switch (dst->File) {
 	case TGSI_FILE_OUTPUT:
-		type = OF_IR_REG_O;
-		num = dst->Index;
-		if (ctx->type == OF_SHADER_PIXEL)
-			flags |= OF_IR_REG_SAT;
+		if (ctx->type == OF_SHADER_VERTEX)  {
+			type = OF_IR_REG_O;
+			num = dst->Index;
+			break;
+		}
+
+		/* Pixel shader ends execution after writing to output reg. */
+		assert(!dst->Index);
+		type = OF_IR_REG_VAR;
+		num = ctx->ps_output_temp;
 		break;
 
 	case TGSI_FILE_TEMPORARY:
@@ -1614,8 +1621,27 @@ of_compile_shader(struct of_shader_stateobj *so)
 	if (!ctx)
 		return -1;
 
+	if (ctx->type == OF_SHADER_PIXEL)
+		ctx->ps_output_temp = ctx->num_regs[TGSI_FILE_TEMPORARY]++;
+
 	process_tokens(ctx, compile_token_handlers,
 			ARRAY_SIZE(compile_token_handlers));
+
+	if (ctx->type == OF_SHADER_PIXEL) {
+		struct of_ir_instr_template instr;
+
+		memset(&instr, 0, sizeof(instr));
+
+		instr.opc = OF_OP_MOV;
+		instr.dst.reg = of_ir_reg_create(ctx->shader, OF_IR_REG_O, 16,
+							"xyzw", OF_IR_REG_SAT);
+		instr.src[0].reg = of_ir_reg_create(ctx->shader, OF_IR_REG_VAR,
+							ctx->ps_output_temp,
+							"xyzw", 0);
+
+		of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
+						NULL, &instr, 1);
+	}
 
 	so->ir = ctx->shader;
 	so->num_immediates = ROUND_UP(ctx->num_immediates, 4);
