@@ -345,12 +345,12 @@ insert_instr(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	     struct list_head *list, struct of_ir_instruction *instr)
 {
 	const struct of_ir_opc_info *info = of_ir_get_opc_info(instr->opc);
+	unsigned comp;
+	unsigned i;
 
 	assert(instr->num_srcs == info->num_srcs);
 
 	if (instr->dst && instr->dst->type == OF_IR_REG_VAR) {
-		unsigned comp;
-
 		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
 			if (!(instr->dst->mask & (1 << comp)))
 				continue;
@@ -358,6 +358,22 @@ insert_instr(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 			shader->stats.num_vars =
 					max(shader->stats.num_vars,
 						instr->dst->var[comp] + 1);
+		}
+	}
+
+	for (i = 0; i < instr->num_srcs; ++i) {
+		struct of_ir_register *src = instr->srcs[i];
+
+		if (src->type != OF_IR_REG_VAR)
+			continue;
+
+		for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
+			if (!(src->mask & (1 << comp)))
+				continue;
+
+			shader->stats.num_vars =
+					max(shader->stats.num_vars,
+						src->var[comp] + 1);
 		}
 	}
 
