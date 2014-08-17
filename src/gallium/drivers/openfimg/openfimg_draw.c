@@ -48,6 +48,27 @@
 
 #include <stdlib.h>
 
+static const float clear_vertices[] = {
+	+1.0f, +1.0f, +1.0f, // RT
+	-1.0f, +1.0f, +1.0f, // LT
+	-1.0f, -1.0f, +1.0f, // LB
+
+	+1.0f, +1.0f, +1.0f, // LT
+	-1.0f, -1.0f, +1.0f, // RB
+	+1.0f, -1.0f, +1.0f, // LB
+};
+
+static struct of_vertex_stateobj solid_vertex_stateobj = {
+	.num_elements = 1,
+	.elements = {
+		[0] = {
+			.attrib = 0x800072e4,
+			.vbctrl = 0x0c00ffff,
+			.vbbase = 0x00000000,
+		},
+	},
+};
+
 static INLINE unsigned
 of_draw_hash(struct of_draw_info *req)
 {
@@ -623,6 +644,7 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	struct of_context *ctx = of_context(pctx);
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer.base;
 	struct fd_ringbuffer *ring = ctx->ring;
+	struct of_vertex_stateobj *vtx_old;
 	uint32_t *pkt;
 
 	if (!ctx->clear_vertex_info)
@@ -648,9 +670,16 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 		util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 		util_format_short_name(pipe_surface_format(pfb->zsbuf)));
 
+	/* FIXME: of_program_emit requires correct vertex stateobj bound */
+	vtx_old = ctx->cso.vtx;
+	ctx->cso.vtx = &solid_vertex_stateobj;
+
 	/* emit clear program */
 	of_program_emit(ctx, ctx->solid_vp);
 	of_program_emit(ctx, ctx->solid_fp);
+
+	/* FIXME */
+	ctx->cso.vtx = vtx_old;
 
 	/* emit clear color */
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
@@ -771,27 +800,6 @@ of_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *ps,
 	DBG("TODO: buffers=%u, depth=%f, stencil=%u, x=%u, y=%u, w=%u, h=%u",
 			buffers, depth, stencil, x, y, w, h);
 }
-
-static const float clear_vertices[] = {
-	+1.0f, +1.0f, +1.0f, // RT
-	-1.0f, +1.0f, +1.0f, // LT
-	-1.0f, -1.0f, +1.0f, // LB
-
-	+1.0f, +1.0f, +1.0f, // LT
-	-1.0f, -1.0f, +1.0f, // RB
-	+1.0f, -1.0f, +1.0f, // LB
-};
-
-static struct of_vertex_stateobj solid_vertex_stateobj = {
-	.num_elements = 1,
-	.elements = {
-		[0] = {
-			.attrib = 0x800072e4,
-			.vbctrl = 0x0c00ffff,
-			.vbbase = 0x00000000,
-		},
-	},
-};
 
 struct of_vertex_info *
 of_draw_init_solid(struct of_context *ctx)
