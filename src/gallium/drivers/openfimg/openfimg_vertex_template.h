@@ -133,7 +133,6 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 		buffer->offset = t->offset;
 		buffer->ctrl_dst_offset = t->offset;
 		buffer->cmd = G3D_REQUEST_VERTEX_BUFFER;
-		LIST_ADDTAIL(&buffer->list, &vertex->buffers);
 
 #ifdef SEQUENTIAL
 		if (ROUND_UP(width, 4) == stride) {
@@ -163,6 +162,7 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 
 			buffer->length = ROUND_UP(buf -
 						BUF_ADDR_8(dst, t->offset), 32);
+			of_draw_add_buffer(buffer, vertex);
 			continue;
 		}
 #endif
@@ -183,6 +183,7 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 						indices + pos + count - 1, 1);
 
 		buffer->length = ROUND_UP(buf - BUF_ADDR_8(dst, t->offset), 32);
+		of_draw_add_buffer(buffer, vertex);
 	}
 
 	buffer = CALLOC_STRUCT(of_vertex_buffer);
@@ -190,7 +191,7 @@ COPY_VERTICES(struct of_vertex_data *vdata, INDEX_TYPE indices,
 
 	buffer->length = count + prim_data->extra;
 	buffer->cmd = G3D_REQUEST_DRAW;
-	LIST_ADDTAIL(&buffer->list, &vertex->buffers);
+	of_draw_add_buffer(buffer, vertex);
 
 	if (dst_transfer)
 		pipe_buffer_unmap(&ctx->base, dst_transfer);

@@ -824,13 +824,13 @@ of_draw_init_solid(struct of_context *ctx)
 	buf->length = ROUND_UP(sizeof(clear_vertices), 32);
 	buf->buffer = buffer;
 	buf->handle = fd_bo_handle(of_resource(buffer)->bo);
-	LIST_ADDTAIL(&buf->list, &info->buffers);
+	of_draw_add_buffer(buf, info);
 
 	buf = CALLOC_STRUCT(of_vertex_buffer);
 	assert(buf);
 	buf->cmd = G3D_REQUEST_DRAW;
 	buf->length = sizeof(clear_vertices) / (3 * sizeof(float));
-	LIST_ADDTAIL(&buf->list, &info->buffers);
+	of_draw_add_buffer(buf, info);
 
 	return info;
 }
