@@ -43,6 +43,7 @@ tex_clamp(unsigned wrap)
 	case PIPE_TEX_WRAP_REPEAT:
 		return ADDR_MODE_REPEAT;
 	case PIPE_TEX_WRAP_CLAMP_TO_EDGE:
+	case PIPE_TEX_WRAP_CLAMP:
 		return ADDR_MODE_CLAMP_TO_EDGE;
 	case PIPE_TEX_WRAP_MIRROR_REPEAT:
 		return ADDR_MODE_FLIP;
