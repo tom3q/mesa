@@ -119,13 +119,13 @@ struct of_vertex_data {
 };
 
 struct of_vertex_buffer {
+	struct list_head list;
 	struct pipe_resource *buffer;
 	unsigned cmd;
 	unsigned length;
 	unsigned handle;
 	unsigned offset;
 	unsigned ctrl_dst_offset;
-	struct list_head list;
 	uint8_t vb_idx;
 	bool direct:1;
 };
@@ -145,5 +145,17 @@ void of_prepare_draw_idx16(struct of_vertex_data *vdata,
 void of_prepare_draw_idx32(struct of_vertex_data *vdata,
 			   const uint32_t *indices);
 void of_prepare_draw_seq(struct of_vertex_data *vdata);
+
+static INLINE void
+of_draw_add_buffer(struct of_vertex_buffer *buffer,
+		   struct of_vertex_info *vertex)
+{
+	assert(buffer->cmd != G3D_REQUEST_VERTEX_BUFFER
+		|| (buffer->length > 0
+		&& buffer->ctrl_dst_offset + buffer->length
+		<= VERTEX_BUFFER_SIZE));
+
+	LIST_ADDTAIL(&buffer->list, &vertex->buffers);
+}
 
 #endif
