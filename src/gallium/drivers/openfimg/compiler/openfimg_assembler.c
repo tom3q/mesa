@@ -284,7 +284,7 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 	}
 
 	if (instr->target) {
-		int offset = instr->target->end_address - pc;
+		int offset = instr->target->end_address - pc - 1;
 		bool backwards = offset < 0;
 
 		if (backwards) {
