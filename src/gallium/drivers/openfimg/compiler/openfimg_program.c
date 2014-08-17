@@ -36,6 +36,7 @@
 #include "openfimg_resource.h"
 #include "openfimg_util.h"
 #include "openfimg_state.h"
+#include "openfimg_vertex.h"
 
 /*
  * Shader overriding support
@@ -218,7 +219,7 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 		/* Workaround for HW bug. */
 		num_attribs = 8;
 	} else {
-		num_attribs = so->num_inputs;
+		num_attribs = ctx->cso.vtx->num_elements;
 	}
 
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM);
