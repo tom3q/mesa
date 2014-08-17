@@ -302,7 +302,7 @@ static struct of_ir_register *
 get_predicate(struct of_compile_context *ctx)
 {
 	/* TODO: Support for remaining predicate registers. */
-	return of_ir_reg_create(ctx->shader, OF_IR_REG_P, 0, "xyzw", 0);
+	return of_ir_reg_create(ctx->shader, OF_IR_REG_P, 1, "xyzw", 0);
 }
 
 /* TODO: Implement immediate coalescing. */
