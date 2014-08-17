@@ -89,10 +89,8 @@ remove_interference(struct of_ir_optimizer *opt, uint16_t var1, uint16_t var2)
 	struct of_ir_variable *v1 = get_var(opt, var1);
 	struct of_ir_variable *v2 = get_var(opt, var2);
 
-	if (!v1->interference)
+	if (!v1->interference || !v2->interference)
 		return;
-
-	assert(v2->interference);
 
 	of_bitmap_clear(v1->interference, var2);
 	of_bitmap_clear(v2->interference, var1);
