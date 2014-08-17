@@ -43,7 +43,7 @@ struct of_compile_context {
 	const struct tgsi_token *tokens;
 
 	struct tgsi_parse_context parser;
-	unsigned type;
+	enum of_shader_type type;
 
 	uint8_t num_regs[TGSI_FILE_COUNT];
 
@@ -181,7 +181,7 @@ get_dst_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst)
 	case TGSI_FILE_OUTPUT:
 		type = OF_IR_REG_O;
 		num = dst->Index;
-		if (ctx->type == TGSI_PROCESSOR_FRAGMENT)
+		if (ctx->type == OF_SHADER_PIXEL)
 			flags |= OF_IR_REG_SAT;
 		break;
 
@@ -1454,7 +1454,7 @@ init_handle_declaration(struct of_compile_context *ctx)
 
 		ctx->output_map[first] = decl->Semantic;
 
-		if (ctx->type == TGSI_PROCESSOR_VERTEX) {
+		if (ctx->type == OF_SHADER_VERTEX) {
 			switch (name) {
 			case TGSI_SEMANTIC_POSITION:
 				if (ctx->position == -1UL)
@@ -1518,6 +1518,12 @@ compile_init(const struct tgsi_token *tokens)
 		return ctx;
 	}
 
+	ret = tgsi_parse_init(&ctx->parser, tokens);
+	if (ret != TGSI_PARSE_OK) {
+		DBG("failed to init TGSI parser (%u)", ret);
+		goto fail;
+	}
+
 	switch (ctx->parser.FullHeader.Processor.Processor) {
 	case TGSI_PROCESSOR_VERTEX:
 		ctx->type = OF_SHADER_VERTEX;
@@ -1551,13 +1557,6 @@ compile_init(const struct tgsi_token *tokens)
 	of_ir_node_insert(region, list);
 	ctx->current_node = list;
 
-	ret = tgsi_parse_init(&ctx->parser, tokens);
-	if (ret != TGSI_PARSE_OK) {
-		DBG("failed to init TGSI parser (%u)", ret);
-		goto fail;
-	}
-
-	ctx->type = ctx->parser.FullHeader.Processor.Processor;
 	ctx->position = -1U;
 	ctx->psize = -1U;
 	ctx->tokens = tokens;
