@@ -101,7 +101,9 @@ const struct of_primitive_data primitive_data[PIPE_PRIM_MAX] = {
 
 void of_put_batch_buffer(struct of_context *ctx, struct of_vertex_buffer *buf)
 {
-	LIST_ADDTAIL(&buf->list, &ctx->pending_batches);
+	list_del(&buf->list);
+	pipe_resource_reference(&buf->buffer, NULL);
+	FREE(buf);
 }
 
 /**

@@ -412,18 +412,26 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
 
 	LIST_FOR_EACH_ENTRY_SAFE(buf, tmp, &info->buffers, list) {
 		uint32_t offset = buf->offset;
-		uint32_t handle = buf->handle;
+		struct pipe_resource *buffer;
+		uint32_t handle;
 
 		/* Direct batches need patching */
 		if (buf->direct) {
 			const struct pipe_vertex_buffer *vb =
 						&ctx->vertexbuf.vb[buf->vb_idx];
 
+			buffer = vb->buffer;
 			offset += vb->buffer_offset;
 			handle = fd_bo_handle(of_resource(vb->buffer)->bo);
 
 			// FIXME: reference the buffer
+		} else {
+			buffer = buf->buffer;
+			offset = buf->offset;
+			handle = buf->handle;
 		}
+
+		of_reference_draw_buffer(ctx, buffer);
 
 		pkt = OUT_PKT(ring, buf->cmd);
 		OUT_RING(ring, buf->length);
@@ -432,10 +440,8 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
 		OUT_RING(ring, buf->ctrl_dst_offset);
 		END_PKT(ring, pkt);
 
-		if (info->first_draw || info->bypass_cache) {
-			LIST_DEL(&buf->list);
+		if (info->first_draw || info->bypass_cache)
 			of_put_batch_buffer(ctx, buf);
-		}
 	}
 
 	info->first_draw = false;

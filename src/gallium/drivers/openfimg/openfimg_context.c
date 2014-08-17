@@ -86,8 +86,8 @@ of_context_render(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer.base;
-	struct of_vertex_buffer *buf, *n;
 	uint32_t timestamp = 0;
+	unsigned i;
 
 	DBG("needs_flush: %d", ctx->needs_flush);
 
@@ -127,11 +127,9 @@ of_context_render(struct pipe_context *pctx)
 	if (pfb->zsbuf)
 		of_resource(pfb->zsbuf->texture)->dirty = false;
 
-	LIST_FOR_EACH_ENTRY_SAFE(buf, n, &ctx->pending_batches, list) {
-		pipe_resource_reference(&buf->buffer, NULL);
-		FREE(buf);
-	}
-	LIST_INITHEAD(&ctx->pending_batches);
+	for (i = 0; i < ctx->num_pending_rsrcs; ++i)
+		pipe_resource_reference(&ctx->pending_rsrcs[i], NULL);
+	ctx->num_pending_rsrcs = 0;
 }
 
 static void
@@ -249,8 +247,6 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 
 	util_slab_create(&ctx->transfer_pool, sizeof(struct pipe_transfer),
 			16, UTIL_SLAB_SINGLETHREADED);
-
-	LIST_INITHEAD(&ctx->pending_batches);
 
 	of_draw_init(pctx);
 	of_resource_context_init(pctx);
