@@ -703,10 +703,10 @@ translate_lit(struct of_compile_context *ctx,
 	instrs[5].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[5].src[0].swizzle = "xxxx";
 	instrs[5].src[0].flags = OF_IR_REG_NEGATE;
-	instrs[5].src[1].reg = of_ir_reg_clone(ctx->shader, tmp);
-	instrs[5].src[1].swizzle = "xxyy";
-	instrs[5].src[2].reg = of_ir_reg_clone(ctx->shader, consts1);
-	instrs[5].src[2].swizzle = "xxxx";
+	instrs[5].src[1].reg = of_ir_reg_clone(ctx->shader, consts1);
+	instrs[5].src[1].swizzle = "xxxx";
+	instrs[5].src[2].reg = of_ir_reg_clone(ctx->shader, tmp);
+	instrs[5].src[2].swizzle = "xxyy";
 
 	/* dst.xw = (1.0, 1.0) */
 	instrs[6].opc = OF_OP_SGE;
@@ -793,8 +793,8 @@ translate_round(struct of_compile_context *ctx,
 	instrs[3].dst.reg = get_dst_reg(ctx, inst);
 	instrs[3].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[3].src[1].reg = of_ir_reg_clone(ctx->shader, tmp2);
-	instrs[3].src[1].flags = OF_IR_REG_NEGATE;
 	instrs[3].src[2].reg = of_ir_reg_clone(ctx->shader, tmp2);
+	instrs[3].src[2].flags = OF_IR_REG_NEGATE;
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node, NULL,
 					instrs, ARRAY_SIZE(instrs));
@@ -869,18 +869,18 @@ translate_ssg(struct of_compile_context *ctx,
 	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[1].reg = const0 = get_immediate(ctx, 2, zero_one);
-	instrs[0].src[1].swizzle = "yyyy";
-	instrs[0].src[1].flags = OF_IR_REG_NEGATE;
+	instrs[0].src[1].swizzle = "xxxx";
 	instrs[0].src[2].reg = of_ir_reg_clone(ctx->shader, const0);
-	instrs[0].src[2].swizzle = "xxxx";
+	instrs[0].src[2].swizzle = "yyyy";
+	instrs[0].src[2].flags = OF_IR_REG_NEGATE;
 
 	instrs[1].opc = OF_OP_CMP;
 	instrs[1].dst.reg = get_dst_reg(ctx, inst);
 	instrs[1].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[1].src[0].flags = OF_IR_REG_NEGATE;
-	instrs[1].src[1].reg = of_ir_reg_clone(ctx->shader, const0);
-	instrs[1].src[1].swizzle = "yyyy";
-	instrs[1].src[2].reg = of_ir_reg_clone(ctx->shader, tmp);
+	instrs[1].src[1].reg = of_ir_reg_clone(ctx->shader, tmp);
+	instrs[1].src[2].reg = of_ir_reg_clone(ctx->shader, const0);
+	instrs[1].src[2].swizzle = "yyyy";
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, instrs, ARRAY_SIZE(instrs));
@@ -891,7 +891,7 @@ translate_sne_seq(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
 	struct of_ir_instr_template instrs[3];
-	struct of_ir_register *tmp, *const0;
+	struct of_ir_register *tmp, *tmp2, *const01;
 
 	memset(instrs, 0, sizeof(instrs));
 
@@ -902,28 +902,28 @@ translate_sne_seq(struct of_compile_context *ctx,
 	instrs[0].src[1].flags = OF_IR_REG_NEGATE;
 
 	instrs[1].opc = OF_OP_CMP;
-	instrs[1].dst.reg = get_dst_reg(ctx, inst);
+	instrs[1].dst.reg = tmp2 = get_temporary(ctx);
 	instrs[1].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
-	instrs[1].src[1].reg = const0 = get_immediate(ctx, 2, zero_one);
-	instrs[1].src[2].reg = of_ir_reg_clone(ctx->shader, const0);
+	instrs[1].src[1].reg = const01 = get_immediate(ctx, 2, zero_one);
 	if (inst->Instruction.Opcode == TGSI_OPCODE_SNE) {
-		instrs[1].src[1].swizzle = "yyyy";
-		instrs[1].src[2].swizzle = "xxxx";
+		instrs[1].src[1].swizzle = "xxxx"; /* 0.0 */
+		instrs[1].src[2].swizzle = "yyyy"; /* 1.0 */
 	} else /* if (inst->Instruction->Opcode == TGSI_OPCODE_SEQ) */ {
-		instrs[1].src[1].swizzle = "xxxx";
-		instrs[1].src[2].swizzle = "yyyy";
+		instrs[1].src[1].swizzle = "yyyy"; /* 1.0 */
+		instrs[1].src[2].swizzle = "xxxx"; /* 0.0 */
 	}
+	instrs[1].src[2].reg = of_ir_reg_clone(ctx->shader, const01);
 
 	instrs[2].opc = OF_OP_CMP;
 	instrs[2].dst.reg = get_dst_reg(ctx, inst);
 	instrs[2].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[2].src[0].flags = OF_IR_REG_NEGATE;
-	instrs[2].src[1].reg = of_ir_reg_clone(ctx->shader, const0);
-	instrs[2].src[2].reg = get_dst_reg(ctx, inst);
+	instrs[2].src[1].reg = of_ir_reg_clone(ctx->shader, tmp2);
+	instrs[2].src[2].reg = of_ir_reg_clone(ctx->shader, const01);
 	if (inst->Instruction.Opcode == TGSI_OPCODE_SNE)
-		instrs[2].src[1].swizzle = "yyyy";
+		instrs[2].src[2].swizzle = "yyyy"; /* 1.0 */
 	else /* if (inst->Instruction->Opcode == TGSI_OPCODE_SEQ) */
-		instrs[2].src[1].swizzle = "xxxx";
+		instrs[2].src[2].swizzle = "xxxx"; /* 0.0 */
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, instrs, ARRAY_SIZE(instrs));
@@ -944,6 +944,24 @@ translate_dp2(struct of_compile_context *ctx,
 	instr.src[1].reg = get_src_reg(ctx, inst, 1);
 	instr.src[2].reg = get_immediate(ctx, 1, &const_zero);
 	instr.src[2].swizzle = "xxxx";
+
+	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
+					NULL, &instr, 1);
+}
+
+static void
+translate_cmp(struct of_compile_context *ctx,
+	      struct tgsi_full_instruction *inst, unsigned long data)
+{
+	struct of_ir_instr_template instr;
+
+	memset(&instr, 0, sizeof(instr));
+
+	instr.opc = OF_OP_CMP;
+	instr.dst.reg = get_dst_reg(ctx, inst);
+	instr.src[0].reg = get_src_reg(ctx, inst, 0);
+	instr.src[1].reg = get_src_reg(ctx, inst, 2);
+	instr.src[2].reg = get_src_reg(ctx, inst, 1);
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, &instr, 1);
@@ -981,8 +999,8 @@ translate_trunc(struct of_compile_context *ctx,
 	instrs[1].dst.reg = get_dst_reg(ctx, inst);
 	instrs[1].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[1].src[1].reg = of_ir_reg_clone(ctx->shader, tmp);
-	instrs[1].src[1].flags = OF_IR_REG_NEGATE;
 	instrs[1].src[2].reg = of_ir_reg_clone(ctx->shader, tmp);
+	instrs[1].src[2].flags = OF_IR_REG_NEGATE;
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, instrs, ARRAY_SIZE(instrs));
@@ -1368,7 +1386,7 @@ static const struct of_tgsi_map_entry translate_table[] = {
 	IR_DIRECT(TGSI_OPCODE_SGE, OF_OP_SGE),
 	IR_EMULATE(TGSI_OPCODE_SNE, translate_sne_seq, 0),
 	IR_EMULATE(TGSI_OPCODE_SEQ, translate_sne_seq, 0),
-	IR_DIRECT(TGSI_OPCODE_CMP, OF_OP_CMP),
+	IR_EMULATE(TGSI_OPCODE_CMP, translate_cmp, 0),
 	IR_EMULATE(TGSI_OPCODE_KILL, translate_kill, 0),
 	IR_EMULATE(TGSI_OPCODE_KILL_IF, translate_kill_if, 0),
 	IR_DIRECT(TGSI_OPCODE_DST, OF_OP_DST),
