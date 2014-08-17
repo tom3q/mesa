@@ -36,6 +36,7 @@
 #include "util/u_string.h"
 #include "indices/u_primconvert.h"
 
+#include "openfimg_util.h"
 #include "openfimg_screen.h"
 
 #define OF_MAX_ATTRIBS		9
@@ -181,7 +182,8 @@ struct of_context {
 	struct of_constbuf_stateobj constbuf[PIPE_SHADER_TYPES];
 	struct of_vertexbuf_stateobj vertexbuf;
 	struct pipe_index_buffer indexbuf;
-	struct list_head pending_batches;
+	struct pipe_resource *pending_rsrcs[512];
+	unsigned num_pending_rsrcs;
 };
 
 static INLINE struct of_context *
@@ -205,6 +207,19 @@ of_supported_prim(struct of_context *ctx, unsigned prim)
 }
 
 void of_context_render(struct pipe_context *pctx);
+
+static INLINE void
+of_reference_draw_buffer(struct of_context *ctx, struct pipe_resource *buffer)
+{
+	if (!buffer)
+		return;
+
+	if (ctx->num_pending_rsrcs == ARRAY_SIZE(ctx->pending_rsrcs))
+		of_context_render(&ctx->base);
+
+	pipe_resource_reference(&ctx->pending_rsrcs[ctx->num_pending_rsrcs++],
+				buffer);
+}
 
 struct pipe_context * of_context_create(struct pipe_screen *pscreen,
 		void *priv);
