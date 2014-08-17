@@ -249,7 +249,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		END_PKT(ring, pkt);
 	}
 
-	if (dirty & OF_DIRTY_PROG_VP)
+	if (dirty & (OF_DIRTY_PROG_VP | OF_DIRTY_VTXSTATE))
 		of_program_emit(ctx, ctx->cso.vp);
 
 	if (dirty & OF_DIRTY_PROG_FP)
