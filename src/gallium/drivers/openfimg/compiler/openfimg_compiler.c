@@ -1022,6 +1022,47 @@ translate_kill(struct of_compile_context *ctx,
 					NULL, &instr, 1);
 }
 
+static void
+translate_kill_if(struct of_compile_context *ctx,
+		  struct tgsi_full_instruction *inst, unsigned long data)
+{
+	const struct tgsi_src_register *src = &inst->Src[0].Register;
+	struct of_ir_instr_template instrs[2];
+	unsigned num_instrs = 1;
+	char swizzle[4] = "xyzw";
+	unsigned mask;
+
+	/* Our TEXKILL instruction only considers x, y and z channels,
+	 * so if four are used, we need to add extra one for w. */
+	mask = BIT(src->SwizzleX) | BIT(src->SwizzleY) | BIT(src->SwizzleZ)
+		| BIT(src->SwizzleW);
+
+	memset(instrs, 0, sizeof(instrs));
+
+	instrs[0].opc = OF_OP_TEXKILL;
+	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
+	instrs[0].src[0].swizzle = swizzle;
+
+	if (mask != 0xf) {
+		/* Look for duplicate channels in the swizzle. Note that we
+		 * don't have to check SwizzleW, because if it is already
+		 * a duplicate then we don't need to handle it at all. */
+		if (BIT(src->SwizzleY) & BIT(src->SwizzleX))
+			swizzle[1] = 'w';
+		else if (BIT(src->SwizzleZ) & BIT(src->SwizzleX)
+			 || BIT(src->SwizzleZ) & BIT(src->SwizzleY))
+			swizzle[2] = 'w';
+	} else {
+		instrs[1].opc = OF_OP_TEXKILL;
+		instrs[1].src[0].reg = get_src_reg(ctx, inst, 0);
+		instrs[1].src[0].swizzle = "wwww";
+		++num_instrs;
+	}
+
+	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
+					NULL, instrs, num_instrs);
+}
+
 /*
  * Dynamic flow control
  */
@@ -1321,8 +1362,8 @@ static const struct of_tgsi_map_entry translate_table[] = {
 	IR_EMULATE(TGSI_OPCODE_SNE, translate_sne_seq, 0),
 	IR_EMULATE(TGSI_OPCODE_SEQ, translate_sne_seq, 0),
 	IR_DIRECT(TGSI_OPCODE_CMP, OF_OP_CMP),
-	IR_DIRECT(TGSI_OPCODE_KILL_IF, OF_OP_TEXKILL),
 	IR_EMULATE(TGSI_OPCODE_KILL, translate_kill, 0),
+	IR_EMULATE(TGSI_OPCODE_KILL_IF, translate_kill_if, 0),
 	IR_DIRECT(TGSI_OPCODE_DST, OF_OP_DST),
 	IR_EMULATE(TGSI_OPCODE_XPD, translate_xpd, 0),
 	IR_EMULATE(TGSI_OPCODE_SCS, translate_trig, 0),
