@@ -304,9 +304,11 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 				of_context_get_scissor(ctx);
 
 		OUT_RING(ring, REG_FGRA_XCLIP);
-		OUT_RING(ring, (scissor->maxx << 16) | scissor->minx);
+		OUT_RING(ring, FGRA_XCLIP_MAX_VAL(scissor->maxx)
+				| FGRA_XCLIP_MIN_VAL(scissor->minx));
 		OUT_RING(ring, REG_FGRA_YCLIP);
-		OUT_RING(ring, (scissor->maxy << 16) | scissor->miny);
+		OUT_RING(ring, FGRA_YCLIP_MAX_VAL(scissor->maxy)
+				| FGRA_YCLIP_MIN_VAL(scissor->miny));
 	}
 
 	if (dirty & OF_DIRTY_VIEWPORT) {
