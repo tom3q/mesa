@@ -265,6 +265,9 @@ of_blend_state_create(struct pipe_context *pctx,
 	if (!(rt->colormask & PIPE_MASK_A))
 		so->fgpf_cbmsk |= FGPF_CBMSK_ALPHA;
 
+	so->fgpf_fbctl = FGPF_FBCTL_ALPHA_CONST(0xff)
+				| FGPF_FBCTL_ALPHA_THRESHOLD(0x80);
+
 	if (cso->dither)
 		so->fgpf_fbctl |= FGPF_FBCTL_DITHER_ON;
 	if (cso->alpha_to_one)
