@@ -125,24 +125,16 @@ of_resource_transfer_map(struct pipe_context *pctx,
 		of_resource_transfer_flush_region(pctx, ptrans, box);
 
 	if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
-#if 1
-		if (rsc->timestamp) {
-			int ret = 0;
+		int ret;
 
-			ret = fd_pipe_wait(ctx->pipe, rsc->timestamp);
-			if (ret) {
-				of_resource_transfer_unmap(pctx, ptrans);
-				return NULL;
-			}
-			rsc->timestamp = 0;
-		}
-#else
 		ret = fd_bo_cpu_prep(rsc->bo, ctx->pipe, op);
-		if ((ret == -EBUSY) && (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE))
+		if ((ret == -EBUSY)
+		    && (usage & PIPE_TRANSFER_DISCARD_WHOLE_RESOURCE)) {
 			realloc_bo(rsc, fd_bo_size(rsc->bo));
-		else if (ret)
-			goto fail;
-#endif
+		} else if (ret) {
+			of_resource_transfer_unmap(pctx, ptrans);
+			return NULL;
+		}
 	}
 
 	buf = fd_bo_map(rsc->bo);
