@@ -35,7 +35,11 @@ boolean
 of_fence_wait(struct of_fence *fence)
 {
 	DBG("fence = %p", fence);
+#if 0
 	return !fd_pipe_wait(fence->pipe, fence->timestamp);
+#else
+	return false;
+#endif
 }
 
 boolean
