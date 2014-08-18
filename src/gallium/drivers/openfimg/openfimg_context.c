@@ -142,13 +142,14 @@ of_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
 	DBG("fence=%p", fence);
 
 	of_context_render(pctx);
-
+#if 0
 	if (fence) {
 		struct of_context *ctx = of_context(pctx);
 
 		of_fence_new(ctx, ctx->last_timestamp,
 				(struct of_fence **)fence);
 	}
+#endif
 }
 
 void
