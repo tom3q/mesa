@@ -130,6 +130,9 @@ of_context_render(struct pipe_context *pctx)
 	for (i = 0; i < ctx->num_pending_rsrcs; ++i)
 		pipe_resource_reference(&ctx->pending_rsrcs[i], NULL);
 	ctx->num_pending_rsrcs = 0;
+
+	ctx->dirty |= OF_DIRTY_FRAMEBUFFER | OF_DIRTY_VERTTEX
+			| OF_DIRTY_FRAGTEX;
 }
 
 static void
