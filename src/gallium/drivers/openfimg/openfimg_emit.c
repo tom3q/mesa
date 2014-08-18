@@ -299,7 +299,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		ctx->cso_active.rasterizer = ctx->cso.rasterizer;
 	}
 
-	if (dirty & OF_DIRTY_SCISSOR) {
+	if (dirty & (OF_DIRTY_SCISSOR | OF_DIRTY_RASTERIZER)) {
 		struct pipe_scissor_state *scissor =
 				of_context_get_scissor(ctx);
 
