@@ -249,26 +249,6 @@ of_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	return &so->base;
 }
 
-/* map gallium sampler-id to hw const-idx.. adreno uses a flat address
- * space of samplers (const-idx), so we need to map the gallium sampler-id
- * which is per-shader to a global const-idx space.
- *
- * Fragment shader sampler maps directly to const-idx, and vertex shader
- * is offset by the # of fragment shader samplers.  If the # of fragment
- * shader samplers changes, this shifts the vertex shader indexes.
- *
- * TODO maybe we can do frag shader 0..N  and vert shader N..0 to avoid
- * this??
- */
-unsigned
-of_get_const_idx(struct of_context *ctx, struct of_texture_stateobj *tex,
-		unsigned samp_id)
-{
-	if (tex == &ctx->fragtex)
-		return samp_id;
-	return samp_id + ctx->fragtex.num_samplers;
-}
-
 void
 of_texture_init(struct pipe_context *pctx)
 {
