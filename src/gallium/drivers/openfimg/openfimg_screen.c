@@ -52,13 +52,19 @@
 #include "state_tracker/drm_driver.h"
 
 static const struct debug_named_value debug_options[] = {
-		{"msgs",      OF_DBG_MSGS,   "Print debug messages"},
-		{"disasm",    OF_DBG_DISASM, "Dump TGSI and adreno shader disassembly"},
-		{"dclear",    OF_DBG_DCLEAR, "Mark all state dirty after clear"},
-		{"dgmem",     OF_DBG_DGMEM,  "Mark all state dirty after GMEM tile pass"},
-		{"vmsgs",     OF_DBG_VMSGS,  "Print verbose debug messages (flood warning!)"},
-		{"shadovr",   OF_DBG_SHADER_OVERRIDE, "Override shaders with custom binaries"},
-		DEBUG_NAMED_VALUE_END
+	{ "msgs",	OF_DBG_MSGS,
+		"Print debug messages" },
+	{ "disasm",	OF_DBG_DISASM,
+		"Dump TGSI and resulting shader disassembly" },
+	{ "ast",	OF_DBG_AST_DUMP,
+		"Dump shader AST after each processing stage" },
+	{ "vast",	OF_DBG_AST_VDUMP,
+		"Dump shader AST after each processing stage (more verbose)" },
+	{ "vmsgs",	OF_DBG_VMSGS,
+		"Print verbose debug messages (flood warning!)" },
+	{ "shadovr",	OF_DBG_SHADER_OVERRIDE,
+		"Override shaders with custom binaries" },
+	DEBUG_NAMED_VALUE_END
 };
 
 DEBUG_GET_ONCE_FLAGS_OPTION(of_mesa_debug, "OF_MESA_DEBUG", debug_options, 0)

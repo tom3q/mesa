@@ -212,16 +212,16 @@ struct of_ir_shader {
 };
 
 void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
-		    void *extra_data);
+		    void *extra_data, const char *str);
 
-#define OF_IR_DUMP_AST(shader, extra, extra_data)		\
-	do { if (of_mesa_debug & OF_DBG_MSGS)			\
-		of_ir_dump_ast(shader, extra, extra_data);	\
+#define OF_IR_DUMP_AST(shader, extra, extra_data, str)		\
+	do { if (of_mesa_debug & OF_DBG_AST_DUMP)		\
+		of_ir_dump_ast(shader, extra, extra_data, str);	\
 	} while (0)
 
-#define OF_IR_DUMP_AST_VERBOSE(shader, extra, extra_data)	\
-	do { if (of_mesa_debug & OF_DBG_VMSGS)			\
-		of_ir_dump_ast(shader, extra, extra_data);	\
+#define OF_IR_DUMP_AST_VERBOSE(shader, extra, extra_data, str)	\
+	do { if (of_mesa_debug & OF_DBG_AST_VDUMP)		\
+		of_ir_dump_ast(shader, extra, extra_data, str);	\
 	} while (0)
 
 void of_ir_merge_flags(struct of_ir_register *reg, enum of_ir_reg_flags flags);
