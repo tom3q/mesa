@@ -186,7 +186,7 @@ static uint32_t
 setup_slices(struct of_resource *rsc)
 {
 	struct pipe_resource *prsc = &rsc->base.b;
-	uint32_t level, size = 0;
+	uint32_t level, size = 0, pixels = 0;
 	uint32_t width = prsc->width0;
 	uint32_t height = prsc->height0;
 	uint32_t depth = prsc->depth0;
@@ -196,9 +196,11 @@ setup_slices(struct of_resource *rsc)
 
 		slice->pitch = width;
 		slice->offset = size;
+		slice->pixoffset = pixels;
 		slice->size0 = slice->pitch * height * rsc->cpp;
 
 		size += slice->size0 * depth * prsc->array_size;
+		pixels += slice->pitch * height * depth * prsc->array_size;
 
 		width = u_minify(width, 1);
 		height = u_minify(height, 1);
