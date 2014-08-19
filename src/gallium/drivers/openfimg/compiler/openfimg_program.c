@@ -324,8 +324,10 @@ static const char *solid_vp =
 	"VERT                                        \n"
 	"DCL IN[0]                                   \n"
 	"DCL OUT[0], POSITION                        \n"
-	"  0: MOV OUT[0], IN[0]                      \n"
-	"  1: END                                    \n";
+	"DCL CONST[0]                                \n"
+	"  0: MOV OUT[0].z, CONST[0].xxxx            \n"
+	"  1: MOV OUT[0].xyw, IN[0]                  \n"
+	"  2: END                                    \n";
 
 void
 of_prog_init_solid(struct of_context *ctx)
