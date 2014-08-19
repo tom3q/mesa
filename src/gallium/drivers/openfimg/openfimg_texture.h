@@ -59,9 +59,6 @@ of_pipe_sampler_view(struct pipe_sampler_view *pview)
 	return (struct of_pipe_sampler_view *)pview;
 }
 
-unsigned of_get_const_idx(struct of_context *ctx,
-		struct of_texture_stateobj *tex, unsigned samp_id);
-
 void of_texture_init(struct pipe_context *pctx);
 
 #endif /* OPENFIMG_TEXTURE_H_ */
