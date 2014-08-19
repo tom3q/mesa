@@ -1035,12 +1035,12 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 	int ret;
 
 	DBG("AST (pre-clean)");
-	of_ir_dump_ast(shader, NULL, NULL);
+	OF_IR_DUMP_AST(shader, NULL, NULL);
 
 	clean_ast(shader);
 
 	DBG("AST (post-clean/pre-ssa)");
-	of_ir_dump_ast(shader, NULL, NULL);
+	OF_IR_DUMP_AST(shader, NULL, NULL);
 
 	ret = of_ir_to_ssa(shader);
 	if (ret) {
