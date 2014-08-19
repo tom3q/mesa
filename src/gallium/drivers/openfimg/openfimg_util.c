@@ -58,14 +58,18 @@ of_pipe2texture(enum pipe_format format, bool *is_rgba)
 
 	/* 16-bit buffers. */
 	case PIPE_FORMAT_B5G6R5_UNORM:
+		*is_rgba = false;
 		return TEX_FMT_565;
 	case PIPE_FORMAT_B5G5R5A1_UNORM:
 	case PIPE_FORMAT_B5G5R5X1_UNORM:
+		*is_rgba = false;
 		return TEX_FMT_1555;
 	case PIPE_FORMAT_B4G4R4A4_UNORM:
 	case PIPE_FORMAT_B4G4R4X4_UNORM:
+		*is_rgba = false;
 		return TEX_FMT_4444;
 	case PIPE_FORMAT_Z16_UNORM:
+		*is_rgba = false;
 		return TEX_FMT_DEPTH16;
 	case PIPE_FORMAT_L8A8_UNORM:
 	case PIPE_FORMAT_L8A8_SNORM:
