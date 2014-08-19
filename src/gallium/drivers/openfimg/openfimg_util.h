@@ -42,8 +42,8 @@
 
 #define OF_DBG_MSGS		0x1
 #define OF_DBG_DISASM		0x2
-#define OF_DBG_DCLEAR		0x4
-#define OF_DBG_DGMEM		0x8
+#define OF_DBG_AST_DUMP		0x4
+#define OF_DBG_AST_VDUMP	0x8
 #define OF_DBG_VMSGS		0x10
 #define OF_DBG_SHADER_OVERRIDE	0x20
 extern int of_mesa_debug;

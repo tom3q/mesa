@@ -1020,9 +1020,11 @@ dump_node(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 
 void
 of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
-	       void *extra_data)
+	       void *extra_data, const char *str)
 {
 	struct of_ir_ast_node *node;
+
+	_debug_printf("AST dump (%s):\n", str);
 
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list)
 		dump_node(shader, node, 0, extra, extra_data);
@@ -1034,13 +1036,11 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 {
 	int ret;
 
-	DBG("AST (pre-clean)");
-	OF_IR_DUMP_AST(shader, NULL, NULL);
+	OF_IR_DUMP_AST(shader, NULL, NULL, "pre-clean");
 
 	clean_ast(shader);
 
-	DBG("AST (post-clean/pre-ssa)");
-	OF_IR_DUMP_AST(shader, NULL, NULL);
+	OF_IR_DUMP_AST(shader, NULL, NULL, "post-clean");
 
 	ret = of_ir_to_ssa(shader);
 	if (ret) {
