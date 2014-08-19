@@ -217,35 +217,46 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 
 	if (dirty & OF_DIRTY_FRAMEBUFFER) {
 		struct of_framebuffer_stateobj *fb = &ctx->framebuffer;
+		struct of_resource_slice *slice;
+		struct pipe_surface *psurf;
 		struct of_resource *rsc;
 
-		if (fb->base.cbufs[0]) {
-			of_reference_draw_buffer(ctx,
-						fb->base.cbufs[0]->texture);
-			rsc = of_resource(fb->base.cbufs[0]->texture);
-		} else {
-			rsc = NULL;
-		}
-
 		pkt = OUT_PKT(ring, G3D_REQUEST_COLORBUFFER);
-		OUT_RING(ring, fb->fgpf_fbctl);
-		OUT_RING(ring, 0);
-		OUT_RING(ring, fb->base.width);
-		OUT_RING(ring, rsc ? fd_bo_handle(rsc->bo) : 0);
-		OUT_RING(ring, rsc ? 0 : G3D_CBUFFER_DETACH);
+		psurf = fb->base.cbufs[0];
+		if (psurf) {
+			rsc = of_resource(psurf->texture);
+			of_reference_draw_buffer(ctx, psurf->texture);
+			slice = &rsc->slices[psurf->u.tex.level];
+
+			OUT_RING(ring, fb->fgpf_fbctl);
+			OUT_RING(ring, slice->offset);
+			OUT_RING(ring, fb->base.width);
+			OUT_RING(ring, fd_bo_handle(rsc->bo));
+			OUT_RING(ring, 0);
+		} else {
+			OUT_RING(ring, 0);
+			OUT_RING(ring, 0);
+			OUT_RING(ring, 0);
+			OUT_RING(ring, 0);
+			OUT_RING(ring, G3D_CBUFFER_DETACH);
+		}
 		END_PKT(ring, pkt);
 
-		if (fb->base.zsbuf) {
-			of_reference_draw_buffer(ctx, fb->base.zsbuf->texture);
-			rsc = of_resource(fb->base.zsbuf->texture);
-		} else {
-			rsc = NULL;
-		}
-
 		pkt = OUT_PKT(ring, G3D_REQUEST_DEPTHBUFFER);
-		OUT_RING(ring, 0);
-		OUT_RING(ring, rsc ? fd_bo_handle(rsc->bo) : 0);
-		OUT_RING(ring, rsc ? 0 : G3D_DBUFFER_DETACH);
+		psurf = fb->base.zsbuf;
+		if (psurf) {
+			rsc = of_resource(psurf->texture);
+			of_reference_draw_buffer(ctx, psurf->texture);
+			slice = &rsc->slices[psurf->u.tex.level];
+
+			OUT_RING(ring, slice->offset);
+			OUT_RING(ring, fd_bo_handle(rsc->bo));
+			OUT_RING(ring, 0);
+		} else {
+			OUT_RING(ring, 0);
+			OUT_RING(ring, 0);
+			OUT_RING(ring, G3D_DBUFFER_DETACH);
+		}
 		END_PKT(ring, pkt);
 	}
 

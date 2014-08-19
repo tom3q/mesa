@@ -120,31 +120,18 @@ of_set_framebuffer_state(struct pipe_context *pctx,
 {
 	struct of_context *ctx = of_context(pctx);
 	struct of_framebuffer_stateobj *cso = &ctx->framebuffer;
-	unsigned i;
+	unsigned fmt = 0;
 
 	DBG("%d: cbufs[0]=%p, zsbuf=%p", ctx->needs_flush,
 			framebuffer->cbufs[0], framebuffer->zsbuf);
 
 	of_context_render(pctx);
 
-	for (i = 0; i < framebuffer->nr_cbufs; i++)
-		pipe_surface_reference(&cso->base.cbufs[i],
-					framebuffer->cbufs[i]);
-	for (; i < cso->base.nr_cbufs; i++)
-		pipe_surface_reference(&cso->base.cbufs[i], NULL);
+	util_copy_framebuffer_state(&cso->base, framebuffer);
 
-	cso->base.nr_cbufs = framebuffer->nr_cbufs;
-	cso->base.width = framebuffer->width;
-	cso->base.height = framebuffer->height;
-
-	if (cso->base.cbufs[0]) {
-		unsigned fmt;
-
+	if (cso->base.cbufs[0])
 		fmt = cso->base.cbufs[0]->format;
-		cso->fgpf_fbctl = FGPF_FBCTL_COLOR_MODE(of_pipe2color(fmt));
-	}
-
-	pipe_surface_reference(&cso->base.zsbuf, framebuffer->zsbuf);
+	cso->fgpf_fbctl = FGPF_FBCTL_COLOR_MODE(of_pipe2color(fmt));
 
 	ctx->dirty |= OF_DIRTY_FRAMEBUFFER;
 
