@@ -516,7 +516,7 @@ src_propagation_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 
 				map = map_next;
 			}
-			if (comp != OF_IR_VEC_SIZE)
+			if (comp != OF_IR_VEC_SIZE || !map)
 				continue;
 
 			for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
