@@ -34,6 +34,7 @@
 
 struct of_resource_slice {
 	uint32_t offset;         /* offset of first layer in slice */
+	uint32_t pixoffset;
 	uint32_t pitch;
 	uint32_t size0;          /* size of first layer in slice */
 };

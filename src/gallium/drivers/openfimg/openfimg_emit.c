@@ -127,10 +127,13 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 {
 	struct of_sampler_stateobj *sampler;
 	struct of_pipe_sampler_view *view;
+	struct of_resource *rsc;
+	unsigned level;
 	uint32_t *pkt;
 
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
 	view = of_pipe_sampler_view(tex->textures[samp_id]);
+	rsc = view->tex_resource;
 
 	of_reference_draw_buffer(ctx, &view->tex_resource->base.b);
 
@@ -139,19 +142,19 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 	OUT_RING(ring, view->width);
 	OUT_RING(ring, view->height);
 	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
-	OUT_RING(ring, 0);
+
+	for (level = 1; level <= rsc->base.b.last_level; ++level) {
+		struct of_resource_slice *slice = of_resource_slice(rsc, level);
+
+		OUT_RING(ring, slice->pixoffset);
+	}
+
+	for (; level < MAX_MIP_LEVELS; ++level)
+		OUT_RING(ring, 0);
+
 	OUT_RING(ring, view->base.u.tex.first_level);
-	OUT_RING(ring, view->base.u.tex.last_level);
+	OUT_RING(ring, min(rsc->base.b.last_level,
+				view->base.u.tex.last_level));
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(view->tex_resource->bo));
 	OUT_RING(ring, (samp_id << 24));
