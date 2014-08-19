@@ -781,9 +781,6 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	ctx->cso_active.vtx = NULL;
 	ctx->cso_active.vp = NULL;
 	ctx->cso_active.fp = NULL;
-
-	if (of_mesa_debug & OF_DBG_DCLEAR)
-		ctx->dirty = 0xffffffff;
 }
 
 static void
