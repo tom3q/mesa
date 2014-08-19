@@ -105,6 +105,12 @@ of_pipe2texture(enum pipe_format format, bool *is_rgba)
 		*is_rgba = false;
 		return TEX_FMT_DXT1;
 
+	case PIPE_FORMAT_Z24X8_UNORM:
+	case PIPE_FORMAT_Z24_UNORM_S8_UINT:
+	case PIPE_FORMAT_X24S8_UINT:
+		*is_rgba = false;
+		return TEX_FMT_DEPTH16;
+
 	default:
 		return ~0;
 	}
