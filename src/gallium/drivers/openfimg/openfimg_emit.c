@@ -239,7 +239,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		} else {
 			OUT_RING(ring, 0);
 			OUT_RING(ring, 0);
-			OUT_RING(ring, 0);
+			OUT_RING(ring, fb->base.width);
 			OUT_RING(ring, 0);
 			OUT_RING(ring, G3D_CBUFFER_DETACH);
 		}
