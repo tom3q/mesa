@@ -691,6 +691,12 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	OUT_RING(ring, color->ui[3]);
 	END_PKT(ring, pkt);
 
+	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
+	OUT_RING(ring, RSD_UNIT_TYPE_OFFS(OF_SHADER_VERTEX,
+			G3D_SHADER_DATA_FLOAT, 0));
+	OUT_RING(ring, fui(depth));
+	END_PKT(ring, pkt);
+
 	/* emit applicable generic state */
 	of_emit_state(ctx, ctx->dirty &
 			(OF_DIRTY_BLEND | OF_DIRTY_VIEWPORT |
@@ -700,11 +706,7 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
 	OUT_RING(ring, REG_FGRA_D_OFF_EN);
-	OUT_RING(ring, 1);
-	OUT_RING(ring, REG_FGRA_D_OFF_FACTOR);
-	OUT_RING(ring, fui(depth));
-	OUT_RING(ring, REG_FGRA_D_OFF_UNITS);
-	OUT_RING(ring, fui(0.0f));
+	OUT_RING(ring, 0);
 	OUT_RING(ring, REG_FGRA_BFCULL);
 	OUT_RING(ring, 0);
 
