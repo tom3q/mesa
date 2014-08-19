@@ -727,14 +727,14 @@ of_ir_optimize(struct of_ir_shader *shader)
 	of_stack_destroy(opt->maps_stack);
 
 	DBG("AST (post-src-propagation)");
-	of_ir_dump_ast(shader, dump_opt_data, opt);
+	OF_IR_DUMP_AST(shader, dump_opt_data, opt);
 
 	RUN_PASS(shader, opt, liveness);
 	RUN_PASS(shader, opt, cleanup);
 	RUN_PASS(shader, opt, validate);
 
 	DBG("AST (post-optimize/pre-register-assignment)");
-	of_ir_dump_ast(shader, dump_opt_data, opt);
+	OF_IR_DUMP_AST(shader, dump_opt_data, opt);
 
 	shader->stats.num_vars = opt->num_vars;
 	util_dynarray_fini(&opt->vars);

@@ -433,7 +433,7 @@ of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader)
 	shader->stats.num_instrs = 0;
 	RUN_PASS(shader, opt, collect_stats);
 	DBG("AST (pre-assembler)");
-	of_ir_dump_ast(shader, NULL, 0);
+	OF_IR_DUMP_AST(shader, NULL, 0);
 
 	shader->buffer = pipe_buffer_create(ctx->base.screen,
 					PIPE_BIND_CUSTOM, PIPE_USAGE_IMMUTABLE,
