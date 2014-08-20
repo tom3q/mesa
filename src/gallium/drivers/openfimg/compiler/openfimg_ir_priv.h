@@ -137,7 +137,7 @@ struct of_ir_instruction {
 	/** Destination register. */
 	struct of_ir_register *dst;
 	/** Branch target. */
-	struct of_ir_ast_node *target;
+	unsigned target;
 
 	/** Opcode. */
 	enum of_instr_opcode opc;

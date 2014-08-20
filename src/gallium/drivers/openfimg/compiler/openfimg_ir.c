@@ -890,28 +890,6 @@ format_dst_reg(struct of_ir_shader *shader, char *buf, size_t maxlen,
 }
 
 static void
-format_target(struct of_ir_shader *shader, char *buf, size_t maxlen,
-	      struct of_ir_ast_node *node)
-{
-	struct of_ir_ast_node *parent = node->parent;
-
-	assert(parent);
-
-	while (node->parent_list.next == &parent->nodes) {
-		node = node->parent;
-		if (!node) {
-			snprintf(buf, maxlen, "[invalid target]");
-			return;
-		}
-	}
-
-	node = LIST_ENTRY(struct of_ir_ast_node, node->parent_list.next,
-				parent_list);
-
-	snprintf(buf, maxlen, "%p", node);
-}
-
-static void
 dump_instruction(struct of_ir_shader *shader, struct of_ir_instruction *ins,
 		 unsigned level)
 {
@@ -926,8 +904,8 @@ dump_instruction(struct of_ir_shader *shader, struct of_ir_instruction *ins,
 	dst = ins->dst;
 	if (dst)
 		format_dst_reg(shader, tmp, sizeof(tmp), dst);
-	else if (ins->target)
-		format_target(shader, tmp, sizeof(tmp), ins->target);
+	else if (opc_info->type == OF_IR_CF)
+		snprintf(tmp, sizeof(tmp), "%u", ins->target);
 
 	snprintf(op, sizeof(op), "%s%s", opc_info->name,
 			(dst && dst->flags & OF_IR_REG_SAT) ? "_sat" : "");
