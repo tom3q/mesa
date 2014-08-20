@@ -287,9 +287,6 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 	if (opc_info->type == OF_IR_CF || opc_info->type == OF_IR_SUB) {
 		int offset = instr->target - pc - 1;
 
-		if (offset < 0)
-			--offset;
-
 		dwords[2] |= CF_WORD2_JUMP_OFFS((uint32_t)offset);
 	}
 
@@ -371,9 +368,9 @@ collect_stats(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child, *s;
 
-	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list) {
-		node->start_address = opt->shader->stats.num_instrs;
+	node->start_address = opt->shader->stats.num_instrs;
 
+	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list) {
 		switch (child->type) {
 		case OF_IR_NODE_LIST: {
 			struct of_ir_instruction *ins;
@@ -414,9 +411,9 @@ collect_stats(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		default:
 			break;
 		}
-
-		node->end_address = opt->shader->stats.num_instrs;
 	}
+
+	node->end_address = opt->shader->stats.num_instrs;
 }
 
 /*
