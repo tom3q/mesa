@@ -127,24 +127,27 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 {
 	struct of_sampler_stateobj *sampler;
 	struct of_pipe_sampler_view *view;
-	struct of_resource *rsc;
+	struct of_resource *of_rsc;
+	struct pipe_resource *rsc;
 	unsigned level;
 	uint32_t *pkt;
 
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
 	view = of_pipe_sampler_view(tex->textures[samp_id]);
-	rsc = view->tex_resource;
+	of_rsc = view->tex_resource;
+	rsc = &of_rsc->base.b;
 
 	of_reference_draw_buffer(ctx, &view->tex_resource->base.b);
 
 	pkt = OUT_PKT(ring, G3D_REQUEST_TEXTURE);
 	OUT_RING(ring, sampler->tsta | view->tsta);
-	OUT_RING(ring, view->width);
-	OUT_RING(ring, view->height);
+	OUT_RING(ring, rsc->width0);
+	OUT_RING(ring, rsc->height0);
 	OUT_RING(ring, 0);
 
-	for (level = 1; level <= rsc->base.b.last_level; ++level) {
-		struct of_resource_slice *slice = of_resource_slice(rsc, level);
+	for (level = 1; level <= rsc->last_level; ++level) {
+		struct of_resource_slice *slice =
+					of_resource_slice(of_rsc, level);
 
 		OUT_RING(ring, slice->pixoffset);
 	}
@@ -153,8 +156,7 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 		OUT_RING(ring, 0);
 
 	OUT_RING(ring, view->base.u.tex.first_level);
-	OUT_RING(ring, min(rsc->base.b.last_level,
-				view->base.u.tex.last_level));
+	OUT_RING(ring, view->base.u.tex.last_level);
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(view->tex_resource->bo));
 	OUT_RING(ring, (samp_id << 24));

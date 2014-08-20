@@ -232,6 +232,8 @@ of_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	if (!so)
 		return NULL;
 
+	assert(cso->u.tex.last_level <= rsc->base.b.last_level);
+
 	so->base = *cso;
 	pipe_reference(NULL, &prsc->reference);
 	so->base.texture = prsc;
@@ -243,8 +245,6 @@ of_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 			| TSTA_TYPE(TEX_TYPE_2D);
 	if (is_rgba)
 		so->tsta |= TSTA_RGBA;
-	so->width = prsc->width0;
-	so->height = prsc->height0;
 
 	return &so->base;
 }
