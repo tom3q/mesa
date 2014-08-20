@@ -61,10 +61,6 @@ enum of_ir_reg_type {
 	OF_IR_REG_S,
 	/** LOD register (read-only, PS only). */
 	OF_IR_REG_D,
-	/** Face register (read-only, PS only). */
-	OF_IR_REG_VFACE,
-	/** Position register (read-only, PS only). */
-	OF_IR_REG_VPOS,
 	/** Shader output register (write-only). */
 	OF_IR_REG_O,
 	/** Address register 0 (write-only). */
