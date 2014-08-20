@@ -75,7 +75,7 @@ struct of_vertex_stateobj {
 
 struct of_draw_info_base {
 	struct pipe_draw_info info;
-	const struct of_vertex_stateobj *vtx;
+	struct of_vertex_stateobj *vtx;
 	unsigned vb_mask;
 	uint8_t num_vb;
 };

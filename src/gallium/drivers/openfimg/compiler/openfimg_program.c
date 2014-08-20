@@ -233,8 +233,6 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 
 		pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
-		OUT_RING(ring, REG_FGVS_ATTRIBUTE_NUM);
-		OUT_RING(ring, ctx->cso.vtx->num_elements);
 		for (i = 0; i < 3; ++i) {
 			OUT_RING(ring, REG_FGVS_IN_ATTR_INDEX(i));
 			OUT_RING(ring, so->input_map[i]);
