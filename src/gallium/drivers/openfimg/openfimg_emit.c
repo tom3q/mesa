@@ -129,7 +129,9 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 	struct of_pipe_sampler_view *view;
 	struct of_resource *of_rsc;
 	struct pipe_resource *rsc;
+	unsigned last_level;
 	unsigned level;
+	uint32_t tsta;
 	uint32_t *pkt;
 
 	sampler = of_sampler_stateobj(tex->samplers[samp_id]);
@@ -139,8 +141,15 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 
 	of_reference_draw_buffer(ctx, &view->tex_resource->base.b);
 
+	last_level = view->base.u.tex.last_level;
+	tsta = sampler->tsta | view->tsta;
+	if (!(tsta & TSTA_MIPMAP_EN__MASK) && view->base.u.tex.first_level) {
+		tsta |= TSTA_MIPMAP_EN(MIPMAP_NEAREST);
+		last_level = view->base.u.tex.first_level;
+	}
+
 	pkt = OUT_PKT(ring, G3D_REQUEST_TEXTURE);
-	OUT_RING(ring, sampler->tsta | view->tsta);
+	OUT_RING(ring, tsta);
 	OUT_RING(ring, rsc->width0);
 	OUT_RING(ring, rsc->height0);
 	OUT_RING(ring, 0);
@@ -156,7 +165,7 @@ emit_texture(struct fd_ringbuffer *ring, struct of_context *ctx,
 		OUT_RING(ring, 0);
 
 	OUT_RING(ring, view->base.u.tex.first_level);
-	OUT_RING(ring, view->base.u.tex.last_level);
+	OUT_RING(ring, last_level);
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(view->tex_resource->bo));
 	OUT_RING(ring, (samp_id << 24));
