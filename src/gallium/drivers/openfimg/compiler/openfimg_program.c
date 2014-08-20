@@ -213,15 +213,14 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 		ret = assemble(ctx, so);
 		if (ret) {
 			DBG("failed to assemble shader, using dummy!");
-			so->num_instrs = 0;
+			so->num_instrs = 1;
 			pipe_resource_reference(&so->buffer, ctx->dummy_shader);
-			return;
 		}
 	}
 
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM);
 	OUT_RING(ring, so->type << 8);
-	OUT_RING(ring, 4 * (so->first_immediate + so->num_immediates));
+	OUT_RING(ring, 4 * so->first_immediate + so->num_immediates);
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(of_resource(so->buffer)->bo));
 	OUT_RING(ring, 0);
