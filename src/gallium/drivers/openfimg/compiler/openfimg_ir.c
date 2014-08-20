@@ -228,10 +228,11 @@ static const struct of_ir_reg_info ps_reg_info[OF_IR_NUM_REG_TYPES] = {
 	OF_IR_REG_RW(AL,    4, false, false, 1),
 	OF_IR_REG_R( B,    16, false, false, 1),
 	OF_IR_REG_RW(P,     7, false, false, 1),
-	OF_IR_REG_R( S,     8, false, false, 1),
+	/* In fact only 8 of them are samplers.
+	 * Few higher ones are reserved for special fragment attributes, i.e.
+	 * 16th is vFace and 24th is vPos */
+	OF_IR_REG_R( S,    32, false, false, 1),
 	OF_IR_REG_R( D,     8, false, false, 1),
-	OF_IR_REG_R( VFACE, 4, false, false, 1),
-	OF_IR_REG_R( VPOS,  4, false, false, 1),
 	OF_IR_REG_W( O,     1, false, true),
 	OF_IR_REG_W(A0,     1, false, false),
 	OF_IR_REG_VAR_INFO, /* Virtual variable */
