@@ -58,8 +58,6 @@ static const enum of_ir_reg_type src_types[] = {
 	[OF_SRC_P] = OF_IR_REG_P,
 	[OF_SRC_S] = OF_IR_REG_S,
 	[OF_SRC_D] = OF_IR_REG_D,
-	[OF_SRC_VFACE] = OF_IR_REG_VFACE,
-	[OF_SRC_VPOS] = OF_IR_REG_VPOS,
 };
 
 static const enum of_ir_reg_type dst_types[] = {
