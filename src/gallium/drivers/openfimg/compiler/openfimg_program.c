@@ -203,6 +203,36 @@ overridden:
 }
 
 void
+of_program_link(struct of_context *ctx, struct of_shader_stateobj *vp,
+		struct of_shader_stateobj *fp)
+{
+	struct fd_ringbuffer *ring = ctx->ring;
+	uint32_t input_map[3];
+	uint32_t output_map[3];
+	uint32_t *pkt;
+	unsigned i;
+
+	input_map[0] = 0x03020100;
+	input_map[1] = 0x07060504;
+	input_map[2] = 0x0b0a0908;
+
+	output_map[0] = 0x03020100;
+	output_map[1] = 0x07060504;
+	output_map[2] = 0x0b0a0908;
+
+	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
+
+	for (i = 0; i < 3; ++i) {
+		OUT_RING(ring, REG_FGVS_IN_ATTR_INDEX(i));
+		OUT_RING(ring, input_map[i]);
+		OUT_RING(ring, REG_FGVS_OUT_ATTR_INDEX(i));
+		OUT_RING(ring, output_map[i]);
+	}
+
+	END_PKT(ring, pkt);
+}
+
+void
 of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 {
 	struct fd_ringbuffer *ring = ctx->ring;
@@ -226,21 +256,6 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 	OUT_RING(ring, 0);
 	OUT_RING(ring, so->num_instrs * 16);
 	END_PKT(ring, pkt);
-
-	if (so->type == OF_SHADER_VERTEX) {
-		unsigned i;
-
-		pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
-
-		for (i = 0; i < 3; ++i) {
-			OUT_RING(ring, REG_FGVS_IN_ATTR_INDEX(i));
-			OUT_RING(ring, so->input_map[i]);
-			OUT_RING(ring, REG_FGVS_OUT_ATTR_INDEX(i));
-			OUT_RING(ring, so->output_map[i]);
-		}
-
-		END_PKT(ring, pkt);
-	}
 }
 
 /*
@@ -261,14 +276,6 @@ create_shader(struct of_context *ctx, const struct pipe_shader_state *cso,
 	so->tokens = tgsi_dup_tokens(cso->tokens);
 	so->hash = of_hash_oneshot(cso->tokens, n * sizeof(struct tgsi_token));
 	so->type = type;
-
-	so->input_map[0] = 0x03020100;
-	so->input_map[1] = 0x07060504;
-	so->input_map[2] = 0x0b0a0908;
-
-	so->output_map[0] = 0x03020100;
-	so->output_map[1] = 0x07060504;
-	so->output_map[2] = 0x0b0a0908;
 
 	return so;
 }
