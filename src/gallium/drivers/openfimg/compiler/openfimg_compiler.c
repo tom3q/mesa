@@ -55,11 +55,11 @@ struct of_compile_context {
 	unsigned num_immediates;
 	uint32_t immediates[1024];
 
-	struct tgsi_declaration_semantic in_semantics[OF_MAX_ATTRIBS];
+	struct of_shader_semantic in_semantics[OF_MAX_ATTRIBS];
 	struct of_shader_in_out_map input_map[OF_MAX_ATTRIBS];
 	unsigned num_generic_inputs;
 
-	struct tgsi_declaration_semantic out_semantics[OF_MAX_ATTRIBS];
+	struct of_shader_semantic out_semantics[OF_MAX_ATTRIBS];
 	struct of_shader_in_out_map output_map[OF_MAX_ATTRIBS];
 	unsigned num_generic_outputs;
 
@@ -1538,15 +1538,18 @@ init_handle_declaration_vs(struct of_compile_context *ctx)
 	switch (file) {
 	case TGSI_FILE_OUTPUT:
 		for (i = first; i <= last; ++i) {
-			ctx->out_semantics[i] = decl->Semantic;
+			unsigned out = ctx->num_generic_outputs++;
+
+			ctx->out_semantics[out].name = decl->Semantic.Name;
+			ctx->out_semantics[out].index = decl->Semantic.Index;
+			ctx->out_semantics[out].row = i - first;
 			ctx->output_map[i].type = OF_IR_REG_O;
-			ctx->output_map[i].num = ctx->num_generic_outputs++;
+			ctx->output_map[i].num = out;
 		}
 		break;
 
 	case TGSI_FILE_INPUT:
 		for (i = first; i <= last; ++i) {
-			ctx->in_semantics[i] = decl->Semantic;
 			ctx->input_map[i].type = OF_IR_REG_V;
 			ctx->input_map[i].num = ctx->num_generic_inputs++;
 		}
@@ -1577,18 +1580,13 @@ init_handle_declaration_ps(struct of_compile_context *ctx)
 	case TGSI_FILE_OUTPUT:
 		name = decl->Semantic.Name;
 
-		switch (name) {
-		case TGSI_SEMANTIC_COLOR:
-			break;
-
-		default:
+		if (name != TGSI_SEMANTIC_COLOR) {
 			compile_error(ctx, "unsupported FS output semantic: %s\n",
 					tgsi_semantic_names[name]);
 			return -1;
 		}
 
 		for (i = first; i <= last; ++i) {
-			ctx->out_semantics[i] = decl->Semantic;
 			ctx->output_map[i].type = OF_IR_REG_VAR;
 			/* .num will be patched later in of_compile_shader() */
 		}
@@ -1597,29 +1595,32 @@ init_handle_declaration_ps(struct of_compile_context *ctx)
 	case TGSI_FILE_INPUT:
 		name = decl->Semantic.Name;
 
-		switch (name) {
-		case TGSI_SEMANTIC_POSITION:
+		if (name == TGSI_SEMANTIC_POSITION) {
 			for (i = first; i <= last; ++i) {
-				ctx->in_semantics[i] = decl->Semantic;
 				ctx->input_map[i].type = OF_IR_REG_S;
 				ctx->input_map[i].num = 24;
 			}
-			break;
 
-		case TGSI_SEMANTIC_FACE:
+			return 0;
+		}
+
+		if (name == TGSI_SEMANTIC_FACE) {
 			for (i = first; i <= last; ++i) {
-				ctx->in_semantics[i] = decl->Semantic;
 				ctx->input_map[i].type = OF_IR_REG_S;
 				ctx->input_map[i].num = 16;
 			}
-			break;
 
-		default:
-			for (i = first; i <= last; ++i) {
-				ctx->in_semantics[i] = decl->Semantic;
-				ctx->input_map[i].type = OF_IR_REG_V;
-				ctx->input_map[i].num = ctx->num_generic_inputs++;
-			}
+			return 0;
+		}
+
+		for (i = first; i <= last; ++i) {
+			unsigned in = ctx->num_generic_inputs++;
+
+			ctx->in_semantics[in].name = decl->Semantic.Name;
+			ctx->in_semantics[in].index = decl->Semantic.Index;
+			ctx->in_semantics[in].row = i - first;
+			ctx->input_map[i].type = OF_IR_REG_V;
+			ctx->input_map[i].num = in;
 		}
 		break;
 	}
@@ -1769,7 +1770,7 @@ of_compile_shader(struct of_shader_stateobj *so)
 		unsigned i;
 
 		for (i = 0; i < ctx->num_regs[TGSI_FILE_OUTPUT]; ++i)
-			if (ctx->out_semantics[i].Name == TGSI_SEMANTIC_COLOR)
+			if (ctx->output_map[i].type == OF_IR_REG_VAR)
 				ps_output_temp = ctx->output_map[i].num =
 					ctx->num_regs[TGSI_FILE_TEMPORARY]++;
 	}
@@ -1802,10 +1803,10 @@ of_compile_shader(struct of_shader_stateobj *so)
 	memcpy(so->immediates, ctx->immediates,
 		so->num_immediates * sizeof(uint32_t));
 	memcpy(so->in_semantics, ctx->in_semantics, sizeof(so->in_semantics));
-	so->num_inputs = ctx->num_regs[TGSI_FILE_INPUT];
+	so->num_inputs = ctx->num_generic_inputs;
 	memcpy(so->out_semantics, ctx->out_semantics,
 		sizeof(so->out_semantics));
-	so->num_outputs = ctx->num_regs[TGSI_FILE_OUTPUT];
+	so->num_outputs = ctx->num_generic_outputs;
 
 	compile_free(ctx);
 	return 0;

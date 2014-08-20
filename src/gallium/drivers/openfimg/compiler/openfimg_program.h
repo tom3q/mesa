@@ -31,6 +31,12 @@
 #include "openfimg_ir.h"
 #include "openfimg_emit.h"
 
+struct of_shader_semantic {
+	unsigned name	:8;
+	unsigned index	:16;
+	unsigned row	:8;
+};
+
 struct of_shader_stateobj {
 	enum of_shader_type type;
 
@@ -59,10 +65,10 @@ struct of_shader_stateobj {
 	unsigned num_immediates;
 	uint32_t *immediates;
 
-	struct tgsi_declaration_semantic in_semantics[OF_MAX_ATTRIBS];
+	struct of_shader_semantic in_semantics[OF_MAX_ATTRIBS];
 	unsigned num_inputs;
 
-	struct tgsi_declaration_semantic out_semantics[OF_MAX_ATTRIBS];
+	struct of_shader_semantic out_semantics[OF_MAX_ATTRIBS];
 	unsigned num_outputs;
 };
 
