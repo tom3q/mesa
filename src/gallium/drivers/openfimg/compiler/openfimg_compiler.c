@@ -1145,7 +1145,7 @@ translate_if(struct of_compile_context *ctx,
 
 	/* Emit condition check. */
 	memset(instrs, 0, sizeof(instrs));
-	instrs[0].opc = OF_OP_SETP_EQ;
+	instrs[0].opc = OF_OP_SETP_NE;
 	instrs[0].dst.reg = pred = get_predicate(ctx);
 	instrs[0].dst.mask = "x___";
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
