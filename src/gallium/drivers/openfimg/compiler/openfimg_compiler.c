@@ -69,16 +69,16 @@ struct of_compile_context {
 	struct util_hash_table *subroutine_ht;
 };
 
-typedef void (*of_tgsi_opcode_handler_t)(struct of_compile_context *,
-					 struct tgsi_full_instruction *,
-					 unsigned long);
+typedef int (*of_tgsi_opcode_handler_t)(struct of_compile_context *,
+					struct tgsi_full_instruction *,
+					unsigned long);
 
 struct of_tgsi_map_entry {
 	of_tgsi_opcode_handler_t handler;
 	unsigned long handler_data;
 };
 
-typedef void (*token_handler_t)(struct of_compile_context *ctx);
+typedef int (*token_handler_t)(struct of_compile_context *ctx);
 
 /*
  * Constants used by code generators.
@@ -142,13 +142,14 @@ compile_error(struct of_compile_context *ctx, const char *format, ...)
 		if (!(cond)) compile_error((ctx), "failed assert: "#cond"\n"); \
 	} while (0)
 
-static void
+static int
 process_tokens(struct of_compile_context *ctx, const token_handler_t *handlers,
 	       unsigned num_handlers)
 {
 	while (!tgsi_parse_end_of_tokens(&ctx->parser)) {
 		token_handler_t handler;
 		unsigned token_type;
+		int ret;
 
 		tgsi_parse_token(&ctx->parser);
 
@@ -161,8 +162,12 @@ process_tokens(struct of_compile_context *ctx, const token_handler_t *handlers,
 		if (!handler)
 			continue;
 
-		handler(ctx);
+		ret = handler(ctx);
+		if (ret)
+			return ret;
 	}
+
+	return 0;
 }
 
 /*
@@ -173,9 +178,9 @@ static struct of_ir_register *
 get_dst_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst)
 {
 	const struct tgsi_dst_register *dst = &inst->Dst[0].Register;
-	enum of_ir_reg_type type;
+	enum of_ir_reg_type type = OF_IR_REG_VAR;
 	unsigned flags = 0;
-	unsigned num;
+	unsigned num = 0;
 	char swiz[5];
 
 	switch (dst->File) {
@@ -210,7 +215,6 @@ get_dst_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst)
 	default:
 		compile_error(ctx, "unsupported dst register file: %s\n",
 				tgsi_file_name(dst->File));
-		return NULL;
 	}
 
 	switch (inst->Instruction.Saturate) {
@@ -239,9 +243,9 @@ get_src_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst,
 {
 	const struct tgsi_src_register *src = &inst->Src[src_num].Register;
 	static const char swiz_vals[] = "xyzw";
-	enum of_ir_reg_type type;
+	enum of_ir_reg_type type = OF_IR_REG_VAR;
 	unsigned flags = 0;
-	unsigned num;
+	unsigned num = 0;
 	char swiz[5];
 
 	switch (src->File) {
@@ -273,7 +277,6 @@ get_src_reg(struct of_compile_context *ctx, struct tgsi_full_instruction *inst,
 	default:
 		compile_error(ctx, "unsupported src register file: %s\n",
 				tgsi_file_name(src->File));
-		return NULL;
 	}
 
 	if (src->Absolute)
@@ -367,7 +370,7 @@ node_stack_top(struct of_stack *stack)
  */
 
 /* POW(a,b) = EXP2(b * LOG2(a)) */
-static void
+static int
 translate_pow(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -399,9 +402,11 @@ translate_pow(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node, NULL,
 					instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_tex(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -417,7 +422,7 @@ translate_tex(struct of_compile_context *ctx,
 	default:
 		compile_error(ctx, "unknown texture type: %s\n",
 				tgsi_texture_names[inst->Texture.Texture]);
-		return;
+		return -1;
 	}
 
 	if (inst->Instruction.Opcode == TGSI_OPCODE_TXP) {
@@ -471,10 +476,12 @@ translate_tex(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, &instr, 1);
+
+	return 0;
 }
 
 /* LRP = (src0 * src1) + ((1 - src0) * src2) */
-static void
+static int
 translate_lrp(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -500,9 +507,11 @@ translate_lrp(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node, NULL,
 					instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_trig(struct of_compile_context *ctx,
 	       struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -639,9 +648,11 @@ translate_trig(struct of_compile_context *ctx,
 						NULL, instrs, 9);
 		break;
 	}
+
+	return 0;
 }
 
-static void
+static int
 translate_lit(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -719,9 +730,11 @@ translate_lit(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node, NULL,
 					instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_sub(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -737,9 +750,11 @@ translate_sub(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, &instr, 1);
+
+	return 0;
 }
 
-static void
+static int
 translate_clamp(struct of_compile_context *ctx,
 		struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -760,9 +775,11 @@ translate_clamp(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node, NULL,
 					instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_round(struct of_compile_context *ctx,
 		struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -798,9 +815,11 @@ translate_round(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node, NULL,
 					instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_xpd(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -837,9 +856,11 @@ translate_xpd(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node, NULL,
 					instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_abs(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -854,9 +875,11 @@ translate_abs(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, &instr, 1);
+
+	return 0;
 }
 
-static void
+static int
 translate_ssg(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -884,9 +907,11 @@ translate_ssg(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_sne_seq(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -927,9 +952,11 @@ translate_sne_seq(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_dp2(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -947,9 +974,11 @@ translate_dp2(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, &instr, 1);
+
+	return 0;
 }
 
-static void
+static int
 translate_cmp(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -965,23 +994,29 @@ translate_cmp(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, &instr, 1);
+
+	return 0;
 }
 
-static void
+static int
 translate_ddx(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
+
+	return 0;
 }
 
-static void
+static int
 translate_ddy(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	DBG("TODO");
+
+	return 0;
 }
 
-static void
+static int
 translate_trunc(struct of_compile_context *ctx,
 		struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1004,9 +1039,11 @@ translate_trunc(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_ceil(struct of_compile_context *ctx,
 	       struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1027,9 +1064,11 @@ translate_ceil(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, instrs, ARRAY_SIZE(instrs));
+
+	return 0;
 }
 
-static void
+static int
 translate_kill(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1045,9 +1084,11 @@ translate_kill(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, &instr, 1);
+
+	return 0;
 }
 
-static void
+static int
 translate_kill_if(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1086,12 +1127,14 @@ translate_kill_if(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, instrs, num_instrs);
+
+	return 0;
 }
 
 /*
  * Dynamic flow control
  */
-static void
+static int
 translate_if(struct of_compile_context *ctx,
 	     struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1132,9 +1175,11 @@ translate_if(struct of_compile_context *ctx,
 	of_ir_node_insert(depart, list);
 
 	ctx->current_node = list;
+
+	return 0;
 }
 
-static void
+static int
 translate_else(struct of_compile_context *ctx,
 	       struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1151,9 +1196,11 @@ translate_else(struct of_compile_context *ctx,
 	list = of_ir_node_list(ctx->shader);
 	of_ir_node_insert(region, list);
 	ctx->current_node = list;
+
+	return 0;
 }
 
-static void
+static int
 translate_endif(struct of_compile_context *ctx,
 		struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1175,6 +1222,8 @@ translate_endif(struct of_compile_context *ctx,
 	list = of_ir_node_list(ctx->shader);
 	of_ir_node_insert(parent, list);
 	ctx->current_node = list;
+
+	return 0;
 }
 
 /*
@@ -1201,7 +1250,7 @@ find_subroutine(struct of_compile_context *ctx, unsigned label)
 	return node;
 }
 
-static void
+static int
 translate_bgnsub(struct of_compile_context *ctx,
 		 struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1218,18 +1267,22 @@ translate_bgnsub(struct of_compile_context *ctx,
 	list = of_ir_node_list(ctx->shader);
 	of_ir_node_insert(region, list);
 	ctx->current_node = list;
+
+	return 0;
 }
 
-static void
+static int
 translate_endsub(struct of_compile_context *ctx,
 		 struct tgsi_full_instruction *inst, unsigned long data)
 {
 	assert(ctx->in_subroutine);
 	ctx->in_subroutine = false;
 	ctx->current_node = ctx->prev_node;
+
+	return 0;
 }
 
-static void
+static int
 translate_cal(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1242,12 +1295,14 @@ translate_cal(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, &instr, 1);
+
+	return 0;
 }
 
 /*
  * Loops.
  */
-static void
+static int
 translate_bgnloop(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1268,9 +1323,11 @@ translate_bgnloop(struct of_compile_context *ctx,
 	list = of_ir_node_list(ctx->shader);
 	of_ir_node_insert(repeat, list);
 	ctx->current_node = list;
+
+	return 0;
 }
 
-static void
+static int
 translate_brk(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1297,9 +1354,11 @@ translate_brk(struct of_compile_context *ctx,
 	list = of_ir_node_list(ctx->shader);
 	of_ir_node_insert(parent, list);
 	ctx->current_node = list;
+
+	return 0;
 }
 
-static void
+static int
 translate_endloop(struct of_compile_context *ctx,
 		  struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1316,13 +1375,15 @@ translate_endloop(struct of_compile_context *ctx,
 	list = of_ir_node_list(ctx->shader);
 	of_ir_node_insert(parent, list);
 	ctx->current_node = list;
+
+	return 0;
 }
 
 /*
  * Helper for TGSI instructions with direct translation.
  */
 
-static void
+static int
 translate_direct(struct of_compile_context *ctx,
 		 struct tgsi_full_instruction *inst, unsigned long data)
 {
@@ -1343,6 +1404,8 @@ translate_direct(struct of_compile_context *ctx,
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
 					NULL, &instr, 1);
+
+	return 0;
 }
 
 /*
@@ -1429,7 +1492,7 @@ static const struct of_tgsi_map_entry translate_table[] = {
 	IR_EMULATE(TGSI_OPCODE_TXP, translate_tex, 0),
 };
 
-static void
+static int
 translate_instruction(struct of_compile_context *ctx)
 {
 	struct tgsi_full_instruction *inst =
@@ -1437,14 +1500,16 @@ translate_instruction(struct of_compile_context *ctx)
 	unsigned opc = inst->Instruction.Opcode;
 
 	if (opc == TGSI_OPCODE_END)
-		return;
+		return 0;
 
 	if (opc >= ARRAY_SIZE(translate_table)
-	    || !translate_table[opc].handler)
+	    || !translate_table[opc].handler) {
 		compile_error(ctx, "unknown TGSI opc: %s\n",
 				tgsi_get_opcode_name(opc));
+		return -1;
+	}
 
-	translate_table[opc].handler(ctx, inst,
+	return translate_table[opc].handler(ctx, inst,
 					translate_table[opc].handler_data);
 }
 
@@ -1456,7 +1521,7 @@ static const token_handler_t compile_token_handlers[] = {
  * Initialization.
  */
 
-static void
+static int
 init_handle_declaration(struct of_compile_context *ctx)
 {
 	struct tgsi_full_declaration *decl;
@@ -1497,6 +1562,7 @@ init_handle_declaration(struct of_compile_context *ctx)
 			default:
 				compile_error(ctx, "unsupported VS output semantic: %s\n",
 					tgsi_semantic_names[name]);
+				return -1;
 			}
 		} else {
 			switch (name) {
@@ -1505,6 +1571,7 @@ init_handle_declaration(struct of_compile_context *ctx)
 			default:
 				compile_error(ctx, "unsupported FS output semantic: %s\n",
 					tgsi_semantic_names[name]);
+				return -1;
 			}
 		}
 		break;
@@ -1513,9 +1580,11 @@ init_handle_declaration(struct of_compile_context *ctx)
 		ctx->input_map[first] = decl->Semantic;
 		break;
 	}
+
+	return 0;
 }
 
-static void
+static int
 init_handle_immediate(struct of_compile_context *ctx)
 {
 	struct tgsi_full_immediate *imm = &ctx->parser.FullToken.FullImmediate;
@@ -1523,6 +1592,8 @@ init_handle_immediate(struct of_compile_context *ctx)
 	compile_assert(ctx, imm->Immediate.DataType == TGSI_IMM_FLOAT32);
 	memcpy(&ctx->immediates[ctx->num_immediates], imm->u, 16);
 	ctx->num_immediates += 4;
+
+	return 0;
 }
 
 static const token_handler_t init_token_handlers[] = {
@@ -1587,8 +1658,10 @@ compile_init(const struct tgsi_token *tokens)
 	ctx->tokens = tokens;
 
 	/* do first pass to extract declarations: */
-	process_tokens(ctx, init_token_handlers,
+	ret = process_tokens(ctx, init_token_handlers,
 			ARRAY_SIZE(init_token_handlers));
+	if (ret)
+		goto fail;
 
 	tgsi_parse_free(&ctx->parser);
 
@@ -1642,8 +1715,11 @@ of_compile_shader(struct of_shader_stateobj *so)
 	if (ctx->type == OF_SHADER_PIXEL)
 		ctx->ps_output_temp = ctx->num_regs[TGSI_FILE_TEMPORARY]++;
 
-	process_tokens(ctx, compile_token_handlers,
-			ARRAY_SIZE(compile_token_handlers));
+	if (process_tokens(ctx, compile_token_handlers,
+			ARRAY_SIZE(compile_token_handlers))) {
+		compile_free(ctx);
+		return -1;
+	}
 
 	if (ctx->type == OF_SHADER_PIXEL) {
 		struct of_ir_instr_template instr;
