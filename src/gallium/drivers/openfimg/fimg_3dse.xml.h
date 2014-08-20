@@ -969,13 +969,12 @@ static inline uint32_t ALU_WORD2_DST_TYPE(enum of_instr_dst val)
 }
 #define ALU_WORD2_DST_A						0x00010000
 #define ALU_WORD2_DST_SAT					0x00020000
-#define CF_WORD2_JUMP_OFFS__MASK				0x0000ff00
+#define CF_WORD2_JUMP_OFFS__MASK				0x0001ff00
 #define CF_WORD2_JUMP_OFFS__SHIFT				8
 static inline uint32_t CF_WORD2_JUMP_OFFS(uint32_t val)
 {
 	return ((val) << CF_WORD2_JUMP_OFFS__SHIFT) & CF_WORD2_JUMP_OFFS__MASK;
 }
-#define CF_WORD2_JUMP_BACK					0x00010000
 #define ALU_WORD2_DST_MASK__MASK				0x00780000
 #define ALU_WORD2_DST_MASK__SHIFT				19
 static inline uint32_t ALU_WORD2_DST_MASK(uint32_t val)

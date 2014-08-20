@@ -239,10 +239,13 @@ static void
 instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 	   uint32_t *buffer, unsigned pc)
 {
+	const struct of_ir_opc_info *opc_info;
 	uint32_t *dwords = buffer + 4 * pc;
 	const struct of_ir_reg_info *info;
 	struct of_ir_register *dst;
 	unsigned i;
+
+	opc_info = of_ir_get_opc_info(instr->opc);
 
 	memset(dwords, 0, 4 * sizeof(uint32_t));
 
@@ -283,16 +286,13 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 		set_flags(dst->flags, dwords, dst_bitfields.flags);
 	}
 
-	if (instr->target) {
-		int offset = instr->target->end_address - pc - 1;
-		bool backwards = offset < 0;
+	if (opc_info->type == OF_IR_CF || opc_info->type == OF_IR_SUB) {
+		int offset = instr->target - pc - 1;
 
-		if (backwards) {
-			dwords[2] |= CF_WORD2_JUMP_BACK;
-			offset = -offset;
-		}
+		if (offset < 0)
+			--offset;
 
-		dwords[2] |= CF_WORD2_JUMP_OFFS(offset);
+		dwords[2] |= CF_WORD2_JUMP_OFFS((uint32_t)offset);
 	}
 
 	/* TODO: Implement predicate support */
@@ -302,6 +302,7 @@ static void
 generate_code(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
+	struct of_ir_ast_node *target;
 	struct of_ir_ast_node *child;
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list) {
@@ -325,7 +326,7 @@ generate_code(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		case OF_IR_NODE_IF_THEN:
 			ins = of_ir_instr_create(opt->shader, OF_OP_BF);
 			of_ir_instr_add_src(ins, child->if_then.reg);
-			ins->target = child;
+			ins->target = child->end_address;
 			instr_emit(opt->shader, ins, opt->dwords,
 					opt->cur_instr++);
 			break;
@@ -337,11 +338,18 @@ generate_code(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		generate_code(opt, child);
 
 		switch (child->type) {
-		case OF_IR_NODE_DEPART:
 		case OF_IR_NODE_REPEAT:
-			if (child->depart_repeat.region->parent) {
+			target = child->depart_repeat.region;
+			ins = of_ir_instr_create(opt->shader, OF_OP_B);
+			ins->target = target->start_address;
+			instr_emit(opt->shader, ins, opt->dwords,
+					opt->cur_instr++);
+			break;
+		case OF_IR_NODE_DEPART:
+			target = child->depart_repeat.region;
+			if (target->parent) {
 				ins = of_ir_instr_create(opt->shader, OF_OP_B);
-				ins->target = child->depart_repeat.region;
+				ins->target = target->end_address;
 			} else {
 				ins = of_ir_instr_create(opt->shader,
 								OF_OP_RET);
@@ -530,6 +538,15 @@ disassemble_code(uint32_t *dwords, unsigned num_dwords,
 			reg = of_ir_reg_create(shader, dst_types[type], num,
 						mask_str, flags);
 			of_ir_instr_add_dst(ins, reg);
+		} else {
+			uint32_t val = (instr[2] & CF_WORD2_JUMP_OFFS__MASK)
+					>> CF_WORD2_JUMP_OFFS__SHIFT;
+			int offset = val;
+
+			if (val & BIT(8))
+				offset = (int)(val | 0xfffffe00);
+
+			ins->target = offset + i / 4 + 1;
 		}
 
 		of_ir_instr_insert(shader, list, NULL, ins);
