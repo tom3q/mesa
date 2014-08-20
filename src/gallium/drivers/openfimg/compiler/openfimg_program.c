@@ -187,6 +187,11 @@ assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 		return -1;
 	}
 
+	if (so->num_instrs > 512) {
+		debug_error("assembled shader too big (%u > 512)");
+		return -1;
+	}
+
 overridden:
 	if (of_mesa_debug & OF_DBG_DISASM) {
 		DBG("disassemble: type=%d", so->type);
