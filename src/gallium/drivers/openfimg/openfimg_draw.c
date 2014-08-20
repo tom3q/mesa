@@ -379,13 +379,13 @@ static void
 of_emit_draw_setup(struct of_context *ctx, const struct of_vertex_info *info,
 		   uint32_t dirty)
 {
+	const struct of_draw_info *draw = &info->key;
 	struct fd_ringbuffer *ring = ctx->ring;
 	uint32_t *pkt;
 
 	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
 	if (dirty & OF_DIRTY_VTXSTATE) {
-		const struct of_draw_info *draw = &info->key;
 		unsigned i;
 
 		for (i = 0; i < draw->base.vtx->num_elements; ++i) {
@@ -399,6 +399,9 @@ of_emit_draw_setup(struct of_context *ctx, const struct of_vertex_info *info,
 			OUT_RING(ring, REG_FGHI_ATTRIB_VBBASE(i));
 			OUT_RING(ring, element->vbbase);
 		}
+
+		OUT_RING(ring, REG_FGVS_ATTRIBUTE_NUM);
+		OUT_RING(ring, draw->base.vtx->num_elements);
 	}
 
 	if (dirty & OF_DIRTY_RASTERIZER
@@ -416,7 +419,7 @@ of_emit_draw_setup(struct of_context *ctx, const struct of_vertex_info *info,
 	END_PKT(ring, pkt);
 
 	ctx->last_draw_mode = info->draw_mode;
-	ctx->cso_active.vtx = ctx->cso.vtx;
+	ctx->cso_active.vtx = draw->base.vtx;
 }
 
 static void
