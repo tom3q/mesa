@@ -28,6 +28,7 @@
 #include "util/u_format.h"
 #include "tgsi/tgsi_dump.h"
 #include "tgsi/tgsi_parse.h"
+#include "tgsi/tgsi_strings.h"
 #include "tgsi/tgsi_text.h"
 
 #include "openfimg_program.h"
@@ -202,23 +203,70 @@ overridden:
 	return 0;
 }
 
+static INLINE unsigned
+MAP_WORD(unsigned attrib)
+{
+	return attrib / 4;
+}
+
+static INLINE unsigned
+MAP_SHIFT(unsigned attrib)
+{
+	return 8 * (attrib % 4);
+}
+
+static INLINE uint32_t
+MAP_MASK(unsigned attrib)
+{
+	return 0xf << MAP_SHIFT(attrib);
+}
+
 void
 of_program_link(struct of_context *ctx, struct of_shader_stateobj *vp,
 		struct of_shader_stateobj *fp)
 {
 	struct fd_ringbuffer *ring = ctx->ring;
-	uint32_t input_map[3];
-	uint32_t output_map[3];
+	uint32_t input_map[3] = { 0x03020100, 0x07060504, 0x0b0a0908 };
+	uint32_t output_map[3] = { 0x0b0b0b0b, 0x0b0b0b0b, 0x0b0b0b0b };
 	uint32_t *pkt;
 	unsigned i;
+	unsigned o;
 
-	input_map[0] = 0x03020100;
-	input_map[1] = 0x07060504;
-	input_map[2] = 0x0b0a0908;
+	/* Map vertex shader outputs to fragment shader inputs. */
+	for (i = 0; i < fp->num_inputs; ++i) {
+		struct of_shader_semantic fp_sem = fp->in_semantics[i];
 
-	output_map[0] = 0x03020100;
-	output_map[1] = 0x07060504;
-	output_map[2] = 0x0b0a0908;
+retry:
+		for (o = 0; o < vp->num_outputs; ++o) {
+			struct of_shader_semantic vp_sem = vp->out_semantics[o];
+
+			if (!memcmp(&fp_sem, &vp_sem, sizeof(fp_sem)))
+				break;
+		}
+		if (o == vp->num_outputs
+		    && fp_sem.name == TGSI_SEMANTIC_BCOLOR) {
+			fp_sem.name = TGSI_SEMANTIC_COLOR;
+			goto retry;
+		}
+		if (o == vp->num_outputs) {
+			DBG("failed to link FS input (%s:%u[%u]) with VS output!",
+				tgsi_semantic_names[fp_sem.name], fp_sem.index,
+				fp_sem.row);
+			assert(0);
+			continue;
+		}
+
+		output_map[MAP_WORD(o)] &= ~MAP_MASK(o);
+		output_map[MAP_WORD(o)] |= (i + 1) << MAP_SHIFT(o);
+	}
+
+	/* Map position output of vertex shader to output 0. */
+	for (o = 0; o < vp->num_outputs; ++o) {
+		if (vp->out_semantics[o].name != TGSI_SEMANTIC_POSITION)
+			continue;
+
+		output_map[MAP_WORD(o)] &= ~MAP_MASK(o);
+	}
 
 	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
@@ -244,6 +292,8 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 		if (ret) {
 			DBG("failed to assemble shader, using dummy!");
 			so->num_instrs = 1;
+			so->num_inputs = 0;
+			so->num_outputs = 0;
 			pipe_resource_reference(&so->buffer, ctx->dummy_shader);
 		}
 	}
