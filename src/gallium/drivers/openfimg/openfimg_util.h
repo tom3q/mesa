@@ -117,8 +117,9 @@ enum of_request_type {
 	G3D_REQUEST_DRAW = 6,
 #define	G3D_DRAW_INDEXED	(1 << 31)
 	G3D_REQUEST_VERTEX_BUFFER = 7,
-
-	G3D_REQUEST_VTX_TEXTURE = -1,
+	G3D_REQUEST_VTX_TEXTURE = 8,
+#define G3D_VTX_TEXTURE_DIRTY	(1 << 0)
+#define G3D_VTX_TEXTURE_DETACH	(1 << 1)
 };
 
 /* Defined using the same values as kernel interface. */
