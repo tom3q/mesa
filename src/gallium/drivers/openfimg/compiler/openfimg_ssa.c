@@ -146,7 +146,7 @@ insert_phi(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		insert_phi(opt, child);
 
 	/* Handles if_then and region nodes. */
-	if (node->ssa.depart_count > 1)
+	if (node->ssa.depart_count)
 		make_trivials(opt, &node->ssa.phis,
 				node->ssa.vars_defined, node->ssa.depart_count);
 
