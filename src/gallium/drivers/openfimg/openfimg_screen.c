@@ -202,7 +202,6 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 	case PIPE_CAP_USER_INDEX_BUFFERS:
 	case PIPE_CAP_USER_VERTEX_BUFFERS:
 	case PIPE_CAP_TEXTURE_SWIZZLE:
-	case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
 	/*
 	 * TODO: Not sure if we can really support them, but they are
 	 * needed for OpenGL 2.1, so enable them for now even if unimplemented.
@@ -212,6 +211,7 @@ of_screen_get_param(struct pipe_screen *pscreen, enum pipe_cap param)
 		return 1;
 
 	/* Unsupported features. */
+	case PIPE_CAP_PREFER_BLIT_BASED_TEXTURE_TRANSFER:
 	case PIPE_CAP_FAKE_SW_MSAA:
 	case PIPE_CAP_TGSI_INSTANCEID:
 	case PIPE_CAP_QUADS_FOLLOW_PROVOKING_VERTEX_CONVENTION:
