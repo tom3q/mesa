@@ -531,7 +531,7 @@ src_propagation_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 
 			src->num = map->reg;
 			src->type = map->type;
-			of_ir_merge_flags(src, map->flags);
+			src->flags = of_ir_merge_flags(map->flags, src->flags);
 		}
 
 		dst = ins->dst;
