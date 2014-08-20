@@ -170,16 +170,16 @@ assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 {
 	int ret;
 
-	if (!so->ir) {
-		ret = compile(so);
-		if (ret)
-			return -1;
-	}
-
 	if (of_mesa_debug & OF_DBG_SHADER_OVERRIDE) {
 		ret = override_shader(ctx, so);
 		if (!ret)
 			goto overridden;
+	}
+
+	if (!so->ir) {
+		ret = compile(so);
+		if (ret)
+			return -1;
 	}
 
 	ret = of_ir_shader_assemble(ctx, so->ir, so);
