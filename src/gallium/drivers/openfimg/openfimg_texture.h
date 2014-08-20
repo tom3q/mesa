@@ -49,8 +49,6 @@ struct of_pipe_sampler_view {
 	struct of_resource *tex_resource;
 	uint32_t vtx_tsta;
 	uint32_t tsta;
-	uint32_t width;
-	uint32_t height;
 };
 
 static INLINE struct of_pipe_sampler_view *
