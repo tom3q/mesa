@@ -206,7 +206,6 @@ void
 of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 {
 	struct fd_ringbuffer *ring = ctx->ring;
-	unsigned num_attribs;
 	uint32_t *pkt;
 	int ret;
 
@@ -220,21 +219,31 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 		}
 	}
 
-	if (so->type == OF_SHADER_PIXEL) {
-		/* Workaround for HW bug. */
-		num_attribs = 8;
-	} else {
-		num_attribs = ctx->cso.vtx->num_elements;
-	}
-
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_PROGRAM);
-	OUT_RING(ring, (so->type << 8) | num_attribs);
+	OUT_RING(ring, so->type << 8);
 	OUT_RING(ring, 4 * (so->first_immediate + so->num_immediates));
 	OUT_RING(ring, 0);
 	OUT_RING(ring, fd_bo_handle(of_resource(so->buffer)->bo));
 	OUT_RING(ring, 0);
 	OUT_RING(ring, so->num_instrs * 16);
 	END_PKT(ring, pkt);
+
+	if (so->type == OF_SHADER_VERTEX) {
+		unsigned i;
+
+		pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
+
+		OUT_RING(ring, REG_FGVS_ATTRIBUTE_NUM);
+		OUT_RING(ring, ctx->cso.vtx->num_elements);
+		for (i = 0; i < 3; ++i) {
+			OUT_RING(ring, REG_FGVS_IN_ATTR_INDEX(i));
+			OUT_RING(ring, so->input_map[i]);
+			OUT_RING(ring, REG_FGVS_OUT_ATTR_INDEX(i));
+			OUT_RING(ring, so->output_map[i]);
+		}
+
+		END_PKT(ring, pkt);
+	}
 }
 
 /*
@@ -255,6 +264,14 @@ create_shader(struct of_context *ctx, const struct pipe_shader_state *cso,
 	so->tokens = tgsi_dup_tokens(cso->tokens);
 	so->hash = of_hash_oneshot(cso->tokens, n * sizeof(struct tgsi_token));
 	so->type = type;
+
+	so->input_map[0] = 0x03020100;
+	so->input_map[1] = 0x07060504;
+	so->input_map[2] = 0x0b0a0908;
+
+	so->output_map[0] = 0x03020100;
+	so->output_map[1] = 0x07060504;
+	so->output_map[2] = 0x0b0a0908;
 
 	return so;
 }
