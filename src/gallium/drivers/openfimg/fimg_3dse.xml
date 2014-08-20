@@ -522,8 +522,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		<bitfield name="DST_TYPE" high="15" low="13" type="of_instr_dst" variants="ALU"/>
 		<bitfield name="DST_A" pos="16" variants="ALU"/>
 		<bitfield name="DST_SAT" pos="17" variants="ALU"/>
-		<bitfield name="JUMP_OFFS" high="15" low="8" variants="CF"/>
-		<bitfield name="JUMP_BACK" pos="16" variants="CF"/>
+		<bitfield name="JUMP_OFFS" high="16" low="8" variants="CF"/>
 		<bitfield name="DST_MASK" high="22" low="19" type="uint" variants="ALU"/>
 		<bitfield name="OPCODE" high="28" low="23" type="uint"/>
 		<bitfield name="NEXT_3SRC" pos="29"/>
