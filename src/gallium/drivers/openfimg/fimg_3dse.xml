@@ -242,38 +242,46 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		</reg32>
 	</stripe>
 
-	<reg32 offset="37" name="FGPE_VERTEX_CONTEXT">
+	<reg32 offset="37" name="FGVS_ATTRIBUTE_NUM" type="uint"/>
+	<stripe offset="38" stride="1" length="3">
+		<reg32 offset="0" name="FGVS_IN_ATTR_INDEX" type="uint"/>
+	</stripe>
+	<stripe offset="41" stride="1" length="3">
+		<reg32 offset="0" name="FGVS_OUT_ATTR_INDEX" type="uint"/>
+	</stripe>
+
+	<reg32 offset="44" name="FGPE_VERTEX_CONTEXT">
 		<bitfield name="TYPE" high="26" low="19" type="fgpe_vctx_ptype"/>
 		<bitfield name="VS_POINT_SIZE" pos="18"/>
 		<bitfield name="VSOUT" high="13" low="10"/>
 		<bitfield name="FLAT_SHADE" pos="9"/>
 		<bitfield name="FLAT_MODEL" high="8" low="0" type="hex"/>
 	</reg32>
-	<reg32 offset="38" name="FGPE_VIEWPORT_OX" type="float"/>
-	<reg32 offset="39" name="FGPE_VIEWPORT_OY" type="float"/>
-	<reg32 offset="40" name="FGPE_VIEWPORT_HALF_PX" type="float"/>
-	<reg32 offset="41" name="FGPE_VIEWPORT_HALF_PY" type="float"/>
-	<reg32 offset="42" name="FGPE_DEPTHRANGE_HALF_F_SUB_N" type="float"/>
-	<reg32 offset="43" name="FGPE_DEPTHRANGE_HALF_F_ADD_N" type="float"/>
+	<reg32 offset="45" name="FGPE_VIEWPORT_OX" type="float"/>
+	<reg32 offset="46" name="FGPE_VIEWPORT_OY" type="float"/>
+	<reg32 offset="47" name="FGPE_VIEWPORT_HALF_PX" type="float"/>
+	<reg32 offset="48" name="FGPE_VIEWPORT_HALF_PY" type="float"/>
+	<reg32 offset="49" name="FGPE_DEPTHRANGE_HALF_F_SUB_N" type="float"/>
+	<reg32 offset="50" name="FGPE_DEPTHRANGE_HALF_F_ADD_N" type="float"/>
 
-	<reg32 offset="44" name="FGRA_PIX_SAMP">
+	<reg32 offset="51" name="FGRA_PIX_SAMP">
 		<bitfield name="PIX_CORNER_SAMP" pos="0"/>
 	</reg32>
-	<reg32 offset="45" name="FGRA_D_OFF_EN">
+	<reg32 offset="52" name="FGRA_D_OFF_EN">
 		<bitfield name="ENABLE" pos="0"/>
 	</reg32>
-	<reg32 offset="46" name="FGRA_D_OFF_FACTOR" type="float"/>
-	<reg32 offset="47" name="FGRA_D_OFF_UNITS" type="float"/>
-	<reg32 offset="48" name="FGRA_BFCULL">
+	<reg32 offset="53" name="FGRA_D_OFF_FACTOR" type="float"/>
+	<reg32 offset="54" name="FGRA_D_OFF_UNITS" type="float"/>
+	<reg32 offset="55" name="FGRA_BFCULL">
 		<bitfield name="FACE" high="1" low="0" type="fgra_bfcull_face"/>
 		<bitfield name="FRONT_CW" pos="2"/>
 		<bitfield name="ENABLE" pos="3"/>
 	</reg32>
-	<reg32 offset="49" name="FGRA_YCLIP">
+	<reg32 offset="56" name="FGRA_YCLIP">
 		<bitfield name="MIN_VAL" high="11" low="0" type="uint"/>
 		<bitfield name="MAX_VAL" high="27" low="16" type="uint"/>
 	</reg32>
-	<reg32 offset="50" name="FGRA_LODCTL">
+	<reg32 offset="57" name="FGRA_LODCTL">
 		<bitfield name="LOD_CON0" high="2" low="0" type="uint"/>
 		<bitfield name="LOD_CON1" high="5" low="3" type="uint"/>
 		<bitfield name="LOD_CON2" high="8" low="6" type="uint"/>
@@ -283,19 +291,19 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		<bitfield name="LOD_CON6" high="20" low="18" type="uint"/>
 		<bitfield name="LOD_CON7" high="23" low="21" type="uint"/>
 	</reg32>
-	<reg32 offset="51" name="FGRA_XCLIP">
+	<reg32 offset="58" name="FGRA_XCLIP">
 		<bitfield name="MIN_VAL" high="11" low="0" type="uint"/>
 		<bitfield name="MAX_VAL" high="27" low="16" type="uint"/>
 	</reg32>
-	<reg32 offset="52" name="FGRA_PWIDTH" type="float"/>
-	<reg32 offset="53" name="FGRA_PSIZE_MIN" type="float"/>
-	<reg32 offset="54" name="FGRA_PSIZE_MAX" type="float"/>
-	<reg32 offset="55" name="FGRA_COORDREPLACE">
+	<reg32 offset="59" name="FGRA_PWIDTH" type="float"/>
+	<reg32 offset="60" name="FGRA_PSIZE_MIN" type="float"/>
+	<reg32 offset="61" name="FGRA_PSIZE_MAX" type="float"/>
+	<reg32 offset="62" name="FGRA_COORDREPLACE">
 		<bitfield name="ATTR" high="7" low="0" type="fgra_coordreplace"/>
 	</reg32>
-	<reg32 offset="56" name="FGRA_LWIDTH" type="float"/>
+	<reg32 offset="63" name="FGRA_LWIDTH" type="float"/>
 
-	<reg32 offset="57" name="FGPF_ALPHAT">
+	<reg32 offset="64" name="FGPF_ALPHAT">
 		<bitfield name="ENABLE" pos="0"/>
 		<bitfield name="MODE" high="3" low="1" type="fgpf_test_mode"/>
 		<bitfield name="VALUE" high="11" low="4" type="uint"/>
@@ -309,7 +317,7 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		<bitfield name="DPFAIL" high="28" low="26" type="fgpf_stencil_action"/>
 		<bitfield name="DPPASS" high="31" low="29" type="fgpf_stencil_action"/>
 	</reg32>
-	<reg32 offset="58" name="FGPF_BACKST">
+	<reg32 offset="65" name="FGPF_BACKST">
 		<bitfield name="MODE" high="3" low="1" type="fgpf_test_mode"/>
 		<bitfield name="VALUE" high="11" low="4" type="uint"/>
 		<bitfield name="MASK" high="19" low="12" type="uint"/>
@@ -321,8 +329,8 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		<bitfield name="ENABLE" pos="0"/>
 		<bitfield name="MODE" high="3" low="1" type="fgpf_test_mode"/>
 	</reg32>
-	<reg32 offset="59" name="FGPF_CCLR" type="uint"/>
-	<reg32 offset="60" name="FGPF_BLEND">
+	<reg32 offset="66" name="FGPF_CCLR" type="uint"/>
+	<reg32 offset="67" name="FGPF_BLEND">
 		<bitfield name="ENABLE" pos="0"/>
 		<bitfield name="COLOR_SRC_FUNC" high="4" low="1" type="fgpf_blend_factor"/>
 		<bitfield name="ALPHA_SRC_FUNC" high="8" low="5" type="fgpf_blend_factor"/>
@@ -331,12 +339,12 @@ WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 		<bitfield name="COLOR_EQUATION" high="19" low="17" type="fgpf_blend_op"/>
 		<bitfield name="ALPHA_EQUATION" high="22" low="20" type="fgpf_blend_op"/>
 	</reg32>
-	<reg32 offset="61" name="FGPF_LOGOP">
+	<reg32 offset="68" name="FGPF_LOGOP">
 		<bitfield name="ENABLE" pos="0"/>
 		<bitfield name="COLOR_OP" high="4" low="1" type="fgpf_logical_op"/>
 		<bitfield name="ALPHA_OP" high="8" low="5" type="fgpf_logical_op"/>
 	</reg32>
-	<reg32 offset="62" name="FGPF_CBMSK">
+	<reg32 offset="69" name="FGPF_CBMSK">
 		<bitfield name="ALPHA" pos="0"/>
 		<bitfield name="BLUE" pos="1"/>
 		<bitfield name="GREEN" pos="2"/>

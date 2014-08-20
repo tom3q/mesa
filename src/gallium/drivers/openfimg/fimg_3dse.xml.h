@@ -8,7 +8,7 @@ http://github.com/freedreno/envytools/
 git clone https://github.com/freedreno/envytools.git
 
 The rules-ng-ng source files this header was generated from are:
-- ./fimg_3dse.xml (  20429 bytes, from 2014-06-09 14:57:19)
+- ./fimg_3dse.xml (  20667 bytes, from 2014-08-20 16:07:08)
 
 Copyright (C) 2013-2014 by the following authors:
 - Tomasz Figa <tomasz.figa@gmail.com> (t.figa)
@@ -356,7 +356,15 @@ static inline uint32_t FGHI_ATTRIB_VBBASE_ADDR(uint32_t val)
 	return ((val) << FGHI_ATTRIB_VBBASE_ADDR__SHIFT) & FGHI_ATTRIB_VBBASE_ADDR__MASK;
 }
 
-#define REG_FGPE_VERTEX_CONTEXT					0x00000025
+#define REG_FGVS_ATTRIBUTE_NUM					0x00000025
+
+
+static inline uint32_t REG_FGVS_IN_ATTR_INDEX(uint32_t i0) { return 0x00000026 + 0x1*i0; }
+
+
+static inline uint32_t REG_FGVS_OUT_ATTR_INDEX(uint32_t i0) { return 0x00000029 + 0x1*i0; }
+
+#define REG_FGPE_VERTEX_CONTEXT					0x0000002c
 #define FGPE_VERTEX_CONTEXT_TYPE__MASK				0x07f80000
 #define FGPE_VERTEX_CONTEXT_TYPE__SHIFT				19
 static inline uint32_t FGPE_VERTEX_CONTEXT_TYPE(enum fgpe_vctx_ptype val)
@@ -378,7 +386,7 @@ static inline uint32_t FGPE_VERTEX_CONTEXT_FLAT_MODEL(uint32_t val)
 	return ((val) << FGPE_VERTEX_CONTEXT_FLAT_MODEL__SHIFT) & FGPE_VERTEX_CONTEXT_FLAT_MODEL__MASK;
 }
 
-#define REG_FGPE_VIEWPORT_OX					0x00000026
+#define REG_FGPE_VIEWPORT_OX					0x0000002d
 #define FGPE_VIEWPORT_OX__MASK					0xffffffff
 #define FGPE_VIEWPORT_OX__SHIFT					0
 static inline uint32_t FGPE_VIEWPORT_OX(float val)
@@ -386,7 +394,7 @@ static inline uint32_t FGPE_VIEWPORT_OX(float val)
 	return ((fui(val)) << FGPE_VIEWPORT_OX__SHIFT) & FGPE_VIEWPORT_OX__MASK;
 }
 
-#define REG_FGPE_VIEWPORT_OY					0x00000027
+#define REG_FGPE_VIEWPORT_OY					0x0000002e
 #define FGPE_VIEWPORT_OY__MASK					0xffffffff
 #define FGPE_VIEWPORT_OY__SHIFT					0
 static inline uint32_t FGPE_VIEWPORT_OY(float val)
@@ -394,7 +402,7 @@ static inline uint32_t FGPE_VIEWPORT_OY(float val)
 	return ((fui(val)) << FGPE_VIEWPORT_OY__SHIFT) & FGPE_VIEWPORT_OY__MASK;
 }
 
-#define REG_FGPE_VIEWPORT_HALF_PX				0x00000028
+#define REG_FGPE_VIEWPORT_HALF_PX				0x0000002f
 #define FGPE_VIEWPORT_HALF_PX__MASK				0xffffffff
 #define FGPE_VIEWPORT_HALF_PX__SHIFT				0
 static inline uint32_t FGPE_VIEWPORT_HALF_PX(float val)
@@ -402,7 +410,7 @@ static inline uint32_t FGPE_VIEWPORT_HALF_PX(float val)
 	return ((fui(val)) << FGPE_VIEWPORT_HALF_PX__SHIFT) & FGPE_VIEWPORT_HALF_PX__MASK;
 }
 
-#define REG_FGPE_VIEWPORT_HALF_PY				0x00000029
+#define REG_FGPE_VIEWPORT_HALF_PY				0x00000030
 #define FGPE_VIEWPORT_HALF_PY__MASK				0xffffffff
 #define FGPE_VIEWPORT_HALF_PY__SHIFT				0
 static inline uint32_t FGPE_VIEWPORT_HALF_PY(float val)
@@ -410,7 +418,7 @@ static inline uint32_t FGPE_VIEWPORT_HALF_PY(float val)
 	return ((fui(val)) << FGPE_VIEWPORT_HALF_PY__SHIFT) & FGPE_VIEWPORT_HALF_PY__MASK;
 }
 
-#define REG_FGPE_DEPTHRANGE_HALF_F_SUB_N			0x0000002a
+#define REG_FGPE_DEPTHRANGE_HALF_F_SUB_N			0x00000031
 #define FGPE_DEPTHRANGE_HALF_F_SUB_N__MASK			0xffffffff
 #define FGPE_DEPTHRANGE_HALF_F_SUB_N__SHIFT			0
 static inline uint32_t FGPE_DEPTHRANGE_HALF_F_SUB_N(float val)
@@ -418,7 +426,7 @@ static inline uint32_t FGPE_DEPTHRANGE_HALF_F_SUB_N(float val)
 	return ((fui(val)) << FGPE_DEPTHRANGE_HALF_F_SUB_N__SHIFT) & FGPE_DEPTHRANGE_HALF_F_SUB_N__MASK;
 }
 
-#define REG_FGPE_DEPTHRANGE_HALF_F_ADD_N			0x0000002b
+#define REG_FGPE_DEPTHRANGE_HALF_F_ADD_N			0x00000032
 #define FGPE_DEPTHRANGE_HALF_F_ADD_N__MASK			0xffffffff
 #define FGPE_DEPTHRANGE_HALF_F_ADD_N__SHIFT			0
 static inline uint32_t FGPE_DEPTHRANGE_HALF_F_ADD_N(float val)
@@ -426,13 +434,13 @@ static inline uint32_t FGPE_DEPTHRANGE_HALF_F_ADD_N(float val)
 	return ((fui(val)) << FGPE_DEPTHRANGE_HALF_F_ADD_N__SHIFT) & FGPE_DEPTHRANGE_HALF_F_ADD_N__MASK;
 }
 
-#define REG_FGRA_PIX_SAMP					0x0000002c
+#define REG_FGRA_PIX_SAMP					0x00000033
 #define FGRA_PIX_SAMP_PIX_CORNER_SAMP				0x00000001
 
-#define REG_FGRA_D_OFF_EN					0x0000002d
+#define REG_FGRA_D_OFF_EN					0x00000034
 #define FGRA_D_OFF_EN_ENABLE					0x00000001
 
-#define REG_FGRA_D_OFF_FACTOR					0x0000002e
+#define REG_FGRA_D_OFF_FACTOR					0x00000035
 #define FGRA_D_OFF_FACTOR__MASK					0xffffffff
 #define FGRA_D_OFF_FACTOR__SHIFT				0
 static inline uint32_t FGRA_D_OFF_FACTOR(float val)
@@ -440,7 +448,7 @@ static inline uint32_t FGRA_D_OFF_FACTOR(float val)
 	return ((fui(val)) << FGRA_D_OFF_FACTOR__SHIFT) & FGRA_D_OFF_FACTOR__MASK;
 }
 
-#define REG_FGRA_D_OFF_UNITS					0x0000002f
+#define REG_FGRA_D_OFF_UNITS					0x00000036
 #define FGRA_D_OFF_UNITS__MASK					0xffffffff
 #define FGRA_D_OFF_UNITS__SHIFT					0
 static inline uint32_t FGRA_D_OFF_UNITS(float val)
@@ -448,7 +456,7 @@ static inline uint32_t FGRA_D_OFF_UNITS(float val)
 	return ((fui(val)) << FGRA_D_OFF_UNITS__SHIFT) & FGRA_D_OFF_UNITS__MASK;
 }
 
-#define REG_FGRA_BFCULL						0x00000030
+#define REG_FGRA_BFCULL						0x00000037
 #define FGRA_BFCULL_FACE__MASK					0x00000003
 #define FGRA_BFCULL_FACE__SHIFT					0
 static inline uint32_t FGRA_BFCULL_FACE(enum fgra_bfcull_face val)
@@ -458,7 +466,7 @@ static inline uint32_t FGRA_BFCULL_FACE(enum fgra_bfcull_face val)
 #define FGRA_BFCULL_FRONT_CW					0x00000004
 #define FGRA_BFCULL_ENABLE					0x00000008
 
-#define REG_FGRA_YCLIP						0x00000031
+#define REG_FGRA_YCLIP						0x00000038
 #define FGRA_YCLIP_MIN_VAL__MASK				0x00000fff
 #define FGRA_YCLIP_MIN_VAL__SHIFT				0
 static inline uint32_t FGRA_YCLIP_MIN_VAL(uint32_t val)
@@ -472,7 +480,7 @@ static inline uint32_t FGRA_YCLIP_MAX_VAL(uint32_t val)
 	return ((val) << FGRA_YCLIP_MAX_VAL__SHIFT) & FGRA_YCLIP_MAX_VAL__MASK;
 }
 
-#define REG_FGRA_LODCTL						0x00000032
+#define REG_FGRA_LODCTL						0x00000039
 #define FGRA_LODCTL_LOD_CON0__MASK				0x00000007
 #define FGRA_LODCTL_LOD_CON0__SHIFT				0
 static inline uint32_t FGRA_LODCTL_LOD_CON0(uint32_t val)
@@ -522,7 +530,7 @@ static inline uint32_t FGRA_LODCTL_LOD_CON7(uint32_t val)
 	return ((val) << FGRA_LODCTL_LOD_CON7__SHIFT) & FGRA_LODCTL_LOD_CON7__MASK;
 }
 
-#define REG_FGRA_XCLIP						0x00000033
+#define REG_FGRA_XCLIP						0x0000003a
 #define FGRA_XCLIP_MIN_VAL__MASK				0x00000fff
 #define FGRA_XCLIP_MIN_VAL__SHIFT				0
 static inline uint32_t FGRA_XCLIP_MIN_VAL(uint32_t val)
@@ -536,7 +544,7 @@ static inline uint32_t FGRA_XCLIP_MAX_VAL(uint32_t val)
 	return ((val) << FGRA_XCLIP_MAX_VAL__SHIFT) & FGRA_XCLIP_MAX_VAL__MASK;
 }
 
-#define REG_FGRA_PWIDTH						0x00000034
+#define REG_FGRA_PWIDTH						0x0000003b
 #define FGRA_PWIDTH__MASK					0xffffffff
 #define FGRA_PWIDTH__SHIFT					0
 static inline uint32_t FGRA_PWIDTH(float val)
@@ -544,7 +552,7 @@ static inline uint32_t FGRA_PWIDTH(float val)
 	return ((fui(val)) << FGRA_PWIDTH__SHIFT) & FGRA_PWIDTH__MASK;
 }
 
-#define REG_FGRA_PSIZE_MIN					0x00000035
+#define REG_FGRA_PSIZE_MIN					0x0000003c
 #define FGRA_PSIZE_MIN__MASK					0xffffffff
 #define FGRA_PSIZE_MIN__SHIFT					0
 static inline uint32_t FGRA_PSIZE_MIN(float val)
@@ -552,7 +560,7 @@ static inline uint32_t FGRA_PSIZE_MIN(float val)
 	return ((fui(val)) << FGRA_PSIZE_MIN__SHIFT) & FGRA_PSIZE_MIN__MASK;
 }
 
-#define REG_FGRA_PSIZE_MAX					0x00000036
+#define REG_FGRA_PSIZE_MAX					0x0000003d
 #define FGRA_PSIZE_MAX__MASK					0xffffffff
 #define FGRA_PSIZE_MAX__SHIFT					0
 static inline uint32_t FGRA_PSIZE_MAX(float val)
@@ -560,7 +568,7 @@ static inline uint32_t FGRA_PSIZE_MAX(float val)
 	return ((fui(val)) << FGRA_PSIZE_MAX__SHIFT) & FGRA_PSIZE_MAX__MASK;
 }
 
-#define REG_FGRA_COORDREPLACE					0x00000037
+#define REG_FGRA_COORDREPLACE					0x0000003e
 #define FGRA_COORDREPLACE_ATTR__MASK				0x000000ff
 #define FGRA_COORDREPLACE_ATTR__SHIFT				0
 static inline uint32_t FGRA_COORDREPLACE_ATTR(enum fgra_coordreplace val)
@@ -568,7 +576,7 @@ static inline uint32_t FGRA_COORDREPLACE_ATTR(enum fgra_coordreplace val)
 	return ((val) << FGRA_COORDREPLACE_ATTR__SHIFT) & FGRA_COORDREPLACE_ATTR__MASK;
 }
 
-#define REG_FGRA_LWIDTH						0x00000038
+#define REG_FGRA_LWIDTH						0x0000003f
 #define FGRA_LWIDTH__MASK					0xffffffff
 #define FGRA_LWIDTH__SHIFT					0
 static inline uint32_t FGRA_LWIDTH(float val)
@@ -576,7 +584,7 @@ static inline uint32_t FGRA_LWIDTH(float val)
 	return ((fui(val)) << FGRA_LWIDTH__SHIFT) & FGRA_LWIDTH__MASK;
 }
 
-#define REG_FGPF_ALPHAT						0x00000039
+#define REG_FGPF_ALPHAT						0x00000040
 #define FGPF_ALPHAT_ENABLE					0x00000001
 #define FGPF_ALPHAT_MODE__MASK					0x0000000e
 #define FGPF_ALPHAT_MODE__SHIFT					1
@@ -630,7 +638,7 @@ static inline uint32_t FGPF_FRONTST_DPPASS(enum fgpf_stencil_action val)
 	return ((val) << FGPF_FRONTST_DPPASS__SHIFT) & FGPF_FRONTST_DPPASS__MASK;
 }
 
-#define REG_FGPF_BACKST						0x0000003a
+#define REG_FGPF_BACKST						0x00000041
 #define FGPF_BACKST_MODE__MASK					0x0000000e
 #define FGPF_BACKST_MODE__SHIFT					1
 static inline uint32_t FGPF_BACKST_MODE(enum fgpf_test_mode val)
@@ -677,9 +685,9 @@ static inline uint32_t FGPF_DEPTHT_MODE(enum fgpf_test_mode val)
 	return ((val) << FGPF_DEPTHT_MODE__SHIFT) & FGPF_DEPTHT_MODE__MASK;
 }
 
-#define REG_FGPF_CCLR						0x0000003b
+#define REG_FGPF_CCLR						0x00000042
 
-#define REG_FGPF_BLEND						0x0000003c
+#define REG_FGPF_BLEND						0x00000043
 #define FGPF_BLEND_ENABLE					0x00000001
 #define FGPF_BLEND_COLOR_SRC_FUNC__MASK				0x0000001e
 #define FGPF_BLEND_COLOR_SRC_FUNC__SHIFT			1
@@ -718,7 +726,7 @@ static inline uint32_t FGPF_BLEND_ALPHA_EQUATION(enum fgpf_blend_op val)
 	return ((val) << FGPF_BLEND_ALPHA_EQUATION__SHIFT) & FGPF_BLEND_ALPHA_EQUATION__MASK;
 }
 
-#define REG_FGPF_LOGOP						0x0000003d
+#define REG_FGPF_LOGOP						0x00000044
 #define FGPF_LOGOP_ENABLE					0x00000001
 #define FGPF_LOGOP_COLOR_OP__MASK				0x0000001e
 #define FGPF_LOGOP_COLOR_OP__SHIFT				1
@@ -733,7 +741,7 @@ static inline uint32_t FGPF_LOGOP_ALPHA_OP(enum fgpf_logical_op val)
 	return ((val) << FGPF_LOGOP_ALPHA_OP__SHIFT) & FGPF_LOGOP_ALPHA_OP__MASK;
 }
 
-#define REG_FGPF_CBMSK						0x0000003e
+#define REG_FGPF_CBMSK						0x00000045
 #define FGPF_CBMSK_ALPHA					0x00000001
 #define FGPF_CBMSK_BLUE						0x00000002
 #define FGPF_CBMSK_GREEN					0x00000004
