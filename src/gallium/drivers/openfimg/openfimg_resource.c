@@ -193,14 +193,18 @@ setup_slices(struct of_resource *rsc)
 
 	for (level = 0; level <= prsc->last_level; level++) {
 		struct of_resource_slice *slice = of_resource_slice(rsc, level);
+		unsigned cur_pixels;
 
 		slice->pitch = width;
 		slice->offset = size;
 		slice->pixoffset = pixels;
 		slice->size0 = slice->pitch * height * rsc->cpp;
 
-		size += slice->size0 * depth * prsc->array_size;
-		pixels += slice->pitch * height * depth * prsc->array_size;
+		cur_pixels = ROUND_UP(width * height * depth
+					* prsc->array_size, 16);
+
+		pixels += cur_pixels;
+		size += cur_pixels * rsc->cpp;
 
 		width = u_minify(width, 1);
 		height = u_minify(height, 1);
