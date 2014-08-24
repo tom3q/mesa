@@ -546,7 +546,7 @@ translate_trig(struct of_compile_context *ctx,
 	 * Idea borrowed from Intel i915 (classic) driver.
 	 */
 
-	/* tmp.yw = tmp.xz * tmp.xz */
+	/* tmp.yw = tmp.xz * |tmp.xz| */
 	instrs[3].opc = OF_OP_MUL;
 	instrs[3].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[3].dst.mask = "_y_w";
@@ -585,18 +585,16 @@ translate_trig(struct of_compile_context *ctx,
 	instrs[6].src[2].swizzle = "xxzz";
 	instrs[6].src[2].flags = OF_IR_REG_NEGATE;
 
-	/* See below... */
-	instrs[7].opc = OF_OP_MAD;
-	instrs[7].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
-	instrs[7].src[1].reg = of_ir_reg_clone(ctx->shader, consts1);
-	instrs[7].src[1].swizzle = "wwww";
-	instrs[7].src[2].reg = of_ir_reg_clone(ctx->shader, tmp);
-
 	switch (inst->Instruction.Opcode) {
 	case TGSI_OPCODE_SIN:
 		/* dst = tmp.yyyy * consts1.wwww + tmp.xxxx */
+		instrs[7].opc = OF_OP_MAD;
 		instrs[7].dst.reg = get_dst_reg(ctx, inst);
+		instrs[7].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 		instrs[7].src[0].swizzle = "yyyy";
+		instrs[7].src[1].reg = of_ir_reg_clone(ctx->shader, consts1);
+		instrs[7].src[1].swizzle = "wwww";
+		instrs[7].src[2].reg = of_ir_reg_clone(ctx->shader, tmp);
 		instrs[7].src[2].swizzle = "xxxx";
 
 		of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
@@ -605,8 +603,13 @@ translate_trig(struct of_compile_context *ctx,
 
 	case TGSI_OPCODE_COS:
 		/* dst = tmp.wwww * consts1.wwww + tmp.zzzz */
+		instrs[7].opc = OF_OP_MAD;
 		instrs[7].dst.reg = get_dst_reg(ctx, inst);
+		instrs[7].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 		instrs[7].src[0].swizzle = "wwww";
+		instrs[7].src[1].reg = of_ir_reg_clone(ctx->shader, consts1);
+		instrs[7].src[1].swizzle = "wwww";
+		instrs[7].src[2].reg = of_ir_reg_clone(ctx->shader, tmp);
 		instrs[7].src[2].swizzle = "zzzz";
 
 		of_ir_instr_insert_templ(ctx->shader, ctx->current_node,
@@ -615,9 +618,14 @@ translate_trig(struct of_compile_context *ctx,
 
 	case TGSI_OPCODE_SCS:
 		/* dst.xy = tmp.wy * consts1.ww + tmp.zx */
+		instrs[7].opc = OF_OP_MAD;
 		instrs[7].dst.reg = get_dst_reg(ctx, inst);
 		instrs[7].dst.mask = "xy__";
+		instrs[7].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 		instrs[7].src[0].swizzle = "wyyy";
+		instrs[7].src[1].reg = of_ir_reg_clone(ctx->shader, consts1);
+		instrs[7].src[1].swizzle = "wwww";
+		instrs[7].src[2].reg = of_ir_reg_clone(ctx->shader, tmp);
 		instrs[7].src[2].swizzle = "zxxx";
 
 		/* dst.zw = (0.0, 1.0) */
