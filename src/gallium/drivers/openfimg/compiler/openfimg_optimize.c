@@ -578,11 +578,6 @@ src_propagation(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 			src_propagation_phi(opt, 0, phi);
 		break;
 
-	case OF_IR_NODE_IF_THEN:
-		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			src_propagation_phi(opt, 0, phi);
-		break;
-
 	case OF_IR_NODE_DEPART:
 	case OF_IR_NODE_REPEAT:
 		opt->maps = of_stack_push_copy(opt->maps_stack);
@@ -591,6 +586,9 @@ src_propagation(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	case OF_IR_NODE_LIST:
 		src_propagation_list(opt, node);
 		return;
+
+	default:
+		break;
 	}
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
@@ -598,11 +596,6 @@ src_propagation(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
-		break;
-
-	case OF_IR_NODE_IF_THEN:
-		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			src_propagation_phi(opt, 1, phi);
 		break;
 
 	case OF_IR_NODE_DEPART:

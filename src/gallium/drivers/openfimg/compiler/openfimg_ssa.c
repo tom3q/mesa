@@ -110,9 +110,6 @@ dep_rep_count(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		node->ssa.repeat_number =
 				++node->depart_repeat.region->ssa.repeat_count;
 		break;
-	case OF_IR_NODE_IF_THEN:
-		node->ssa.depart_count = 2; /* To make PHI insertion easier. */
-		break;
 	default:
 		break;
 	}
@@ -224,11 +221,6 @@ make_ssa(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		}
 		break;
 
-	case OF_IR_NODE_IF_THEN:
-		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
-			rename_phi_operand(opt, 0, phi, opt->renames);
-		break;
-
 	case OF_IR_NODE_DEPART:
 	case OF_IR_NODE_REPEAT:
 		opt->renames = of_stack_push_copy(opt->renames_stack);
@@ -237,6 +229,9 @@ make_ssa(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	case OF_IR_NODE_LIST:
 		rename_operands(opt, node);
 		return;
+
+	default:
+		break;
 	}
 
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
@@ -246,13 +241,6 @@ make_ssa(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	case OF_IR_NODE_REGION:
 		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list)
 			rename_lhs(opt, phi, opt->renames);
-		break;
-
-	case OF_IR_NODE_IF_THEN:
-		LIST_FOR_EACH_ENTRY(phi, &node->ssa.phis, list) {
-			rename_phi_operand(opt, 1, phi, opt->renames);
-			rename_lhs(opt, phi, opt->renames);
-		}
 		break;
 
 	case OF_IR_NODE_DEPART:
