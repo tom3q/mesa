@@ -303,7 +303,27 @@ fail:
 	return NULL;
 }
 
-static bool render_blit(struct pipe_context *pctx, struct pipe_blit_info *info);
+static void
+save_blitter_state(struct of_context *ctx)
+{
+	util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vertexbuf.vb);
+	util_blitter_save_vertex_elements(ctx->blitter, ctx->cso.vtx);
+	util_blitter_save_vertex_shader(ctx->blitter, ctx->cso.vp);
+	util_blitter_save_rasterizer(ctx->blitter, ctx->cso.rasterizer);
+	util_blitter_save_viewport(ctx->blitter, &ctx->viewport);
+	util_blitter_save_scissor(ctx->blitter, &ctx->scissor);
+	util_blitter_save_fragment_shader(ctx->blitter, ctx->cso.fp);
+	util_blitter_save_blend(ctx->blitter, ctx->cso.blend);
+	util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->cso.zsa);
+	util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);
+	util_blitter_save_sample_mask(ctx->blitter, ctx->sample_mask);
+	util_blitter_save_framebuffer(ctx->blitter, &ctx->framebuffer.base);
+	util_blitter_save_fragment_sampler_states(ctx->blitter,
+			ctx->fragtex.num_samplers,
+			(void **)ctx->fragtex.samplers);
+	util_blitter_save_fragment_sampler_views(ctx->blitter,
+			ctx->fragtex.num_textures, ctx->fragtex.textures);
+}
 
 /**
  * Copy a block of pixels from one resource to another.
@@ -319,34 +339,23 @@ of_resource_copy_region(struct pipe_context *pctx,
 		unsigned src_level,
 		const struct pipe_box *src_box)
 {
-	/* TODO if we have 2d core, or other DMA engine that could be used
-	 * for simple copies and reasonably easily synchronized with the 3d
-	 * core, this is where we'd plug it in..
-	 */
-	struct pipe_blit_info info = {
-		.dst = {
-			.resource = dst,
-			.box = {
-				.x      = dstx,
-				.y      = dsty,
-				.z      = dstz,
-				.width  = src_box->width,
-				.height = src_box->height,
-				.depth  = src_box->depth,
-			},
-			.format = util_format_linear(dst->format),
-			.level  = dst_level,
-		},
-		.src = {
-			.resource = src,
-			.box      = *src_box,
-			.format   = util_format_linear(src->format),
-			.level    = src_level,
-		},
-		.mask = PIPE_MASK_RGBA,
-		.filter = PIPE_TEX_FILTER_NEAREST,
-	};
-	render_blit(pctx, &info);
+	struct of_context *ctx = of_context(pctx);
+
+	if (dst->target == PIPE_BUFFER || src->target == PIPE_BUFFER)
+		goto sw_fallback;
+
+	if (!util_blitter_is_copy_supported(ctx->blitter, dst, src))
+		goto sw_fallback;
+
+	save_blitter_state(ctx);
+	util_blitter_copy_texture(ctx->blitter,
+			dst, dst_level, dstx, dsty, dstz,
+			src, src_level, src_box);
+	return;
+
+sw_fallback:
+	util_resource_copy_region(pctx, dst, dst_level, dstx, dsty, dstz,
+					src, src_level, src_box);
 }
 
 /* Optimal hardware path for blitting pixels.
@@ -355,6 +364,7 @@ of_resource_copy_region(struct pipe_context *pctx,
 static void
 of_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 {
+	struct of_context *ctx = of_context(pctx);
 	struct pipe_blit_info info = *blit_info;
 
 	if (info.src.resource->nr_samples > 1 &&
@@ -374,43 +384,15 @@ of_blit(struct pipe_context *pctx, const struct pipe_blit_info *blit_info)
 		info.mask &= ~PIPE_MASK_S;
 	}
 
-	render_blit(pctx, &info);
-}
-
-static bool
-render_blit(struct pipe_context *pctx, struct pipe_blit_info *info)
-{
-#if 1
-	struct of_context *ctx = of_context(pctx);
-
-	if (!util_blitter_is_blit_supported(ctx->blitter, info)) {
+	if (!util_blitter_is_blit_supported(ctx->blitter, &info)) {
 		DBG("blit unsupported %s -> %s",
-				util_format_short_name(info->src.resource->format),
-				util_format_short_name(info->dst.resource->format));
-		return false;
+				util_format_short_name(info.src.resource->format),
+				util_format_short_name(info.dst.resource->format));
+		return;
 	}
 
-	util_blitter_save_vertex_buffer_slot(ctx->blitter, ctx->vertexbuf.vb);
-	util_blitter_save_vertex_elements(ctx->blitter, ctx->cso.vtx);
-	util_blitter_save_vertex_shader(ctx->blitter, ctx->cso.vp);
-	util_blitter_save_rasterizer(ctx->blitter, ctx->cso.rasterizer);
-	util_blitter_save_viewport(ctx->blitter, &ctx->viewport);
-	util_blitter_save_scissor(ctx->blitter, &ctx->scissor);
-	util_blitter_save_fragment_shader(ctx->blitter, ctx->cso.fp);
-	util_blitter_save_blend(ctx->blitter, ctx->cso.blend);
-	util_blitter_save_depth_stencil_alpha(ctx->blitter, ctx->cso.zsa);
-	util_blitter_save_stencil_ref(ctx->blitter, &ctx->stencil_ref);
-	util_blitter_save_sample_mask(ctx->blitter, ctx->sample_mask);
-	util_blitter_save_framebuffer(ctx->blitter, &ctx->framebuffer.base);
-	util_blitter_save_fragment_sampler_states(ctx->blitter,
-			ctx->fragtex.num_samplers,
-			(void **)ctx->fragtex.samplers);
-	util_blitter_save_fragment_sampler_views(ctx->blitter,
-			ctx->fragtex.num_textures, ctx->fragtex.textures);
-
-	util_blitter_blit(ctx->blitter, info);
-#endif
-	return true;
+	save_blitter_state(ctx);
+	util_blitter_blit(ctx->blitter, &info);
 }
 
 static void
