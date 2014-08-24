@@ -629,15 +629,15 @@ translate_trig(struct of_compile_context *ctx,
 		break;
 
 	case TGSI_OPCODE_SCS:
-		/* tmp.xy = tmp.wy * consts1.ww + tmp.zx */
-		instrs[7].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
+		/* dst.xy = tmp.wy * consts1.ww + tmp.zx */
+		instrs[7].dst.reg = get_dst_reg(ctx, inst);
 		instrs[7].dst.mask = "xy__";
 		instrs[7].src[0].swizzle = "wyyy";
 		instrs[7].src[2].swizzle = "zxxx";
 
-		/* tmp.xz = (0.0, 1.0) */
+		/* dst.zw = (0.0, 1.0) */
 		instrs[8].opc = OF_OP_MOV;
-		instrs[8].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
+		instrs[8].dst.reg = get_dst_reg(ctx, inst);
 		instrs[8].dst.mask = "__zw";
 		instrs[8].src[0].reg = get_immediate(ctx, 2, zero_one);
 		instrs[8].src[0].swizzle = "xxxy";
