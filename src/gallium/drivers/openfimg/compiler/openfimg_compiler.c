@@ -102,21 +102,6 @@ static const float sin_quad_constants[2][4] = {
 	}
 };
 
-static const float sin_constants[4] = {
-	1.0,
-	-1.0 / (3 * 2 * 1),
-	1.0 / (5 * 4 * 3 * 2 * 1),
-	-1.0 / (7 * 6 * 5 * 4 * 3 * 2 * 1)
-};
-
-/* 1, -1/2!, 1/4!, -1/6! */
-static const float cos_constants[4] = {
-	1.0,
-	-1.0 / (2 * 1),
-	1.0 / (4 * 3 * 2 * 1),
-	-1.0 / (6 * 5 * 4 * 3 * 2 * 1)
-};
-
 /*
  * Helpers
  */
