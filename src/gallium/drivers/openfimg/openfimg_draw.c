@@ -669,7 +669,7 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	if (buffers & (PIPE_CLEAR_DEPTH | PIPE_CLEAR_STENCIL))
 		of_resource(pfb->zsbuf->texture)->dirty = true;
 
-	DBG("%x depth=%f, stencil=%u (%s/%s)", buffers, depth, stencil,
+	VDBG("%x depth=%f, stencil=%u (%s/%s)", buffers, depth, stencil,
 		util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 		util_format_short_name(pipe_surface_format(pfb->zsbuf)));
 
