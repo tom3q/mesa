@@ -158,8 +158,7 @@ no_dst:
 }
 
 static void
-liveness_phi_dst(struct of_ir_optimizer *opt, struct list_head *phis,
-		 unsigned num_srcs)
+liveness_phi_dst(struct of_ir_optimizer *opt, struct list_head *phis)
 {
 	struct of_ir_phi *phi, *s;
 
@@ -238,8 +237,7 @@ liveness(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		live_copy = util_slab_alloc(&opt->live_slab);
 		copy_bitmap(opt, &live_copy, opt->live, opt->num_vars);
 
-		liveness_phi_dst(opt, &node->ssa.phis,
-					node->ssa.depart_count);
+		liveness_phi_dst(opt, &node->ssa.phis);
 
 		copy_bitmap(opt, &node->liveout, opt->live, opt->num_vars);
 		of_bitmap_fill(opt->live, 0, opt->num_vars);
@@ -272,8 +270,7 @@ liveness(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
 		if (!LIST_IS_EMPTY(&node->ssa.loop_phis)) {
-			liveness_phi_dst(opt, &node->ssa.loop_phis,
-						node->ssa.repeat_count + 1);
+			liveness_phi_dst(opt, &node->ssa.loop_phis);
 
 			copy_bitmap(opt, &node->livein, opt->live, opt->num_vars);
 
@@ -281,8 +278,7 @@ liveness(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 						     parent_list)
 				liveness(opt, child);
 
-			liveness_phi_dst(opt, &node->ssa.loop_phis,
-						node->ssa.repeat_count + 1);
+			liveness_phi_dst(opt, &node->ssa.loop_phis);
 			liveness_phi_src(opt, &node->ssa.loop_phis, 0);
 		}
 
