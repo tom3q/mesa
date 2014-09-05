@@ -28,6 +28,8 @@
 #include <string.h>
 #include <assert.h>
 
+#include "os/os_time.h"
+
 #include "openfimg_program.h"
 #include "openfimg_util.h"
 
@@ -1018,7 +1020,10 @@ int
 of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 		      struct of_shader_stateobj *so)
 {
+	int64_t start;
 	int ret;
+
+	start = os_time_get();
 
 	OF_IR_DUMP_AST(shader, NULL, NULL, "pre-clean");
 
@@ -1053,6 +1058,11 @@ of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 	pipe_resource_reference(&so->buffer, NULL);
 	so->buffer = shader->buffer;
 	so->num_instrs = shader->stats.num_instrs;
+
+	DBG("assembly of program %p took %lld ms",
+		so, (os_time_get() - start) / 1000);
+	DBG("assembly of program %p (type = %u) ended with %u instructions",
+		so, so->type, so->num_instrs);
 
 	return 0;
 }

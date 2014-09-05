@@ -26,6 +26,7 @@
 #include "util/u_memory.h"
 #include "util/u_inlines.h"
 #include "util/u_hash_table.h"
+#include "os/os_time.h"
 #include "tgsi/tgsi_parse.h"
 #include "tgsi/tgsi_ureg.h"
 #include "tgsi/tgsi_info.h"
@@ -1746,6 +1747,9 @@ of_compile_shader(struct of_shader_stateobj *so)
 {
 	struct of_compile_context *ctx;
 	unsigned ps_output_temp = 0;
+	int64_t start;
+
+	start = os_time_get();
 
 	of_ir_shader_destroy(so->ir);
 	so->ir = NULL;
@@ -1802,5 +1806,9 @@ of_compile_shader(struct of_shader_stateobj *so)
 	so->num_outputs = ctx->num_generic_outputs;
 
 	compile_free(ctx);
+
+	DBG("compilation of program %p took %lld ms",
+		so, (os_time_get() - start) / 1000);
+
 	return 0;
 }
