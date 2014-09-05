@@ -163,7 +163,7 @@ try_to_merge_chunks(struct of_ir_optimizer *opt, struct of_ir_affinity *a,
 	c0->num_vars += c1->num_vars;
 	c0->comp |= c1->comp;
 	c0->parity |= c1->parity;
-	c0->cost += a->cost;
+	c0->cost += c1->cost + a->cost;
 
 	OF_VALSET_FOR_EACH_VAL(num1, &c1->vars) {
 		struct of_ir_variable *v1 = get_var(opt, *num1);
