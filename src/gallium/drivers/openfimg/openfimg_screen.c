@@ -64,6 +64,10 @@ static const struct debug_named_value debug_options[] = {
 		"Print verbose debug messages (flood warning!)" },
 	{ "shadovr",	OF_DBG_SHADER_OVERRIDE,
 		"Override shaders with custom binaries" },
+	{ "shadnodce",	OF_DBG_SHADER_NO_DCE,
+		"Disable dead code elimination" },
+	{ "shadnocp",	OF_DBG_SHADER_NO_CP,
+		"Disable copy propagation" },
 	DEBUG_NAMED_VALUE_END
 };
 
