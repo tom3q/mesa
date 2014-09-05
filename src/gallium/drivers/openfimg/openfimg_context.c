@@ -89,13 +89,13 @@ of_context_render(struct pipe_context *pctx)
 	uint32_t timestamp = 0;
 	unsigned i;
 
-	DBG("needs_flush: %d", ctx->needs_flush);
+	VDBG("needs_flush: %d", ctx->needs_flush);
 
 	if (!ctx->needs_flush)
 		return;
 
 	fd_ringmarker_mark(ctx->draw_end);
-	DBG("rendering sysmem (%s/%s)",
+	VDBG("rendering sysmem (%s/%s)",
 			util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 			util_format_short_name(pipe_surface_format(pfb->zsbuf)));
 	fd_ringmarker_flush(ctx->draw_start);
@@ -109,7 +109,7 @@ of_context_render(struct pipe_context *pctx)
 		of_resource(pfb->zsbuf->texture)->timestamp = timestamp;
 	ctx->last_timestamp = timestamp;
 
-	DBG("%p/%p/%p", ctx->ring->start, ctx->ring->cur,
+	VDBG("%p/%p/%p", ctx->ring->start, ctx->ring->cur,
 		ctx->ring->end);
 
 	/* if size in dwords is more than half the buffer size, then wait and
@@ -139,7 +139,7 @@ static void
 of_context_flush(struct pipe_context *pctx, struct pipe_fence_handle **fence,
 		unsigned flags)
 {
-	DBG("fence=%p", fence);
+	VDBG("fence=%p", fence);
 
 	of_context_render(pctx);
 #if 0
