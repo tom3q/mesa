@@ -569,7 +569,7 @@ translate_trig(struct of_compile_context *ctx,
 	instrs[5].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[5].dst.mask = "x_z_";
 	instrs[5].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
-	instrs[5].src[1].swizzle = "xxzz";
+	instrs[5].src[0].swizzle = "xxzz";
 	instrs[5].src[1].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[5].src[1].swizzle = "yyww";
 
