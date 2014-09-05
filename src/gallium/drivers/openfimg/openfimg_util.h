@@ -46,6 +46,8 @@
 #define OF_DBG_AST_VDUMP	0x8
 #define OF_DBG_VMSGS		0x10
 #define OF_DBG_SHADER_OVERRIDE	0x20
+#define OF_DBG_SHADER_NO_DCE	0x40
+#define OF_DBG_SHADER_NO_CP	0x80
 extern int of_mesa_debug;
 
 #define FORCE_DEBUG

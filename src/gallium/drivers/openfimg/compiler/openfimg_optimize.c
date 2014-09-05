@@ -305,6 +305,9 @@ cleanup_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins, *s;
 
+	if (of_mesa_debug & OF_DBG_SHADER_NO_DCE)
+		return;
+
 	LIST_FOR_EACH_ENTRY_SAFE(ins, s, &node->list.instrs, list) {
 		struct of_ir_register *dst = ins->dst;
 		unsigned i;
@@ -350,6 +353,9 @@ cleanup(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 
 	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list)
 		cleanup(opt, child);
+
+	if (of_mesa_debug & OF_DBG_SHADER_NO_DCE)
+		return;
 
 	if (!LIST_IS_EMPTY(&node->ssa.phis))
 		cleanup_phis(opt, &node->ssa.phis);
@@ -567,6 +573,9 @@ src_propagation(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	struct of_ir_ast_node *region;
 	struct of_ir_ast_node *child;
 	struct of_ir_phi *phi;
+
+	if (of_mesa_debug & OF_DBG_SHADER_NO_CP)
+		return;
 
 	switch (node->type) {
 	case OF_IR_NODE_REGION:
