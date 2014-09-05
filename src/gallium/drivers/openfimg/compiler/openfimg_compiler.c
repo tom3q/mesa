@@ -359,29 +359,30 @@ translate_pow(struct of_compile_context *ctx,
 	      struct tgsi_full_instruction *inst, unsigned long data)
 {
 	struct of_ir_instr_template instrs[3];
+	struct of_ir_register *tmp;
 
 	memset(instrs, 0, sizeof(instrs));
 
-	/* dst = log(src0.xxxx) */
+	/* tmp.x = log(src0.x) */
 	instrs[0].opc = OF_OP_LOG;
-	instrs[0].dst.reg = get_dst_reg(ctx, inst);
+	instrs[0].dst.reg = tmp = get_temporary(ctx);
 	instrs[0].dst.mask = "x___";
 	instrs[0].src[0].reg = get_src_reg(ctx, inst, 0);
 	instrs[0].src[0].swizzle = "xxxx";
 
-	/* dst = dst.xxxx * src1.xxxx */
+	/* tmp.x = tmp.x * src1.x */
 	instrs[1].opc = OF_OP_MUL;
-	instrs[1].dst.reg = of_ir_reg_clone(ctx->shader, instrs[0].dst.reg);
+	instrs[1].dst.reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[1].dst.mask = "x___";
-	instrs[1].src[0].reg = of_ir_reg_clone(ctx->shader, instrs[0].dst.reg);
+	instrs[1].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[1].src[0].swizzle = "xxxx";
 	instrs[1].src[1].reg = get_src_reg(ctx, inst, 1);
 	instrs[1].src[1].swizzle = "xxxx";
 
-	/* dst = exp(dst.xxxx) */
+	/* dst = exp(tmp.x) - replicated */
 	instrs[2].opc = OF_OP_EXP;
-	instrs[2].dst.reg = of_ir_reg_clone(ctx->shader, instrs[1].dst.reg);
-	instrs[2].src[0].reg = of_ir_reg_clone(ctx->shader, instrs[1].dst.reg);
+	instrs[2].dst.reg = get_dst_reg(ctx, inst);
+	instrs[2].src[0].reg = of_ir_reg_clone(ctx->shader, tmp);
 	instrs[2].src[0].swizzle = "xxxx";
 
 	of_ir_instr_insert_templ(ctx->shader, ctx->current_node, NULL,
