@@ -40,6 +40,11 @@ ifneq ($(filter freedreno, $(MESA_GPU_DRIVERS)),)
 SUBDIRS += winsys/freedreno/drm drivers/freedreno
 endif
 
+# openfimg
+ifneq ($(filter openfimg, $(MESA_GPU_DRIVERS)),)
+SUBDIRS += winsys/openfimg/drm drivers/openfimg
+endif
+
 # i915g
 ifneq ($(filter i915g, $(MESA_GPU_DRIVERS)),)
 SUBDIRS += winsys/i915/drm drivers/i915
