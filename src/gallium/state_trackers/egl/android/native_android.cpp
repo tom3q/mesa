@@ -54,6 +54,7 @@
 #include <cutils/properties.h>
 #include <cutils/log.h>
 #include <utils/Errors.h>
+#include <gralloc_drm_public.h>
 
 extern "C" {
 #include "egllog.h"
