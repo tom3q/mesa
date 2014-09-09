@@ -30,6 +30,7 @@ LOCAL_SRC_FILES := \
 	$(COMPILER_SOURCES)
 
 LOCAL_CFLAGS := \
+	-Wno-pointer-arith \
 	-Wno-packed-bitfield-compat \
 	-Werror
 
