@@ -86,6 +86,12 @@ gallium_DRIVERS += libmesa_winsys_freedreno libmesa_pipe_freedreno
 LOCAL_SHARED_LIBRARIES += libdrm_freedreno
 endif
 
+# openfimg
+ifneq ($(filter openfimg, $(MESA_GPU_DRIVERS)),)
+gallium_DRIVERS += libmesa_winsys_openfimg libmesa_pipe_openfimg
+LOCAL_SHARED_LIBRARIES += libdrm_freedreno
+endif
+
 # i915g
 ifneq ($(filter i915g, $(MESA_GPU_DRIVERS)),)
 gallium_DRIVERS += libmesa_winsys_i915 libmesa_pipe_i915
