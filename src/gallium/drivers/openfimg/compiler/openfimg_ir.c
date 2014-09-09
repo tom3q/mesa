@@ -447,7 +447,7 @@ merge_swizzle(struct of_ir_register *reg, const char *swizzle)
 	uint16_t var[4];
 
 	for (comp = 0; comp < OF_IR_VEC_SIZE; ++comp) {
-		unsigned chan;
+		unsigned chan = 0;
 
 		switch (swizzle[comp]) {
 		case 'x': chan = 0; break;
