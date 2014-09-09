@@ -534,18 +534,17 @@ out_unknown:
 }
 
 static int
-array_compare(const void *a, const void *b, void *data)
+array_compare(const void *e1, const void *e2)
 {
-	struct of_vertex_stateobj *so = data;
-	uint8_t elem1 = *(const uint8_t *)a;
-	uint8_t elem2 = *(const uint8_t *)b;
+	const struct pipe_vertex_element *elem1, *elem2;
 
-	if (so->pipe[elem1].vertex_buffer_index
-	    != so->pipe[elem2].vertex_buffer_index)
-		return so->pipe[elem1].vertex_buffer_index
-				- so->pipe[elem2].vertex_buffer_index;
+	elem1 = *(const struct pipe_vertex_element **)e1;
+	elem2 = *(const struct pipe_vertex_element **)e2;
 
-	return so->pipe[elem1].src_offset - so->pipe[elem2].src_offset;
+	if (elem1->vertex_buffer_index != elem2->vertex_buffer_index)
+		return elem1->vertex_buffer_index - elem2->vertex_buffer_index;
+
+	return elem1->src_offset - elem2->src_offset;
 }
 
 static void *
@@ -556,7 +555,7 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 	struct of_vertex_transfer *transfer;
 	struct of_vertex_stateobj *so;
 	struct of_element_data elems[OF_MAX_ATTRIBS];
-	uint8_t arrays[OF_MAX_ATTRIBS];
+	const struct pipe_vertex_element *arrays[OF_MAX_ATTRIBS];
 	int i;
 
 	if (num_elements < 1 || num_elements >= OF_MAX_ATTRIBS)
@@ -576,19 +575,19 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 		of_vtx_format(vtx_element, draw_element->src_format,
 				&elems[i]);
 
-		arrays[i] = i;
+		arrays[i] = &so->pipe[i];
 	}
 
 	/* Mark last element with terminating flag */
 	so->elements[num_elements - 1].attrib |= FGHI_ATTRIB_LAST_ATTR;
 
 	/* Try to detect interleaved arrays */
-	qsort_r(arrays, num_elements, sizeof(*arrays), array_compare, so);
+	qsort(arrays, num_elements, sizeof(*arrays), array_compare);
 
 	transfer = so->transfers;
 	for (i = 0; i < num_elements;) {
-		unsigned attrib = arrays[i];
-		const struct pipe_vertex_element *pipe = &elements[attrib];
+		const struct pipe_vertex_element *pipe = arrays[i];
+		unsigned attrib = pipe - so->pipe;
 		struct of_element_data *elem = &elems[attrib];
 
 		if (!(so->vb_mask & (1 << pipe->vertex_buffer_index))) {
@@ -602,9 +601,8 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 		elem->transfer_index = so->num_transfers;
 
 		for (++i; i < num_elements; ++i) {
-			unsigned attrib2 = arrays[i];
-			const struct pipe_vertex_element *pipe2 =
-							&so->pipe[attrib2];
+			const struct pipe_vertex_element *pipe2 = arrays[i];
+			unsigned attrib2 = pipe2 - so->pipe;
 			struct of_element_data *elem2 = &elems[attrib2];
 			unsigned offset = pipe2->src_offset - pipe->src_offset;
 
