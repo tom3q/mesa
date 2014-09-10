@@ -86,7 +86,6 @@ of_context_render(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer.base;
-	uint32_t timestamp = 0;
 	unsigned i;
 
 	VDBG("needs_flush: %d", ctx->needs_flush);
@@ -101,13 +100,7 @@ of_context_render(struct pipe_context *pctx)
 	fd_ringmarker_flush(ctx->draw_start);
 	fd_ringmarker_mark(ctx->draw_start);
 
-	/* update timestamps on render targets: */
-	timestamp = fd_ringbuffer_timestamp(ctx->ring);
-	if (pfb->cbufs[0])
-		of_resource(pfb->cbufs[0]->texture)->timestamp = timestamp;
-	if (pfb->zsbuf)
-		of_resource(pfb->zsbuf->texture)->timestamp = timestamp;
-	ctx->last_timestamp = timestamp;
+	ctx->last_timestamp = fd_ringbuffer_timestamp(ctx->ring);
 
 	VDBG("%p/%p/%p", ctx->ring->start, ctx->ring->cur,
 		ctx->ring->end);

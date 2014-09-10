@@ -36,6 +36,7 @@
 #include "openfimg_surface.h"
 #include "openfimg_context.h"
 #include "openfimg_util.h"
+#include "openfimg_draw.h"
 
 #include <errno.h>
 
@@ -50,23 +51,20 @@ realloc_bo(struct of_resource *rsc, uint32_t size)
 		fd_bo_del(rsc->bo);
 
 	rsc->bo = fd_bo_new(screen->dev, size, flags);
-	rsc->timestamp = 0;
 	rsc->dirty = false;
 }
 
-static void of_resource_transfer_flush_region(struct pipe_context *pctx,
-		struct pipe_transfer *ptrans,
-		const struct pipe_box *box)
+static void
+of_resource_transfer_flush_region(struct pipe_context *pctx,
+				  struct pipe_transfer *ptrans,
+				  const struct pipe_box *box)
 {
-	struct of_context *ctx = of_context(pctx);
 	struct of_resource *rsc = of_resource(ptrans->resource);
 
-	if (rsc->dirty)
-		of_context_render(pctx);
-
-	if (rsc->timestamp) {
-		fd_pipe_wait(ctx->pipe, rsc->timestamp);
-		rsc->timestamp = 0;
+	if (ptrans->usage & PIPE_TRANSFER_WRITE) {
+		if (++rsc->version == 0)
+			of_invalidate_vb_caches(of_context(pctx),
+						ptrans->resource);
 	}
 }
 
@@ -76,8 +74,14 @@ of_resource_transfer_unmap(struct pipe_context *pctx,
 {
 	struct of_context *ctx = of_context(pctx);
 	struct of_resource *rsc = of_resource(ptrans->resource);
+
 	if (!(ptrans->usage & PIPE_TRANSFER_UNSYNCHRONIZED))
 		fd_bo_cpu_fini(rsc->bo);
+
+	if (ptrans->usage & PIPE_TRANSFER_WRITE
+	    && !(ptrans->usage & PIPE_TRANSFER_FLUSH_EXPLICIT))
+		of_resource_transfer_flush_region(pctx, ptrans, NULL);
+
 	pipe_resource_reference(&ptrans->resource, NULL);
 	util_slab_free(&ctx->transfer_pool, ptrans);
 }
@@ -126,6 +130,9 @@ of_resource_transfer_map(struct pipe_context *pctx,
 
 	if (!(usage & PIPE_TRANSFER_UNSYNCHRONIZED)) {
 		int ret;
+
+		if (rsc->dirty)
+			of_context_render(pctx);
 
 		ret = fd_bo_cpu_prep(rsc->bo, ctx->pipe, op);
 		if ((ret == -EBUSY)

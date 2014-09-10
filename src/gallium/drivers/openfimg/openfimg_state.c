@@ -37,6 +37,7 @@
 #include "openfimg_texture.h"
 #include "openfimg_util.h"
 #include "openfimg_vertex.h"
+#include "openfimg_draw.h"
 
 /* All the generic state handling.. In case of CSO's that are specific
  * to the GPU version, when the bind and the delete are common they can
@@ -637,7 +638,10 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 static void
 of_vertex_state_delete(struct pipe_context *pctx, void *hwcso)
 {
-	// FIXME: Invalidate draw caches
+	struct of_context *ctx = of_context(pctx);
+	struct of_vertex_stateobj *vtx = hwcso;
+
+	of_invalidate_vtx_caches(ctx, vtx);
 	FREE(hwcso);
 }
 
