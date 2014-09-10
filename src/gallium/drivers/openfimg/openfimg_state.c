@@ -566,6 +566,8 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 	if (!so)
 		return NULL;
 
+	LIST_INITHEAD(&so->vtx_inv_list);
+
 	memcpy(so->pipe, elements, sizeof(*elements) * num_elements);
 	so->num_elements = num_elements;
 

@@ -154,7 +154,34 @@ of_invalidate_vb_caches(struct of_context *ctx, struct pipe_resource *buffer)
 void
 of_invalidate_vtx_caches(struct of_context *ctx, struct of_vertex_stateobj *vtx)
 {
-	// TODO
+	struct of_vertex_info *vertex, *s;
+
+	LIST_FOR_EACH_ENTRY_SAFE(vertex, s, &vtx->vtx_inv_list, vtx_inv_list) {
+		struct cso_hash_iter iter;
+		struct cso_hash *hash;
+		unsigned hash_key;
+
+		if (vertex->direct) {
+			hash = ctx->draw_hash_direct;
+			hash_key = of_draw_hash_direct(&vertex->key);
+		} else {
+			hash = ctx->draw_hash;
+			hash_key = of_draw_hash(&vertex->key);
+		}
+
+		for (iter = cso_hash_find(hash, hash_key);
+		     cso_hash_iter_key(iter) == hash_key;
+		     iter = cso_hash_iter_next(iter)) {
+			if (cso_hash_iter_data(iter) == vertex) {
+				cso_hash_erase(hash, iter);
+				list_del(&vertex->vtx_inv_list);
+				FREE(vertex);
+				break;
+			}
+		}
+	}
+
+	LIST_INITHEAD(&vtx->vtx_inv_list);
 }
 
 /*
@@ -419,6 +446,7 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 	vertex->first_draw = true;
 	vertex->bypass_cache = bypass_cache;
 	vertex->draw_mode = ctx->primtypes[vertex->mode];
+	list_addtail(&vertex->vtx_inv_list, &draw->base.vtx->vtx_inv_list);
 
 	of_build_vertex_data(ctx, vertex);
 
