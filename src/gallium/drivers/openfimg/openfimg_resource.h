@@ -44,8 +44,8 @@ struct of_resource {
 	struct fd_bo *bo;
 	uint32_t cpp;
 	struct of_resource_slice slices[MAX_MIP_LEVELS];
-	uint32_t timestamp;
 	bool dirty;
+	uint32_t version;
 };
 
 static INLINE struct of_resource *

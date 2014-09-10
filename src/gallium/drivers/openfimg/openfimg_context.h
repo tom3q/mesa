@@ -87,6 +87,7 @@ struct of_context {
 	struct of_screen *screen;
 	struct blitter_context *blitter;
 	struct cso_hash *draw_hash;
+	struct cso_hash *draw_hash_direct;
 
 	struct util_slab_mempool transfer_pool;
 

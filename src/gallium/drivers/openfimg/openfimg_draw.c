@@ -69,18 +69,32 @@ static struct of_vertex_stateobj solid_vertex_stateobj = {
 	},
 };
 
-static INLINE unsigned
+/*
+ * Draw cache helpers
+ */
+
+static unsigned
 of_draw_hash(struct of_draw_info *req)
 {
 	uint32_t hash;
 
 	hash = of_hash_add(0, &req->base, sizeof(req->base));
-	if (req->direct)
-		hash = of_hash_add(hash, req->vb_strides,
-			req->base.num_vb * sizeof(req->vb_strides[0]));
-	else
-		hash = of_hash_add(hash, req->vb,
-			req->base.num_vb * sizeof(req->vb[0]));
+	hash = of_hash_add(hash, req->vb,
+				req->base.num_vb * sizeof(req->vb[0]));
+	if (req->base.info.indexed)
+		hash = of_hash_add(hash, &req->ib, sizeof(req->ib));
+
+	return of_hash_finish(hash);
+}
+
+static unsigned
+of_draw_hash_direct(struct of_draw_info *req)
+{
+	uint32_t hash;
+
+	hash = of_hash_add(0, &req->base, sizeof(req->base));
+	hash = of_hash_add(hash, req->vb_strides,
+				req->base.num_vb * sizeof(req->vb_strides[0]));
 	if (req->base.info.indexed)
 		hash = of_hash_add(hash, &req->ib, sizeof(req->ib));
 
@@ -94,18 +108,11 @@ draw_info_compare(const void *a, const void *b, size_t size)
 	const struct of_draw_info *req2 = b;
 	int ret;
 
-	if (req1->direct != req2->direct)
-		return req1->direct - req2->direct;
-
 	ret = memcmp(&req1->base, &req2->base, sizeof(req1->base));
 	if (ret)
 		return ret;
 
-	if (req1->direct)
-		ret = memcmp(req1->vb_strides, req2->vb_strides,
-			req1->base.num_vb * sizeof(req1->vb_strides[0]));
-	else
-		ret = memcmp(req1->vb, req2->vb,
+	ret = memcmp(req1->vb, req2->vb,
 			req1->base.num_vb * sizeof(req1->vb[0]));
 	if (ret)
 		return ret;
@@ -114,6 +121,73 @@ draw_info_compare(const void *a, const void *b, size_t size)
 		return memcmp(&req1->ib, &req2->ib, sizeof(req1->ib));
 
 	return 0;
+}
+
+static int
+draw_info_compare_direct(const void *a, const void *b, size_t size)
+{
+	const struct of_draw_info *req1 = a;
+	const struct of_draw_info *req2 = b;
+	int ret;
+
+	ret = memcmp(&req1->base, &req2->base, sizeof(req1->base));
+	if (ret)
+		return ret;
+
+	ret = memcmp(req1->vb_strides, req2->vb_strides,
+			req1->base.num_vb * sizeof(req1->vb_strides[0]));
+	if (ret)
+		return ret;
+
+	if (req1->base.info.indexed)
+		return memcmp(&req1->ib, &req2->ib, sizeof(req1->ib));
+
+	return 0;
+}
+
+void
+of_invalidate_vb_caches(struct of_context *ctx, struct pipe_resource *buffer)
+{
+	// TODO
+}
+
+void
+of_invalidate_vtx_caches(struct of_context *ctx, struct of_vertex_stateobj *vtx)
+{
+	// TODO
+}
+
+/*
+ * Draw data processing
+ */
+
+static void
+of_primconvert_prepare(struct of_context *ctx, struct of_vertex_info *vertex)
+{
+	const struct pipe_rasterizer_state *rast = ctx->cso.rasterizer;
+	const struct of_draw_info *draw = &vertex->key;
+	struct pipe_index_buffer *new_ib = &vertex->ib;
+	const struct pipe_draw_info *info = &draw->base.info;
+	unsigned api_pv;
+
+	memset(new_ib, 0, sizeof(*new_ib));
+	vertex->indexed = true;
+
+	api_pv = (rast->flatshade
+			&& !rast->flatshade_first) ? PV_LAST : PV_FIRST;
+
+	if (info->indexed)
+		u_index_translator(ctx->primtype_mask,
+					info->mode, draw->ib.index_size,
+					info->count, api_pv, PV_LAST,
+					&vertex->mode, &new_ib->index_size,
+					&vertex->count, &vertex->trans_func);
+	else
+		u_index_generator(ctx->primtype_mask,
+					info->mode, info->start, info->count,
+					api_pv, PV_LAST, &vertex->mode,
+					&new_ib->index_size, &vertex->count,
+					&vertex->gen_func);
 }
 
 static void
@@ -155,8 +229,6 @@ of_primconvert_release(struct of_context *ctx, struct of_vertex_info *vertex)
 	FREE((void *)new_ib->user_buffer);
 	new_ib->user_buffer = NULL;
 }
-
-static unsigned int dummy_const;
 
 static bool
 of_primitive_needs_workaround(unsigned mode)
@@ -246,7 +318,7 @@ static void
 of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 {
 	const struct pipe_index_buffer *ib = &vertex->ib;
-	struct of_draw_info *draw = &vertex->key;
+	const struct of_draw_info *draw = &vertex->key;
 	const struct of_vertex_stateobj *vtx = draw->base.vtx;
 	const struct of_vertex_transfer *transfer;
 	struct pipe_transfer *ib_transfer = NULL;
@@ -261,22 +333,23 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 		primconvert = true;
 	}
 
-	VDBG("TODO");
-	// TODO: Prepare constant elements
-	vdata.const_data = &dummy_const;
-	vdata.const_size = 0;
-
 	vdata.ctx = ctx;
 	vdata.info = vertex;
 
+	if (draw->base.info.indexed && draw->ib.buffer) {
+		struct of_resource *rsc = of_resource(draw->ib.buffer);
+
+		vertex->ib_version = rsc->version;
+	}
+
 	if (vertex->indexed) {
 		/* Get pointer to index buffer. */
-		if (ib->user_buffer)
-			indices = ib->user_buffer;
-		else
+		if (ib->buffer)
 			indices = pipe_buffer_map(&ctx->base, ib->buffer,
 							PIPE_TRANSFER_READ,
 							&ib_transfer);
+		else
+			indices = ib->user_buffer;
 	}
 
 	transfer = draw->base.vtx->transfers;
@@ -285,26 +358,32 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 		unsigned buf_idx = vtx->vb_map[pipe_idx];
 		const struct pipe_vertex_buffer *vb = &draw->vb[buf_idx];
 
-		ugly |= vb->user_buffer != NULL;
+		ugly |= vb->buffer == NULL;
 		ugly |= (vb->stride != ROUND_UP(transfer->width, 4));
+
+		if (vb->buffer) {
+			struct of_resource *rsc = of_resource(vb->buffer);
+
+			vertex->vb_version[buf_idx] = rsc->version;
+		}
 	}
 
 	/* Check for fast path conditions. */
 	if (!ugly && vertex->indexed
 	    && of_prepare_draw_direct_indices(&vdata, indices)) {
 		/* Use fast path for indexed draws. */
-		draw->direct = true;
+		vertex->direct = true;
 	} else if (!ugly && !vertex->indexed) {
 		/* Use fast path for sequential draws. */
 		if (!of_primitive_needs_workaround(draw->base.info.mode))
 			of_prepare_draw_direct(&vdata);
 		else
 			of_prepare_draw_direct_wa(&vdata);
-		draw->direct = true;
+		vertex->direct = true;
 	} else {
 		/* Slow path fallback - full vertex data reordering. */
 		of_build_vertex_data_repack(ctx, &vdata, indices);
-		draw->direct = false;
+		vertex->direct = false;
 	}
 
 	if (primconvert)
@@ -314,47 +393,16 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 		pipe_buffer_unmap(&ctx->base, ib_transfer);
 }
 
-static void
-of_primconvert_prepare(struct of_context *ctx, struct of_vertex_info *vertex)
-{
-	const struct pipe_rasterizer_state *rast = ctx->cso.rasterizer;
-	const struct of_draw_info *draw = &vertex->key;
-	struct pipe_index_buffer *new_ib = &vertex->ib;
-	const struct pipe_draw_info *info = &draw->base.info;
-	unsigned api_pv;
-
-	memset(new_ib, 0, sizeof(*new_ib));
-	vertex->indexed = true;
-
-	api_pv = (rast->flatshade
-			&& !rast->flatshade_first) ? PV_LAST : PV_FIRST;
-
-	if (info->indexed)
-		u_index_translator(ctx->primtype_mask,
-					info->mode, draw->ib.index_size,
-					info->count, api_pv, PV_LAST,
-					&vertex->mode, &new_ib->index_size,
-					&vertex->count, &vertex->trans_func);
-	else
-		u_index_generator(ctx->primtype_mask,
-					info->mode, info->start, info->count,
-					api_pv, PV_LAST, &vertex->mode,
-					&new_ib->index_size, &vertex->count,
-					&vertex->gen_func);
-}
-
 static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 			const struct of_draw_info *draw, bool bypass_cache)
 {
 	struct of_vertex_info *vertex = CALLOC_STRUCT(of_vertex_info);
+	unsigned hash_key;
 
 	if (vertex == NULL)
 		return NULL;
 
 	memcpy(&vertex->key, draw, sizeof(*draw));
-
-	vertex->bypass_cache = bypass_cache;
-	vertex->first_draw = true;
 
 	/* emulate unsupported primitives: */
 	if (of_supported_prim(ctx, draw->base.info.mode)) {
@@ -368,12 +416,26 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 		of_primconvert_prepare(ctx, vertex);
 	}
 
+	vertex->first_draw = true;
+	vertex->bypass_cache = bypass_cache;
 	vertex->draw_mode = ctx->primtypes[vertex->mode];
 
 	of_build_vertex_data(ctx, vertex);
 
+	if (vertex->direct) {
+		hash_key = of_draw_hash_direct(&vertex->key);
+		cso_hash_insert(ctx->draw_hash_direct, hash_key, vertex);
+	} else {
+		hash_key = of_draw_hash(&vertex->key);
+		cso_hash_insert(ctx->draw_hash, hash_key, vertex);
+	}
+
 	return vertex;
 }
+
+/*
+ * Draw
+ */
 
 static void
 of_emit_draw_setup(struct of_context *ctx, const struct of_vertex_info *info,
@@ -472,38 +534,24 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
 }
 
 static void
-of_kill_draw_caches(struct of_context *ctx, struct pipe_resource *buf)
-{
-	DBG("TODO");
-	assert(0);
-}
-
-static void
 of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 {
 	struct of_draw_info *draw = ctx->draw;
 	struct of_vertex_info *vertex = NULL;
-	bool bypass_cache = false;
-	bool index_dirty = false;
-	unsigned dirty = 0;
+	unsigned state_dirty = ctx->dirty;
+	bool direct = true;
 	unsigned hash_key;
 	unsigned i;
-	unsigned state_dirty = ctx->dirty;
 
 	if (draw->base.info.indexed != info->indexed
 	    || state_dirty & OF_DIRTY_INDEXBUF) {
 		struct pipe_index_buffer *indexbuf = &ctx->indexbuf;
 
-		if (info->indexed)
+		draw->user_ib = false;
+		if (info->indexed) {
 			memcpy(&draw->ib, indexbuf, sizeof(draw->ib));
-	}
-
-	if (info->indexed) {
-		if (draw->ib.user_buffer) {
-			bypass_cache = true;
-			draw->ib.buffer = NULL;
-		} else if (of_resource(draw->ib.buffer)->dirty) {
-			index_dirty = true;
+			if (!indexbuf->buffer)
+				draw->user_ib = true;
 		}
 	}
 
@@ -519,71 +567,67 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		draw->base.vtx = ctx->cso.vtx;
 		draw->base.num_vb = vtx->num_vb;
 		draw->base.vb_mask = vtx->vb_mask;
+		draw->user_vb = false;
 
 		vb_mask = vtx->vb_mask;
 		while (vb_mask) {
-			unsigned pipe_idx = ffs(vb_mask) - 1;
+			unsigned pipe_idx = u_bit_scan(&vb_mask);
 			unsigned buf_idx = vtx->vb_map[pipe_idx];
 
 			memcpy(&draw->vb[buf_idx], &vertexbuf->vb[pipe_idx],
 				sizeof(vertexbuf->vb[pipe_idx]));
 			draw->vb_strides[buf_idx] =
 				vertexbuf->vb[pipe_idx].stride;
-
-			vb_mask &= ~(1 << pipe_idx);
-		}
-	}
-
-	for (i = 0; i < draw->base.num_vb; ++i) {
-		struct pipe_vertex_buffer *vb = &draw->vb[i];
-
-		if (vb->user_buffer) {
-			bypass_cache = true;
-			vb->buffer = NULL;
-		} else if (of_resource(vb->buffer)->dirty) {
-			dirty |= 1 << i;
+			if (!draw->vb[buf_idx].buffer)
+				draw->user_vb = true;
 		}
 	}
 
 	memcpy(&draw->base.info, info, sizeof(draw->base.info));
 
-	draw->direct = true;
-	hash_key = of_draw_hash(draw);
-	vertex = cso_hash_find_data_from_template_c(ctx->draw_hash, hash_key,
-					draw, sizeof(*draw), draw_info_compare);
+	hash_key = of_draw_hash_direct(draw);
+	vertex = cso_hash_find_data_from_template_c(ctx->draw_hash_direct,
+						hash_key, draw, sizeof(*draw),
+						draw_info_compare_direct);
 	if (!vertex) {
-		draw->direct = false;
+		direct = false;
 		hash_key = of_draw_hash(draw);
 		vertex = cso_hash_find_data_from_template_c(ctx->draw_hash,
 						hash_key, draw, sizeof(*draw),
 						draw_info_compare);
 	}
 
-	if (!vertex) {
-		vertex = of_create_vertex_info(ctx, draw, bypass_cache);
-		hash_key = of_draw_hash(&vertex->key);
-		cso_hash_insert(ctx->draw_hash, hash_key, vertex);
-	} else if ((!vertex->key.direct && dirty)
-		   || index_dirty || LIST_IS_EMPTY(&vertex->buffers)) {
-		while (!vertex->key.direct && dirty) {
-			unsigned buffer = ffs(dirty) - 1;
-			struct pipe_vertex_buffer *vb = &draw->vb[buffer];
+	if (vertex) {
+		bool cached = !LIST_IS_EMPTY(&vertex->buffers)
+				&& !vertex->bypass_cache;
 
-			of_kill_draw_caches(ctx, vb->buffer);
-			dirty &= ~(1 << buffer);
-			of_resource(vb->buffer)->dirty = false;
+		if (cached && !direct) {
+			for (i = 0; i < draw->base.num_vb; ++i) {
+				struct pipe_resource *prsc = draw->vb[i].buffer;
+				struct of_resource *rsc = of_resource(prsc);
 
-			vertex->first_draw = true;
+				if (vertex->vb_version[i] < rsc->version) {
+					cached = false;
+					vertex->first_draw = true;
+				}
+			}
 		}
 
-		if (index_dirty) {
-			of_kill_draw_caches(ctx, draw->ib.buffer);
-			of_resource(draw->ib.buffer)->dirty = false;
+		if (cached && draw->base.info.indexed) {
+			struct pipe_resource *prsc = draw->ib.buffer;
+			struct of_resource *rsc = of_resource(prsc);
 
-			vertex->first_draw = true;
+			if (vertex->ib_version < rsc->version) {
+				cached = false;
+				vertex->first_draw = true;
+			}
 		}
 
-		of_build_vertex_data(ctx, vertex);
+		if (!cached)
+			of_build_vertex_data(ctx, vertex);
+	} else {
+		vertex = of_create_vertex_info(ctx, draw,
+						draw->user_ib || draw->user_vb);
 	}
 
 	of_emit_state(ctx, state_dirty);
@@ -639,6 +683,10 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 
 	of_draw(ctx, info);
 }
+
+/*
+ * Hardware clear
+ */
 
 static void
 of_clear(struct pipe_context *pctx, unsigned buffers,
@@ -803,6 +851,10 @@ of_clear_depth_stencil(struct pipe_context *pctx, struct pipe_surface *ps,
 			buffers, depth, stencil, x, y, w, h);
 }
 
+/*
+ * Draw state initialization
+ */
+
 struct of_vertex_info *
 of_draw_init_solid(struct of_context *ctx)
 {
@@ -862,6 +914,7 @@ of_draw_init(struct pipe_context *pctx)
 	pctx->clear_depth_stencil = of_clear_depth_stencil;
 
 	ctx->draw_hash = cso_hash_create();
+	ctx->draw_hash_direct = cso_hash_create();
 	ctx->draw = CALLOC_STRUCT(of_draw_info);
 }
 
@@ -884,4 +937,7 @@ of_draw_fini(struct pipe_context *pctx)
 
 		FREE(info);
 	}
+
+	cso_hash_delete(ctx->draw_hash);
+	cso_hash_delete(ctx->draw_hash_direct);
 }

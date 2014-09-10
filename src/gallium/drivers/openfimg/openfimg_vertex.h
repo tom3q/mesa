@@ -87,7 +87,8 @@ struct of_draw_info {
 	struct pipe_index_buffer ib;
 
 	/* Unhashed */
-	bool direct:1;
+	bool user_ib:1;
+	bool user_vb:1;
 };
 
 struct of_vertex_info {
@@ -98,6 +99,7 @@ struct of_vertex_info {
 	bool first_draw:1;
 	bool bypass_cache:1;
 	bool indexed:1;
+	bool direct:1;
 
 	unsigned num_draws;
 
@@ -106,14 +108,14 @@ struct of_vertex_info {
 	u_translate_func trans_func;
 	u_generate_func gen_func;
 	struct pipe_index_buffer ib;
+
+	uint32_t ib_version;
+	uint32_t vb_version[OF_MAX_ATTRIBS];
 };
 
 struct of_vertex_data {
 	struct of_context *ctx;
 	struct of_vertex_info *info;
-
-	const void *const_data;
-	unsigned const_size;
 
 	const void *transfers[OF_MAX_ATTRIBS];
 };
