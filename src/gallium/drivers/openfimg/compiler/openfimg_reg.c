@@ -1514,6 +1514,10 @@ dump_interference(struct of_ir_optimizer *opt)
 	}
 }
 
+/*
+ * Register assignment entry point
+ */
+
 int
 of_ir_assign_registers(struct of_ir_shader *shader)
 {

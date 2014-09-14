@@ -36,6 +36,10 @@
 
 #include "fimg_3dse.xml.h"
 
+/*
+ * Instruction descriptors
+ */
+
 #define OF_IR_OPC(_opc, _type, _num_srcs)	\
 	[OF_OP_ ## _opc] = {			\
 		.name = #_opc,			\
@@ -160,6 +164,10 @@ const struct of_ir_opc_info of_ir_opc_info[] = {
 	OF_IR_OPC(CALLNZ, SUB, 1),
 	OF_IR_OPC(RET, SUB, 0),
 };
+
+/*
+ * Register descriptors
+ */
 
 #define OF_IR_REG_RW(_reg, _num_regs, _a0_addr, _al_addr, _num_reads)	\
 	[OF_IR_REG_ ## _reg] = {					\
@@ -1016,6 +1024,10 @@ of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list)
 		dump_node(shader, node, 0, extra, extra_data);
 }
+
+/*
+ * Post-compile program processing entry point
+ */
 
 int
 of_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,

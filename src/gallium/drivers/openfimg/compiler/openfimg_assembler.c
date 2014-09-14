@@ -49,6 +49,10 @@ struct of_reg_bitfields {
 	struct of_instr_flag flags[3];
 };
 
+/*
+ * Structures describing instruction word layout
+ */
+
 static const enum of_ir_reg_type src_types[] = {
 	[OF_SRC_V] = OF_IR_REG_V,
 	[OF_SRC_R] = OF_IR_REG_R,
@@ -68,7 +72,6 @@ static const enum of_ir_reg_type dst_types[] = {
 	[OF_DST_A0] = OF_IR_REG_A0,
 	[OF_DST_AL] = OF_IR_REG_AL,
 };
-
 
 static const struct of_reg_bitfields src_bitfields[] = {
 	[0] = {
@@ -182,6 +185,10 @@ static const struct of_reg_bitfields dst_bitfields = {
 	}
 };
 
+/*
+ * Instruction word access helpers
+ */
+
 static INLINE unsigned
 get_bitfield(const uint32_t *instr, const struct of_instr_bitfield *field)
 {
@@ -293,6 +300,10 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 
 	/* TODO: Implement predicate support */
 }
+
+/*
+ * Main code generation pass.
+ */
 
 static void
 generate_code(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)

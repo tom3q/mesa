@@ -31,6 +31,10 @@
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
+/*
+ * Construction of defined variable lists.
+ */
+
 static void
 variables_defined_list(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
@@ -93,6 +97,10 @@ variables_defined(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	}
 }
 
+/*
+ * Departures/repeats counting.
+ */
+
 static void
 dep_rep_count(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
@@ -114,6 +122,10 @@ dep_rep_count(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 		break;
 	}
 }
+
+/*
+ * PHI operator insertion.
+ */
 
 static void
 make_trivials(struct of_ir_optimizer *opt, struct list_head *list, uint32_t *vars,
@@ -153,6 +165,10 @@ insert_phi(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 				node->ssa.vars_defined,
 				node->ssa.repeat_count + 1);
 }
+
+/*
+ * Variable renaming.
+ */
 
 static void
 rename_phi_operand(struct of_ir_optimizer *opt, unsigned num, struct of_ir_phi *phi,
@@ -266,6 +282,10 @@ make_ssa(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	}
 }
 
+/*
+ * Node initialization.
+ */
+
 static void
 init_nodes(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 {
@@ -279,6 +299,10 @@ init_nodes(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
 	LIST_FOR_EACH_ENTRY(child, &node->nodes, parent_list)
 		init_nodes(opt, child);
 }
+
+/*
+ * Dumping of stage-specific tree data.
+ */
 
 static void
 dump_phis(struct list_head *list, unsigned count, unsigned level)
@@ -351,6 +375,10 @@ dump_ssa_data(struct of_ir_shader *shader, struct of_ir_ast_node *node,
 	else
 		dump_ssa_data_pre(shader, node, level, data);
 }
+
+/*
+ * SSA conversion entry point.
+ */
 
 int
 of_ir_to_ssa(struct of_ir_shader *shader)
