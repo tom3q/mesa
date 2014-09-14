@@ -83,10 +83,10 @@ void of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so);
 void of_program_link(struct of_context *ctx, struct of_shader_stateobj *vp,
 		     struct of_shader_stateobj *fp);
 
-void of_prog_init_solid(struct of_context *ctx);
-void of_prog_init_blit(struct of_context *ctx);
+void of_program_init_solid(struct of_context *ctx);
+void of_program_init_blit(struct of_context *ctx);
 
-void of_prog_init(struct pipe_context *pctx);
-void of_prog_fini(struct pipe_context *pctx);
+void of_program_init(struct pipe_context *pctx);
+void of_program_fini(struct pipe_context *pctx);
 
 #endif /* OF_PROGRAM_H_ */
