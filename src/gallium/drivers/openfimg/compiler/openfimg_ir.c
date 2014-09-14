@@ -30,6 +30,7 @@
 
 #include "os/os_time.h"
 
+#include "openfimg_compiler.h"
 #include "openfimg_program.h"
 #include "openfimg_util.h"
 
@@ -732,7 +733,7 @@ of_ir_shader_create(enum of_shader_type type)
 }
 
 void
-of_ir_shader_destroy(struct of_ir_shader *shader)
+of_shader_destroy(struct of_ir_shader *shader)
 {
 	if (!shader)
 		return;
@@ -1017,7 +1018,7 @@ of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 }
 
 int
-of_ir_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
+of_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
 		      struct of_shader_stateobj *so)
 {
 	int64_t start;

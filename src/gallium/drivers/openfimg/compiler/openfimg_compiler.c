@@ -1725,7 +1725,7 @@ fail:
 	if (ctx->loop_stack)
 		of_stack_destroy(ctx->loop_stack);
 	if (ctx->shader)
-		of_ir_shader_destroy(ctx->shader);
+		of_shader_destroy(ctx->shader);
 	FREE(ctx);
 
 	return NULL;
@@ -1744,7 +1744,7 @@ compile_free(struct of_compile_context *ctx)
  */
 
 int
-of_compile_shader(struct of_shader_stateobj *so)
+of_shader_compile(struct of_shader_stateobj *so)
 {
 	struct of_compile_context *ctx;
 	unsigned ps_output_temp = 0;
@@ -1752,7 +1752,7 @@ of_compile_shader(struct of_shader_stateobj *so)
 
 	start = os_time_get();
 
-	of_ir_shader_destroy(so->ir);
+	of_shader_destroy(so->ir);
 	so->ir = NULL;
 	FREE(so->immediates);
 	so->immediates = NULL;

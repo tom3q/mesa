@@ -156,7 +156,7 @@ compile(struct of_shader_stateobj *so)
 		tgsi_dump(so->tokens, 0);
 	}
 
-	ret = of_compile_shader(so);
+	ret = of_shader_compile(so);
 	if (ret) {
 		debug_error("compile failed!");
 		return -1;
@@ -182,7 +182,7 @@ assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 			return -1;
 	}
 
-	ret = of_ir_shader_assemble(ctx, so->ir, so);
+	ret = of_shader_assemble(ctx, so->ir, so);
 	if (ret) {
 		debug_error("assemble failed!");
 		return -1;
@@ -196,8 +196,8 @@ assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 overridden:
 	if (of_mesa_debug & OF_DBG_DISASM) {
 		DBG("disassemble: type=%d", so->type);
-		of_ir_shader_disassemble(ctx, so->buffer, 4 * so->num_instrs,
-						so->type);
+		of_shader_disassemble(ctx, so->buffer, 4 * so->num_instrs,
+					so->type);
 	}
 
 	return 0;
@@ -363,7 +363,7 @@ of_prog_state_delete(struct pipe_context *pctx, void *hwcso)
 {
 	struct of_shader_stateobj *so = hwcso;
 
-	of_ir_shader_destroy(so->ir);
+	of_shader_destroy(so->ir);
 	free(so->tokens);
 	pipe_resource_reference(&so->buffer, NULL);
 	free(so);

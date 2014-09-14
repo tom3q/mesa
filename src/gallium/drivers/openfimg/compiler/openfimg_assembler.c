@@ -26,6 +26,7 @@
 #include <string.h>
 #include <assert.h>
 
+#include "openfimg_compiler.h"
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
@@ -549,11 +550,11 @@ disassemble_code(uint32_t *dwords, unsigned num_dwords,
 
 	of_ir_dump_ast(shader, NULL, NULL, "disassembler");
 
-	of_ir_shader_destroy(shader);
+	of_shader_destroy(shader);
 }
 
 int
-of_ir_shader_disassemble(struct of_context *ctx, struct pipe_resource *buffer,
+of_shader_disassemble(struct of_context *ctx, struct pipe_resource *buffer,
 			 unsigned num_dwords, enum of_shader_type type)
 {
 	struct pipe_transfer *transfer;
