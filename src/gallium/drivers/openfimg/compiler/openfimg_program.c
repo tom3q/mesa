@@ -48,7 +48,7 @@ override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
 	char path[] = "Xs_YYYYYYYY.bin";
 	struct pipe_transfer *transfer = NULL;
 	struct pipe_resource *buffer = NULL;
-	struct shader_header hdr;
+	struct of_shader_binary_header hdr;
 	uint32_t *dwords = NULL;
 	FILE *file;
 	size_t ret;
