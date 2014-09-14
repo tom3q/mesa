@@ -208,5 +208,16 @@ struct of_ir_ast_node *of_ir_node_list_back(struct of_ir_ast_node *node);
 struct of_ir_ast_node *of_ir_node_list_after(struct of_ir_ast_node *node);
 
 struct of_ir_shader *of_ir_shader_create(enum of_shader_type type);
+void of_ir_shader_destroy(struct of_ir_shader *shader);
+
+/*
+ * IR processing stages
+ */
+
+int of_ir_to_ssa(struct of_ir_shader *shader);
+int of_ir_optimize(struct of_ir_shader *shader);
+int of_ir_assign_registers(struct of_ir_shader *shader);
+int of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader,
+			struct pipe_resource **buffer, unsigned *num_instrs);
 
 #endif /* OF_IR_H_ */

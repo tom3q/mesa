@@ -30,10 +30,6 @@
 #include "openfimg_ir.h"
 #include "openfimg_util.h"
 
-#define DEBUG_MSG(...)  do { if (0) DBG(__VA_ARGS__); } while (0)
-#define WARN_MSG(...)   DBG("WARN:  "__VA_ARGS__)
-#define ERROR_MSG(...)  DBG("ERROR: "__VA_ARGS__)
-
 #define RUN_PASS(shader, data, pass)					\
 	do {								\
 		struct of_ir_ast_node *node;				\
@@ -226,11 +222,6 @@ void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 
 enum of_ir_reg_flags of_ir_merge_flags(enum of_ir_reg_flags dst,
 					     enum of_ir_reg_flags src);
-
-int of_ir_to_ssa(struct of_ir_shader *shader);
-int of_ir_optimize(struct of_ir_shader *shader);
-int of_ir_assign_registers(struct of_ir_shader *shader);
-int of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader);
 
 /* Optimization passes: */
 void liveness(struct of_ir_optimizer *opt, struct of_ir_ast_node *node);

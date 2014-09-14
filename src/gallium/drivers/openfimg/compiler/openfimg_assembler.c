@@ -433,7 +433,8 @@ collect_stats(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
  */
 
 int
-of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader)
+of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader,
+		    struct pipe_resource **buffer, unsigned *num_instrs)
 {
 	struct pipe_transfer *transfer;
 	struct of_ir_optimizer *opt;
@@ -469,6 +470,9 @@ of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader)
 
 	if (transfer)
 		pipe_buffer_unmap(&ctx->base, transfer);
+
+	*buffer = shader->buffer;
+	*num_instrs = shader->stats.num_instrs;
 
 	of_heap_destroy(heap);
 	return 0;
@@ -561,7 +565,7 @@ disassemble_code(uint32_t *dwords, unsigned num_dwords,
 
 	of_ir_dump_ast(shader, NULL, NULL, "disassembler");
 
-	of_shader_destroy(shader);
+	of_ir_shader_destroy(shader);
 }
 
 int
