@@ -41,7 +41,14 @@
 
 /*
  * Shader overriding support
+ *
+ * This feature allows loading of a precompiled binary from a file named
+ * {vs,fs}_XXXXXXXX.bin in current directory, where XXXXXXXX is the hexadecimal
+ * representation of hash value of input TGSI program. The best way to learn
+ * final file names is to enable "shadovr" and "msgs" debugging flags and
+ * watch console output when application is running.
  */
+
 static int
 override_shader(struct of_context *ctx, struct of_shader_stateobj *so)
 {
@@ -146,6 +153,7 @@ fail:
 /*
  * Compilation wrappers
  */
+
 static int
 compile(struct of_shader_stateobj *so)
 {
@@ -202,6 +210,10 @@ overridden:
 
 	return 0;
 }
+
+/*
+ * Shader linking
+ */
 
 static INLINE unsigned
 MAP_WORD(unsigned attrib)
@@ -280,6 +292,10 @@ retry:
 	END_PKT(ring, pkt);
 }
 
+/*
+ * Hardware state emission
+ */
+
 void
 of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 {
@@ -311,6 +327,7 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
 /*
  * State management
  */
+
 static struct of_shader_stateobj *
 create_shader(struct of_context *ctx, const struct pipe_shader_state *cso,
 	      enum of_shader_type type)
@@ -372,6 +389,7 @@ of_prog_state_delete(struct pipe_context *pctx, void *hwcso)
 /*
  * Utility programs
  */
+
 static void *
 assemble_tgsi(struct pipe_context *pctx, const char *src, bool frag)
 {
@@ -439,8 +457,9 @@ of_program_init_blit(struct of_context *ctx)
 }
 
 /*
- * Context init/fini
+ * Context initialization
  */
+
 void
 of_program_init(struct pipe_context *pctx)
 {
