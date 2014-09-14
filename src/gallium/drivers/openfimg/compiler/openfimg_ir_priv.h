@@ -220,8 +220,8 @@ void of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 		of_ir_dump_ast(shader, extra, extra_data, str);	\
 	} while (0)
 
-enum of_ir_reg_flags of_ir_merge_flags(enum of_ir_reg_flags dst,
-					     enum of_ir_reg_flags src);
+enum of_ir_reg_flags of_ir_merge_flags(enum of_ir_reg_flags inner,
+				       enum of_ir_reg_flags outer);
 
 /* Optimization passes: */
 void liveness(struct of_ir_optimizer *opt, struct of_ir_ast_node *node);
