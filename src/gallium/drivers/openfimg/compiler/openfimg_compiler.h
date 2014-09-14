@@ -27,10 +27,35 @@
 #include "openfimg_program.h"
 #include "openfimg_util.h"
 
+/**
+ * Compiles specified shader program into driver's internal representation.
+ * @param so Shader state object initialized with valid TGSI program.
+ * @return Zero on success, non-zero on failure.
+ */
 int of_shader_compile(struct of_shader_stateobj *so);
+
+/**
+ * Assembles specified shader program into binary code.
+ * @param ctx Driver's pipe context for which the program should be assembled.
+ * @param so Shader state object that has been successfully compiled.
+ * @return Zero on success, non-zero on failure.
+ */
 int of_shader_assemble(struct of_context *ctx, struct of_shader_stateobj *so);
+
+/**
+ * Destroys specified shader program.
+ * @param so Shader state object.
+ */
 void of_shader_destroy(struct of_shader_stateobj *so);
 
+/**
+ * Disassembles existing binary code and prints the output to debugging output.
+ * @param ctx Driver's pipe context for buffer mapping purposes.
+ * @param buffer Pipe resource containing binary code to disassemble.
+ * @param sizedwords Size of binary code in 32-bit words.
+ * @param type Target shader unit of specified binary code.
+ * @return Zero on success, non-zero on failure.
+ */
 int of_shader_disassemble(struct of_context *ctx, struct pipe_resource *buffer,
 			     unsigned sizedwords, enum of_shader_type type);
 
