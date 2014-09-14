@@ -477,19 +477,19 @@ merge_swizzle(struct of_ir_register *reg, const char *swizzle)
 }
 
 enum of_ir_reg_flags
-of_ir_merge_flags(enum of_ir_reg_flags dst, enum of_ir_reg_flags src)
+of_ir_merge_flags(enum of_ir_reg_flags inner, enum of_ir_reg_flags outer)
 {
 	/* Absolute on top of negate === absolute alone. */
-	if (src & OF_IR_REG_ABS)
-		dst &= ~OF_IR_REG_NEGATE;
+	if (outer & OF_IR_REG_ABS)
+		inner &= ~OF_IR_REG_NEGATE;
 
 	/* Negating negation === no negation. */
-	dst ^= src & OF_IR_REG_NEGATE;
+	inner ^= outer & OF_IR_REG_NEGATE;
 
 	/* Saturation and absolute are additive. */
-	dst |= src & (OF_IR_REG_SAT | OF_IR_REG_ABS);
+	inner |= outer & (OF_IR_REG_SAT | OF_IR_REG_ABS);
 
-	return dst;
+	return inner;
 }
 
 void
