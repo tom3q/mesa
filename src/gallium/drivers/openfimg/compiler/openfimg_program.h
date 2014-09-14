@@ -46,20 +46,7 @@ struct of_shader_stateobj {
 	struct tgsi_token *tokens;
 	uint32_t hash;
 
-	/* note that we defer compiling shader until we know both vs and ps..
-	 * and if one changes, we potentially need to recompile in order to
-	 * get varying linkages correct:
-	 */
 	struct of_ir_shader *ir;
-
-	/* for all shaders, any tex fetch instructions which need to be
-	 * patched before assembly:
-	 */
-	unsigned num_tfetch_instrs;
-	struct {
-		unsigned samp_id;
-		struct of_ir_instruction *instr;
-	} tfetch_instrs[64];
 
 	unsigned first_immediate;     /* const reg # of first immediate */
 	unsigned num_immediates;
