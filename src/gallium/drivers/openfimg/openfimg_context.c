@@ -166,7 +166,7 @@ of_context_destroy(struct pipe_context *pctx)
 		fd_ringbuffer_del(ctx->rings[i]);
 
 	of_draw_fini(pctx);
-	of_prog_fini(pctx);
+	of_program_fini(pctx);
 
 	FREE(ctx);
 }
@@ -174,7 +174,7 @@ of_context_destroy(struct pipe_context *pctx)
 void
 of_context_init_solid(struct of_context *ctx)
 {
-	of_prog_init_solid(ctx);
+	of_program_init_solid(ctx);
 
 	ctx->clear_vertex_info = of_draw_init_solid(ctx);
 	if (!ctx->clear_vertex_info)
@@ -184,7 +184,7 @@ of_context_init_solid(struct of_context *ctx)
 void
 of_context_init_blit(struct of_context *ctx)
 {
-	of_prog_init_blit(ctx);
+	of_program_init_blit(ctx);
 }
 
 static const uint8_t fimg_3dse_primtypes[PIPE_PRIM_MAX] = {
@@ -248,7 +248,7 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 	of_draw_init(pctx);
 	of_resource_context_init(pctx);
 	of_texture_init(pctx);
-	of_prog_init(pctx);
+	of_program_init(pctx);
 	of_state_init(pctx);
 
 	ctx->blitter = util_blitter_create(pctx);

@@ -406,7 +406,7 @@ static const char *solid_vp =
 	"  2: END                                    \n";
 
 void
-of_prog_init_solid(struct of_context *ctx)
+of_program_init_solid(struct of_context *ctx)
 {
 	ctx->solid_fp = assemble_tgsi(&ctx->base, solid_fp, true);
 	ctx->solid_vp = assemble_tgsi(&ctx->base, solid_vp, false);
@@ -432,7 +432,7 @@ static const char *blit_vp =
 	"  1: END                                    \n";
 
 void
-of_prog_init_blit(struct of_context *ctx)
+of_program_init_blit(struct of_context *ctx)
 {
 	ctx->blit_fp = assemble_tgsi(&ctx->base, blit_fp, true);
 	ctx->blit_vp = assemble_tgsi(&ctx->base, blit_vp, false);
@@ -442,7 +442,7 @@ of_prog_init_blit(struct of_context *ctx)
  * Context init/fini
  */
 void
-of_prog_init(struct pipe_context *pctx)
+of_program_init(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
 
@@ -462,7 +462,7 @@ of_prog_init(struct pipe_context *pctx)
 }
 
 void
-of_prog_fini(struct pipe_context *pctx)
+of_program_fini(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
 
