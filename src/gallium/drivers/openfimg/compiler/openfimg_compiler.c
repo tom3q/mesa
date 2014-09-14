@@ -1725,7 +1725,7 @@ fail:
 	if (ctx->loop_stack)
 		of_stack_destroy(ctx->loop_stack);
 	if (ctx->shader)
-		of_shader_destroy(ctx->shader);
+		of_ir_shader_destroy(ctx->shader);
 	FREE(ctx);
 
 	return NULL;
@@ -1752,7 +1752,7 @@ of_shader_compile(struct of_shader_stateobj *so)
 
 	start = os_time_get();
 
-	of_shader_destroy(so->ir);
+	of_ir_shader_destroy(so->ir);
 	so->ir = NULL;
 	FREE(so->immediates);
 	so->immediates = NULL;
@@ -1812,4 +1812,68 @@ of_shader_compile(struct of_shader_stateobj *so)
 		so, (os_time_get() - start) / 1000);
 
 	return 0;
+}
+
+/*
+ * Post-compile program processing entry point
+ */
+
+int
+of_shader_assemble(struct of_context *ctx, struct of_shader_stateobj *so)
+{
+	struct of_ir_shader *shader = so->ir;
+	struct pipe_resource *buffer;
+	unsigned num_instrs;
+	int64_t start;
+	int ret;
+
+	start = os_time_get();
+
+	ret = of_ir_to_ssa(shader);
+	if (ret) {
+		ERROR_MSG("failed to create SSA form");
+		return -1;
+	}
+
+	ret = of_ir_optimize(shader);
+	if (ret) {
+		ERROR_MSG("failed to optimize shader");
+		return -1;
+	}
+
+	ret = of_ir_assign_registers(shader);
+	if (ret) {
+		ERROR_MSG("failed to create executable form");
+		return -1;
+	}
+
+	ret = of_ir_generate_code(ctx, shader, &buffer, &num_instrs);
+	if (ret) {
+		ERROR_MSG("failed to generate code");
+		return -1;
+	}
+
+	pipe_resource_reference(&so->buffer, NULL);
+	so->num_instrs = num_instrs;
+	so->buffer = buffer;
+
+	DBG("assembly of program %p took %lld ms",
+		so, (os_time_get() - start) / 1000);
+	DBG("assembly of program %p (type = %u) ended with %u instructions",
+		so, so->type, so->num_instrs);
+
+	return 0;
+}
+
+/*
+ * Shader program destructor
+ */
+
+void
+of_shader_destroy(struct of_shader_stateobj *so)
+{
+	free(so->immediates);
+	pipe_resource_reference(&so->buffer, NULL);
+	of_ir_shader_destroy(so->ir);
+	so->ir = NULL;
 }

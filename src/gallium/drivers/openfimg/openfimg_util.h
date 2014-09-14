@@ -66,6 +66,10 @@ extern int of_mesa_debug;
 #define DBG(...)	DBG_PRINT(OF_DBG_MSGS, __VA_ARGS__, "")
 #define VDBG(...)	DBG_PRINT(OF_DBG_VMSGS, __VA_ARGS__, "")
 
+#define DEBUG_MSG(...)  do { if (0) DBG(__VA_ARGS__); } while (0)
+#define WARN_MSG(...)   DBG("WARN:  "__VA_ARGS__)
+#define ERROR_MSG(...)  DBG("ERROR: "__VA_ARGS__)
+
 #define ARRAY_SIZE(arr) (sizeof(arr) / sizeof((arr)[0]))
 #define ROUND_UP(val, to)	(((val) + (to) - 1) & ~((to) - 1))
 

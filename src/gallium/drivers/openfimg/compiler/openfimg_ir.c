@@ -741,7 +741,7 @@ of_ir_shader_create(enum of_shader_type type)
 }
 
 void
-of_shader_destroy(struct of_ir_shader *shader)
+of_ir_shader_destroy(struct of_ir_shader *shader)
 {
 	if (!shader)
 		return;
@@ -749,73 +749,6 @@ of_shader_destroy(struct of_ir_shader *shader)
 	DEBUG_MSG("");
 	of_heap_destroy(shader->heap);
 	FREE(shader);
-}
-
-/*
- * AST cleaner
- */
-
-static void
-depart_region(struct of_ir_shader *shader, struct of_ir_ast_node *region)
-{
-	struct of_ir_ast_node *child, *s;
-	struct of_ir_ast_node *depart;
-	struct list_head tmp_list;
-
-	list_inithead(&tmp_list);
-
-	LIST_FOR_EACH_ENTRY_SAFE(child, s, &region->nodes, parent_list) {
-		list_del(&child->parent_list);
-		list_addtail(&child->parent_list, &tmp_list);
-	}
-
-	depart = of_ir_node_depart(shader, region);
-
-	LIST_FOR_EACH_ENTRY_SAFE(child, s, &tmp_list, parent_list)
-		of_ir_node_insert(depart, child);
-
-	of_ir_node_insert(region, depart);
-}
-
-static void
-clean_node(struct of_ir_shader *shader, struct of_ir_ast_node *node)
-{
-	struct of_ir_ast_node *child, *s;
-
-	switch (node->type) {
-	case OF_IR_NODE_LIST:
-		if (LIST_IS_EMPTY(&node->list.instrs))
-			LIST_DELINIT(&node->parent_list);
-		return;
-	default:
-		break;
-	}
-
-	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list)
-		clean_node(shader, child);
-
-	switch (node->type) {
-	case OF_IR_NODE_REGION:
-		if (LIST_IS_EMPTY(&node->nodes))
-			break;
-		child = LIST_ENTRY(struct of_ir_ast_node,
-					node->nodes.prev, parent_list);
-		if (child->type != OF_IR_NODE_DEPART
-		    && child->type != OF_IR_NODE_REPEAT)
-			depart_region(shader, node);
-		break;
-	default:
-		break;
-	}
-}
-
-static void
-clean_ast(struct of_ir_shader *shader)
-{
-	struct of_ir_ast_node *node;
-
-	LIST_FOR_EACH_ENTRY(node, &shader->root_nodes, parent_list)
-		clean_node(shader, node);
 }
 
 /*
@@ -1025,57 +958,3 @@ of_ir_dump_ast(struct of_ir_shader *shader, dump_ast_callback_t extra,
 		dump_node(shader, node, 0, extra, extra_data);
 }
 
-/*
- * Post-compile program processing entry point
- */
-
-int
-of_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
-		      struct of_shader_stateobj *so)
-{
-	int64_t start;
-	int ret;
-
-	start = os_time_get();
-
-	OF_IR_DUMP_AST(shader, NULL, NULL, "pre-clean");
-
-	clean_ast(shader);
-
-	OF_IR_DUMP_AST(shader, NULL, NULL, "post-clean");
-
-	ret = of_ir_to_ssa(shader);
-	if (ret) {
-		ERROR_MSG("failed to create SSA form");
-		return -1;
-	}
-
-	ret = of_ir_optimize(shader);
-	if (ret) {
-		ERROR_MSG("failed to optimize shader");
-		return -1;
-	}
-
-	ret = of_ir_assign_registers(shader);
-	if (ret) {
-		ERROR_MSG("failed to create executable form");
-		return -1;
-	}
-
-	ret = of_ir_generate_code(ctx, shader);
-	if (ret) {
-		ERROR_MSG("failed to generate code");
-		return -1;
-	}
-
-	pipe_resource_reference(&so->buffer, NULL);
-	so->buffer = shader->buffer;
-	so->num_instrs = shader->stats.num_instrs;
-
-	DBG("assembly of program %p took %lld ms",
-		so, (os_time_get() - start) / 1000);
-	DBG("assembly of program %p (type = %u) ended with %u instructions",
-		so, so->type, so->num_instrs);
-
-	return 0;
-}

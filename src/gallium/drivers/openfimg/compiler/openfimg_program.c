@@ -190,7 +190,7 @@ assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 			return -1;
 	}
 
-	ret = of_shader_assemble(ctx, so->ir, so);
+	ret = of_shader_assemble(ctx, so);
 	if (ret) {
 		debug_error("assemble failed!");
 		return -1;
@@ -380,9 +380,8 @@ of_prog_state_delete(struct pipe_context *pctx, void *hwcso)
 {
 	struct of_shader_stateobj *so = hwcso;
 
-	of_shader_destroy(so->ir);
+	of_shader_destroy(so);
 	free(so->tokens);
-	pipe_resource_reference(&so->buffer, NULL);
 	free(so);
 }
 

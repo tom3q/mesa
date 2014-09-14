@@ -28,9 +28,8 @@
 #include "openfimg_util.h"
 
 int of_shader_compile(struct of_shader_stateobj *so);
-int of_shader_assemble(struct of_context *ctx, struct of_ir_shader *shader,
-			  struct of_shader_stateobj *so);
-void of_shader_destroy(struct of_ir_shader *shader);
+int of_shader_assemble(struct of_context *ctx, struct of_shader_stateobj *so);
+void of_shader_destroy(struct of_shader_stateobj *so);
 
 int of_shader_disassemble(struct of_context *ctx, struct pipe_resource *buffer,
 			     unsigned sizedwords, enum of_shader_type type);

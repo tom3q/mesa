@@ -32,6 +32,64 @@
 #include "openfimg_util.h"
 
 /*
+ * Initial AST tree clean-up
+ */
+
+static void
+depart_region(struct of_ir_optimizer *opt, struct of_ir_ast_node *region)
+{
+	struct of_ir_ast_node *child, *s;
+	struct of_ir_ast_node *depart;
+	struct list_head tmp_list;
+
+	list_inithead(&tmp_list);
+
+	LIST_FOR_EACH_ENTRY_SAFE(child, s, &region->nodes, parent_list) {
+		list_del(&child->parent_list);
+		list_addtail(&child->parent_list, &tmp_list);
+	}
+
+	depart = of_ir_node_depart(opt->shader, region);
+
+	LIST_FOR_EACH_ENTRY_SAFE(child, s, &tmp_list, parent_list)
+		of_ir_node_insert(depart, child);
+
+	of_ir_node_insert(region, depart);
+}
+
+static void
+clean_node(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+{
+	struct of_ir_ast_node *child, *s;
+
+	switch (node->type) {
+	case OF_IR_NODE_LIST:
+		if (LIST_IS_EMPTY(&node->list.instrs))
+			LIST_DELINIT(&node->parent_list);
+		return;
+	default:
+		break;
+	}
+
+	LIST_FOR_EACH_ENTRY_SAFE(child, s, &node->nodes, parent_list)
+		clean_node(opt, child);
+
+	switch (node->type) {
+	case OF_IR_NODE_REGION:
+		if (LIST_IS_EMPTY(&node->nodes))
+			break;
+		child = LIST_ENTRY(struct of_ir_ast_node,
+					node->nodes.prev, parent_list);
+		if (child->type != OF_IR_NODE_DEPART
+		    && child->type != OF_IR_NODE_REPEAT)
+			depart_region(opt, node);
+		break;
+	default:
+		break;
+	}
+}
+
+/*
  * Construction of defined variable lists.
  */
 
@@ -399,6 +457,12 @@ of_ir_to_ssa(struct of_ir_shader *shader)
 	memset(opt->renames, 0, opt->num_vars * sizeof(*opt->renames));
 	opt->shader_heap = shader->heap;
 	opt->last_var = 1;
+
+	OF_IR_DUMP_AST(shader, NULL, NULL, "pre-clean");
+
+	RUN_PASS(shader, opt, clean_node);
+
+	OF_IR_DUMP_AST(shader, NULL, NULL, "post-clean");
 
 	RUN_PASS(shader, opt, init_nodes);
 	RUN_PASS(shader, opt, variables_defined);
