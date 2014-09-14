@@ -37,7 +37,6 @@
  */
 
 enum {
-	OF_IR_NUM_CF_TARGETS = 2,
 	OF_IR_NUM_SRCS = 3,
 	OF_IR_VEC_SIZE = 4,
 };
@@ -85,7 +84,6 @@ enum of_ir_reg_flags {
 };
 
 enum of_ir_instr_flags {
-	OF_IR_INSTR_NEXT_3SRC = (1 << 0),
 	OF_IR_INSTR_COPY = (1 << 1),
 	OF_IR_INSTR_DEAD = (1 << 2),
 };
@@ -183,8 +181,6 @@ void of_ir_instr_insert_before(struct of_ir_shader *shader,
 			       struct of_ir_ast_node *node,
 			       struct of_ir_instruction *where,
 			       struct of_ir_instruction *instr);
-struct of_ir_instruction *of_ir_instr_ptr(struct of_ir_shader *shader);
-
 void of_ir_instr_insert_templ(struct of_ir_shader *shader,
 			      struct of_ir_ast_node *block,
 			      struct of_ir_instruction *where,
