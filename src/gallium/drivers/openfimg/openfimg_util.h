@@ -203,6 +203,20 @@ pipe_surface_format(struct pipe_surface *psurf)
 	return psurf->format;
 }
 
+/* FIXME: Remove after dmabuf support hits libdrm-freedreno. */
+static inline struct fd_bo *
+fd_bo_from_dmabuf(struct fd_device *dev, unsigned handle)
+{
+	return NULL;
+}
+
+/* FIXME: Remove after dmabuf support hits libdrm-freedreno. */
+static inline unsigned
+fd_bo_dmabuf(struct fd_bo *bo)
+{
+	return 0;
+}
+
 /*
  * Private memory heap
  */

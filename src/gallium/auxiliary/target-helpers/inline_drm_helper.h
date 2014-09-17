@@ -501,7 +501,7 @@ dd_configuration(enum drm_conf conf)
 #endif
 #if defined(GALLIUM_OPENFIMG)
    if (strcmp(driver_name, "exynos") == 0)
-      return NULL;
+      return configuration_query(conf);
    else
 #endif
       return NULL;
