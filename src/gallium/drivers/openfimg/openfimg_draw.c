@@ -424,9 +424,33 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 }
 
 static void
+of_destroy_vertex_info(struct of_context *ctx, struct of_vertex_info *vertex)
+{
+	struct of_vertex_buffer *buffer, *s;
+
+	OF_CSO_PUT(ctx, &vertex->key.base.vtx->cso);
+
+	LIST_FOR_EACH_ENTRY_SAFE(buffer, s, &vertex->buffers, list) {
+		pipe_resource_reference(&buffer->buffer, NULL);
+		FREE(buffer);
+	}
+
+	FREE(vertex);
+}
+
+static void
 of_invalidate_vb_caches(struct of_context *ctx)
 {
+	struct cso_hash_iter iter = cso_hash_first_node(ctx->draw_hash);
 
+	while (!cso_hash_iter_is_null(iter)) {
+		struct of_vertex_info *vertex = cso_hash_iter_data(iter);
+
+		of_destroy_vertex_info(ctx, vertex);
+	}
+
+	cso_hash_delete(ctx->draw_hash);
+	ctx->draw_hash = cso_hash_create();
 }
 
 /*

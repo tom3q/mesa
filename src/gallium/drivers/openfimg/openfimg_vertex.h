@@ -113,8 +113,6 @@ struct of_vertex_info {
 
 	uint32_t ib_version;
 	uint32_t vb_version[OF_MAX_ATTRIBS];
-
-	struct list_head vtx_inv_list;
 };
 
 struct of_vertex_data {
