@@ -36,9 +36,6 @@
 struct fd_ringbuffer;
 struct of_vertex_stateobj;
 
-void of_invalidate_vb_caches(struct of_context *ctx,
-			     struct pipe_resource *buffer);
-
 void of_draw_emit(struct of_context *ctx, const struct pipe_draw_info *info);
 
 void of_draw_init(struct pipe_context *pctx);

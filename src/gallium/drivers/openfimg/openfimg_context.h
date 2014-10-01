@@ -88,6 +88,7 @@ struct of_context {
 	struct blitter_context *blitter;
 	struct cso_hash *draw_hash;
 	struct cso_hash *draw_hash_direct;
+	bool invalidate_vbos;
 
 	struct util_slab_mempool transfer_pool;
 
@@ -185,6 +186,8 @@ struct of_context {
 	struct pipe_index_buffer indexbuf;
 	struct pipe_resource *pending_rsrcs[512];
 	unsigned num_pending_rsrcs;
+
+	struct list_head ctx_list;
 };
 
 static INLINE struct of_context *

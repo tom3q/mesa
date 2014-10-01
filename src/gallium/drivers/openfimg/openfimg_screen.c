@@ -485,6 +485,8 @@ of_screen_create(struct fd_device *dev)
 
 	pscreen = &screen->base;
 
+	pipe_mutex_init(screen->ctxs_mutex);
+	LIST_INITHEAD(&screen->ctxs_list);
 	screen->dev = dev;
 
 	pscreen->context_create = of_context_create;

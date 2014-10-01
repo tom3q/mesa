@@ -32,6 +32,8 @@
 #include <freedreno_ringbuffer.h>
 
 #include "pipe/p_screen.h"
+#include "os/os_thread.h"
+#include "util/u_double_list.h"
 #include "util/u_memory.h"
 
 typedef uint32_t u32;
@@ -44,6 +46,9 @@ struct of_screen {
 	struct fd_device *dev;
 
 	int64_t cpu_gpu_time_delta;
+	pipe_mutex ctxs_mutex;
+	struct list_head ctxs_list;
+	int32_t bo_timestamp;
 };
 
 static INLINE struct of_screen *

@@ -146,12 +146,6 @@ draw_info_compare_direct(const void *a, const void *b, size_t size)
 	return 0;
 }
 
-void
-of_invalidate_vb_caches(struct of_context *ctx, struct pipe_resource *buffer)
-{
-	// TODO
-}
-
 /*
  * Draw data processing
  */
@@ -429,6 +423,12 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 	return vertex;
 }
 
+static void
+of_invalidate_vb_caches(struct of_context *ctx)
+{
+
+}
+
 /*
  * Draw
  */
@@ -536,6 +536,11 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	bool direct = true;
 	unsigned hash_key;
 	unsigned i;
+
+	if (ctx->invalidate_vbos) {
+		of_invalidate_vb_caches(ctx);
+		ctx->invalidate_vbos = false;
+	}
 
 	if (draw->base.info.indexed != info->indexed
 	    || state_dirty & OF_DIRTY_INDEXBUF) {

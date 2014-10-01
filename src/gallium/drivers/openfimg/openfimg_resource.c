@@ -54,17 +54,38 @@ realloc_bo(struct of_resource *rsc, uint32_t size)
 	rsc->dirty = false;
 }
 
+static uint32_t
+update_bo_timestamp(struct of_screen *screen)
+{
+	uint32_t timestamp;
+
+	p_atomic_inc(&screen->bo_timestamp);
+	timestamp = (uint32_t)p_atomic_read(&screen->bo_timestamp);
+
+	if (!timestamp) {
+		struct of_context *ctx;
+
+		pipe_mutex_lock(screen->ctxs_mutex);
+
+		LIST_FOR_EACH_ENTRY(ctx, &screen->ctxs_list, ctx_list)
+			ctx->invalidate_vbos = true;
+
+		pipe_mutex_unlock(screen->ctxs_mutex);
+	}
+
+	return timestamp;
+}
+
 static void
 of_resource_transfer_flush_region(struct pipe_context *pctx,
 				  struct pipe_transfer *ptrans,
 				  const struct pipe_box *box)
 {
-	struct of_resource *rsc = of_resource(ptrans->resource);
-
 	if (ptrans->usage & PIPE_TRANSFER_WRITE) {
-		if (++rsc->version == 0)
-			of_invalidate_vb_caches(of_context(pctx),
-						ptrans->resource);
+		struct of_resource *rsc = of_resource(ptrans->resource);
+		struct of_screen *screen = of_screen(pctx->screen);
+
+		rsc->version = update_bo_timestamp(screen);
 	}
 }
 
@@ -257,6 +278,8 @@ of_resource_create(struct pipe_screen *pscreen,
 	realloc_bo(rsc, size);
 	if (!rsc->bo)
 		goto fail;
+
+	rsc->version = update_bo_timestamp(of_screen(pscreen));
 
 	return prsc;
 fail:
