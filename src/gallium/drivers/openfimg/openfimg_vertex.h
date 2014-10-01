@@ -65,7 +65,6 @@ struct of_vertex_stateobj {
 	struct pipe_vertex_element pipe[OF_MAX_ATTRIBS];
 	struct of_vertex_element elements[OF_MAX_ATTRIBS];
 	struct of_vertex_transfer transfers[OF_MAX_ATTRIBS];
-	struct list_head vtx_inv_list;
 	struct of_cso cso;
 	unsigned vb_mask;
 	uint16_t batch_size;

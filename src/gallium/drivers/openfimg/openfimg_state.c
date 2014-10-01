@@ -569,15 +569,6 @@ array_compare(const void *e1, const void *e2)
 	return elem1->src_offset - elem2->src_offset;
 }
 
-static void
-of_vertex_state_release(struct of_context *ctx, void *cso)
-{
-	struct of_vertex_stateobj *vtx = cso;
-
-	of_invalidate_vtx_caches(ctx, vtx);
-	FREE(vtx);
-}
-
 static void *
 of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 		       const struct pipe_vertex_element *elements)
@@ -596,8 +587,7 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 	if (!so)
 		return NULL;
 
-	OF_CSO_INIT(so, of_vertex_state_release);
-	LIST_INITHEAD(&so->vtx_inv_list);
+	OF_CSO_INIT(so, NULL);
 
 	memcpy(so->pipe, elements, sizeof(*elements) * num_elements);
 	so->num_elements = num_elements;
