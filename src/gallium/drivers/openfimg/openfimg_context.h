@@ -73,9 +73,9 @@ struct of_framebuffer_stateobj {
 };
 
 struct of_cso_state {
-	struct pipe_blend_state *blend;
-	struct pipe_rasterizer_state *rasterizer;
-	struct pipe_depth_stencil_alpha_state *zsa;
+	struct of_blend_stateobj *blend;
+	struct of_rasterizer_stateobj *rasterizer;
+	struct of_zsa_stateobj *zsa;
 	struct of_vertex_stateobj *vtx;
 	struct of_shader_stateobj *vp, *fp;
 };
@@ -191,14 +191,6 @@ static INLINE struct of_context *
 of_context(struct pipe_context *pctx)
 {
 	return (struct of_context *)pctx;
-}
-
-static INLINE struct pipe_scissor_state *
-of_context_get_scissor(struct of_context *ctx)
-{
-	if (ctx->cso.rasterizer && ctx->cso.rasterizer->scissor)
-		return &ctx->scissor;
-	return &ctx->disabled_scissor;
 }
 
 static INLINE bool

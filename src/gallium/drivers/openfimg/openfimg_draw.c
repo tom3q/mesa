@@ -59,6 +59,7 @@ static const float clear_vertices[] = {
 };
 
 static struct of_vertex_stateobj solid_vertex_stateobj = {
+	OF_STATIC_CSO(&solid_vertex_stateobj),
 	.num_elements = 1,
 	.elements = {
 		[0] = {
@@ -191,7 +192,7 @@ of_invalidate_vtx_caches(struct of_context *ctx, struct of_vertex_stateobj *vtx)
 static void
 of_primconvert_prepare(struct of_context *ctx, struct of_vertex_info *vertex)
 {
-	const struct pipe_rasterizer_state *rast = ctx->cso.rasterizer;
+	const struct pipe_rasterizer_state *rast = &ctx->cso.rasterizer->base;
 	const struct of_draw_info *draw = &vertex->key;
 	struct pipe_index_buffer *new_ib = &vertex->ib;
 	const struct pipe_draw_info *info = &draw->base.info;
@@ -496,9 +497,7 @@ of_emit_draw_setup(struct of_context *ctx, const struct of_vertex_info *info,
 
 	if (dirty & OF_DIRTY_RASTERIZER
 	    || ctx->last_draw_mode != info->draw_mode) {
-		struct of_rasterizer_stateobj *rasterizer;
-
-		rasterizer = of_rasterizer_stateobj(ctx->cso.rasterizer);
+		struct of_rasterizer_stateobj *rasterizer = ctx->cso.rasterizer;
 
 		OUT_RING(ring, REG_FGPE_VERTEX_CONTEXT);
 		OUT_RING(ring, rasterizer->fgpe_vertex_context |
@@ -509,7 +508,7 @@ of_emit_draw_setup(struct of_context *ctx, const struct of_vertex_info *info,
 	END_PKT(ring, pkt);
 
 	ctx->last_draw_mode = info->draw_mode;
-	ctx->cso_active.vtx = draw->base.vtx;
+	OF_CSO_SET_ACTIVE(ctx, vtx);
 }
 
 static void
@@ -749,16 +748,13 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 		util_format_short_name(pipe_surface_format(pfb->cbufs[0])),
 		util_format_short_name(pipe_surface_format(pfb->zsbuf)));
 
-	/* FIXME: of_program_emit requires correct vertex stateobj bound */
+	/* of_program_emit requires correct vertex stateobj bound */
 	vtx_old = ctx->cso.vtx;
 	ctx->cso.vtx = &solid_vertex_stateobj;
 
 	/* emit clear program */
 	of_program_emit(ctx, ctx->solid_vp);
 	of_program_emit(ctx, ctx->solid_fp);
-
-	/* FIXME */
-	ctx->cso.vtx = vtx_old;
 
 	/* emit clear color */
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);
@@ -854,12 +850,15 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 			OF_DIRTY_BLEND |
 			OF_DIRTY_VTXSTATE |
 			OF_DIRTY_VTXBUF;
-	ctx->cso_active.rasterizer = NULL;
-	ctx->cso_active.blend = NULL;
-	ctx->cso_active.zsa = NULL;
-	ctx->cso_active.vtx = NULL;
-	ctx->cso_active.vp = NULL;
-	ctx->cso_active.fp = NULL;
+	OF_CSO_CLEAR(ctx, rasterizer);
+	OF_CSO_CLEAR(ctx, blend);
+	OF_CSO_CLEAR(ctx, zsa);
+	OF_CSO_CLEAR(ctx, vtx);
+	OF_CSO_CLEAR(ctx, vp);
+	OF_CSO_CLEAR(ctx, fp);
+
+	/* restore original vertex state object */
+	ctx->cso.vtx = vtx_old;
 }
 
 static void

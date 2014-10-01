@@ -31,8 +31,16 @@
 #include "pipe/p_context.h"
 #include "openfimg_context.h"
 
+struct of_cso {
+	unsigned ref_cnt;
+	void *ptr;
+
+	void (*release)(struct of_context *, void *);
+};
+
 struct of_blend_stateobj {
 	struct pipe_blend_state base;
+	struct of_cso cso;
 	uint32_t fgpf_blend;
 	uint32_t fgpf_logop;
 	uint32_t fgpf_cbmsk;
@@ -41,6 +49,7 @@ struct of_blend_stateobj {
 
 struct of_rasterizer_stateobj {
 	struct pipe_rasterizer_state base;
+	struct of_cso cso;
 	uint32_t fgra_bfcull;
 	uint32_t fgra_psize_min;
 	uint32_t fgra_psize_max;
@@ -49,6 +58,7 @@ struct of_rasterizer_stateobj {
 
 struct of_zsa_stateobj {
 	struct pipe_depth_stencil_alpha_state base;
+	struct of_cso cso;
 	uint32_t fgpf_alphat;
 	uint32_t fgpf_frontst;
 	uint32_t fgpf_backst;
@@ -56,34 +66,90 @@ struct of_zsa_stateobj {
 	uint32_t fgpf_dbmsk;
 };
 
-#define OF_CSO_BIND(pctx, name, dirty_flag, hwcso)		\
+#define OF_STATIC_CSO(_cso)					\
+	.cso = {						\
+		.ptr = _cso,					\
+		.ref_cnt = 1,					\
+		.release = of_cso_dummy_release,		\
+	}
+
+#define OF_CSO_INIT(_cso, _release)				\
 	do {							\
-		struct of_context *ctx = of_context(pctx);	\
+		(_cso)->cso.ptr = (_cso);			\
+		(_cso)->cso.ref_cnt = 1;			\
+		(_cso)->cso.release = _release;			\
+	} while (0)
+
+static INLINE void
+OF_CSO_GET(struct of_cso *cso)
+{
+	++cso->ref_cnt;
+}
+
+static INLINE void
+OF_CSO_PUT(struct of_context *ctx, struct of_cso *cso)
+{
+	if (!(--cso->ref_cnt)) {
+		if (cso->release)
+			cso->release(ctx, cso->ptr);
+		else
+			FREE(cso->ptr);
+	}
+}
+
+#define OF_CSO_BIND(ctx, name, dirty_flag, hwcso)		\
+	do {							\
+		if (!hwcso)					\
+			hwcso = &of_cso_dummy_ ## name;		\
+								\
 		ctx->cso.name = hwcso;				\
+								\
 		if (ctx->cso_active.name != hwcso)		\
 			ctx->dirty |= dirty_flag;		\
 		else						\
 			ctx->dirty &= ~dirty_flag;		\
 	} while (0)
 
+#define OF_CSO_SET_ACTIVE(ctx, name)				\
+	do {							\
+		OF_CSO_GET(&ctx->cso.name->cso);		\
+		OF_CSO_PUT(ctx, &ctx->cso_active.name->cso);		\
+		ctx->cso_active.name = ctx->cso.name;		\
+	} while (0)
+
+#define OF_CSO_CLEAR(ctx, name)					\
+	do {							\
+		OF_CSO_GET(&of_cso_dummy_ ## name.cso);	\
+		OF_CSO_PUT(ctx, &ctx->cso_active.name->cso);		\
+		ctx->cso_active.name = &of_cso_dummy_ ## name;	\
+	} while (0)
+
 static inline bool of_depth_enabled(struct of_context *ctx)
 {
-	return ctx->cso.zsa && ctx->cso.zsa->depth.enabled;
+	return ctx->cso.zsa && ctx->cso.zsa->base.depth.enabled;
 }
 
 static inline bool of_stencil_enabled(struct of_context *ctx)
 {
-	return ctx->cso.zsa && ctx->cso.zsa->stencil[0].enabled;
+	return ctx->cso.zsa && ctx->cso.zsa->base.stencil[0].enabled;
 }
 
 static inline bool of_logicop_enabled(struct of_context *ctx)
 {
-	return ctx->cso.blend && ctx->cso.blend->logicop_enable;
+	return ctx->cso.blend && ctx->cso.blend->base.logicop_enable;
 }
 
 static inline bool of_blend_enabled(struct of_context *ctx, unsigned n)
 {
-	return ctx->cso.blend && ctx->cso.blend->rt[n].blend_enable;
+	return ctx->cso.blend && ctx->cso.blend->base.rt[n].blend_enable;
+}
+
+static INLINE struct pipe_scissor_state *
+of_context_get_scissor(struct of_context *ctx)
+{
+	if (ctx->cso.rasterizer && ctx->cso.rasterizer->base.scissor)
+		return &ctx->scissor;
+	return &ctx->disabled_scissor;
 }
 
 static INLINE struct of_blend_stateobj *
@@ -105,5 +171,11 @@ of_zsa_stateobj(struct pipe_depth_stencil_alpha_state *zsa)
 }
 
 void of_state_init(struct pipe_context *pctx);
+void of_cso_dummy_release(struct of_context *, void *cso);
+
+extern struct of_blend_stateobj of_cso_dummy_blend;
+extern struct of_rasterizer_stateobj of_cso_dummy_rasterizer;
+extern struct of_zsa_stateobj of_cso_dummy_zsa;
+extern struct of_vertex_stateobj of_cso_dummy_vtx;
 
 #endif /* OPENFIMG_STATE_H_ */

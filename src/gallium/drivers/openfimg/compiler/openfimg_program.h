@@ -30,6 +30,7 @@
 
 #include "openfimg_ir.h"
 #include "openfimg_emit.h"
+#include "openfimg_state.h"
 
 /** Structure representing a single semantic attribute. */
 struct of_shader_semantic {
@@ -40,6 +41,8 @@ struct of_shader_semantic {
 
 /** Structure containing shader state object for driver's pipe context. */
 struct of_shader_stateobj {
+	struct of_cso cso;
+
 	enum of_shader_type type;	/**< Shader type (vertex/pixel). */
 
 	struct pipe_resource *buffer;	/**< Buffer containing binary code. */
@@ -122,5 +125,8 @@ void of_program_init(struct pipe_context *pctx);
  * @param pctx Gallium pipe context to destroy.
  */
 void of_program_fini(struct pipe_context *pctx);
+
+extern struct of_shader_stateobj of_cso_dummy_vp;
+extern struct of_shader_stateobj of_cso_dummy_fp;
 
 #endif /* OF_PROGRAM_H_ */

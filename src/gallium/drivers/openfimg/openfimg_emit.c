@@ -286,13 +286,13 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	if (dirty & (OF_DIRTY_PROG_VP | OF_DIRTY_CONSTBUF)) {
 		emit_constants(ring, &ctx->constbuf[PIPE_SHADER_VERTEX],
 				dirty & OF_DIRTY_PROG_VP, ctx->cso.vp);
-		ctx->cso_active.vp = ctx->cso.vp;
+		OF_CSO_SET_ACTIVE(ctx, vp);
 	}
 
 	if (dirty & (OF_DIRTY_PROG_FP | OF_DIRTY_CONSTBUF)) {
 		emit_constants(ring, &ctx->constbuf[PIPE_SHADER_FRAGMENT],
 				dirty & OF_DIRTY_PROG_FP, ctx->cso.fp);
-		ctx->cso_active.fp = ctx->cso.fp;
+		OF_CSO_SET_ACTIVE(ctx, fp);
 	}
 
 	if (dirty & OF_DIRTY_VERTTEX)
@@ -304,27 +304,26 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	pkt = OUT_PKT(ring, G3D_REQUEST_REGISTER_WRITE);
 
 	if (dirty & OF_DIRTY_RASTERIZER) {
-		struct of_rasterizer_stateobj *rasterizer =
-				of_rasterizer_stateobj(ctx->cso.rasterizer);
+		struct of_rasterizer_stateobj *rasterizer = ctx->cso.rasterizer;
 
 		OUT_RING(ring, REG_FGRA_D_OFF_EN);
-		OUT_RING(ring, ctx->cso.rasterizer->offset_tri);
+		OUT_RING(ring, rasterizer->base.offset_tri);
 		OUT_RING(ring, REG_FGRA_D_OFF_FACTOR);
-		OUT_RING(ring, fui(ctx->cso.rasterizer->offset_scale));
+		OUT_RING(ring, fui(rasterizer->base.offset_scale));
 		OUT_RING(ring, REG_FGRA_D_OFF_UNITS);
-		OUT_RING(ring, fui(ctx->cso.rasterizer->offset_units));
+		OUT_RING(ring, fui(rasterizer->base.offset_units));
 		OUT_RING(ring, REG_FGRA_BFCULL);
 		OUT_RING(ring, rasterizer->fgra_bfcull);
 		OUT_RING(ring, REG_FGRA_PWIDTH);
-		OUT_RING(ring, fui(ctx->cso.rasterizer->point_size));
+		OUT_RING(ring, fui(rasterizer->base.point_size));
 		OUT_RING(ring, REG_FGRA_PSIZE_MIN);
 		OUT_RING(ring, rasterizer->fgra_psize_min);
 		OUT_RING(ring, REG_FGRA_PSIZE_MAX);
 		OUT_RING(ring, rasterizer->fgra_psize_max);
 		OUT_RING(ring, REG_FGRA_LWIDTH);
-		OUT_RING(ring, fui(ctx->cso.rasterizer->line_width));
+		OUT_RING(ring, fui(rasterizer->base.line_width));
 
-		ctx->cso_active.rasterizer = ctx->cso.rasterizer;
+		OF_CSO_SET_ACTIVE(ctx, rasterizer);
 	}
 
 	if (dirty & (OF_DIRTY_SCISSOR | OF_DIRTY_RASTERIZER)) {
@@ -357,8 +356,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	}
 
 	if (dirty & OF_DIRTY_BLEND) {
-		struct of_blend_stateobj *blend =
-				of_blend_stateobj(ctx->cso.blend);
+		struct of_blend_stateobj *blend = ctx->cso.blend;
 
 		OUT_RING(ring, REG_FGPF_BLEND);
 		OUT_RING(ring, blend->fgpf_blend);
@@ -369,7 +367,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		OUT_RING(ring, REG_FGPF_FBCTL);
 		OUT_RING(ring, blend->fgpf_fbctl);
 
-		ctx->cso_active.blend = ctx->cso.blend;
+		OF_CSO_SET_ACTIVE(ctx, blend);
 	}
 
 	if (dirty & OF_DIRTY_BLEND_COLOR) {
@@ -378,7 +376,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	}
 
 	if (dirty & (OF_DIRTY_ZSA | OF_DIRTY_STENCIL_REF)) {
-		struct of_zsa_stateobj *zsa = of_zsa_stateobj(ctx->cso.zsa);
+		struct of_zsa_stateobj *zsa = ctx->cso.zsa;
 		struct pipe_stencil_ref *sr = &ctx->stencil_ref;
 
 		OUT_RING(ring, REG_FGPF_FRONTST);
@@ -387,12 +385,10 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		OUT_RING(ring, REG_FGPF_BACKST);
 		OUT_RING(ring, zsa->fgpf_backst |
 				FGPF_BACKST_VALUE(sr->ref_value[1]));
-
-		ctx->cso_active.zsa = ctx->cso.zsa;
 	}
 
 	if (dirty & OF_DIRTY_ZSA) {
-		struct of_zsa_stateobj *zsa = of_zsa_stateobj(ctx->cso.zsa);
+		struct of_zsa_stateobj *zsa = ctx->cso.zsa;
 
 		OUT_RING(ring, REG_FGPF_ALPHAT);
 		OUT_RING(ring, zsa->fgpf_alphat);
@@ -401,7 +397,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 		OUT_RING(ring, REG_FGPF_DBMSK);
 		OUT_RING(ring, zsa->fgpf_dbmsk);
 
-		ctx->cso_active.zsa = ctx->cso.zsa;
+		OF_CSO_SET_ACTIVE(ctx, zsa);
 	}
 
 	END_PKT(ring, pkt);

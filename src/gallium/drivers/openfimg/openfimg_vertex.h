@@ -30,6 +30,7 @@
 #include <indices/u_indices.h>
 
 #include "openfimg_context.h"
+#include "openfimg_state.h"
 
 #define VERTEX_BUFFER_SIZE	4096
 
@@ -65,6 +66,7 @@ struct of_vertex_stateobj {
 	struct of_vertex_element elements[OF_MAX_ATTRIBS];
 	struct of_vertex_transfer transfers[OF_MAX_ATTRIBS];
 	struct list_head vtx_inv_list;
+	struct of_cso cso;
 	unsigned vb_mask;
 	uint16_t batch_size;
 	uint8_t vb_map[PIPE_MAX_ATTRIBS];

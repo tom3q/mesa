@@ -328,6 +328,24 @@ of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
  * State management
  */
 
+struct of_shader_stateobj of_cso_dummy_vp = {
+	OF_STATIC_CSO(&of_cso_dummy_vp),
+};
+
+struct of_shader_stateobj of_cso_dummy_fp = {
+	OF_STATIC_CSO(&of_cso_dummy_fp),
+};
+
+static void
+of_prog_state_release(struct of_context *ctx, void *hwcso)
+{
+	struct of_shader_stateobj *so = hwcso;
+
+	of_shader_destroy(so);
+	FREE(so->tokens);
+	FREE(so);
+}
+
 static struct of_shader_stateobj *
 create_shader(struct of_context *ctx, const struct pipe_shader_state *cso,
 	      enum of_shader_type type)
@@ -338,6 +356,7 @@ create_shader(struct of_context *ctx, const struct pipe_shader_state *cso,
 	so = CALLOC_STRUCT(of_shader_stateobj);
 	if (!so)
 		return NULL;
+	OF_CSO_INIT(so, of_prog_state_release);
 
 	n = tgsi_num_tokens(cso->tokens);
 	so->tokens = tgsi_dup_tokens(cso->tokens);
@@ -358,7 +377,7 @@ of_fp_state_create(struct pipe_context *pctx,
 static void
 of_fp_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	OF_CSO_BIND(pctx, fp, OF_DIRTY_PROG_FP, hwcso);
+	OF_CSO_BIND(of_context(pctx), fp, OF_DIRTY_PROG_FP, hwcso);
 }
 
 static void *
@@ -372,7 +391,7 @@ of_vp_state_create(struct pipe_context *pctx,
 static void
 of_vp_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	OF_CSO_BIND(pctx, vp, OF_DIRTY_PROG_VP, hwcso);
+	OF_CSO_BIND(of_context(pctx), vp, OF_DIRTY_PROG_VP, hwcso);
 }
 
 static void
@@ -380,9 +399,7 @@ of_prog_state_delete(struct pipe_context *pctx, void *hwcso)
 {
 	struct of_shader_stateobj *so = hwcso;
 
-	of_shader_destroy(so);
-	free(so->tokens);
-	free(so);
+	OF_CSO_PUT(of_context(pctx), &so->cso);
 }
 
 /*
@@ -463,6 +480,15 @@ void
 of_program_init(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
+
+	OF_CSO_GET(&of_cso_dummy_vp.cso);
+	OF_CSO_GET(&of_cso_dummy_fp.cso);
+
+	ctx->cso.vp = &of_cso_dummy_vp;
+	ctx->cso.fp = &of_cso_dummy_fp;
+
+	ctx->cso_active.vp = &of_cso_dummy_vp;
+	ctx->cso_active.fp = &of_cso_dummy_fp;
 
 	pctx->create_fs_state = of_fp_state_create;
 	pctx->bind_fs_state = of_fp_state_bind;

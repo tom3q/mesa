@@ -224,6 +224,7 @@ of_blend_state_create(struct pipe_context *pctx,
 	if (!so)
 		return NULL;
 
+	OF_CSO_INIT(so, NULL);
 	so->base = *cso;
 
 	so->fgpf_blend =
@@ -264,16 +265,22 @@ of_blend_state_create(struct pipe_context *pctx,
 	return so;
 }
 
+struct of_blend_stateobj of_cso_dummy_blend = {
+	OF_STATIC_CSO(&of_cso_dummy_blend),
+};
+
 static void
 of_blend_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	OF_CSO_BIND(pctx, blend, OF_DIRTY_BLEND, hwcso);
+	OF_CSO_BIND(of_context(pctx), blend, OF_DIRTY_BLEND, hwcso);
 }
 
 static void
 of_blend_state_delete(struct pipe_context *pctx, void *hwcso)
 {
-	FREE(hwcso);
+	struct of_blend_stateobj *so = hwcso;
+
+	OF_CSO_PUT(of_context(pctx), &so->cso);
 }
 
 static void *
@@ -286,6 +293,7 @@ of_rasterizer_state_create(struct pipe_context *pctx,
 	so = CALLOC_STRUCT(of_rasterizer_stateobj);
 	if (!so)
 		return NULL;
+	OF_CSO_INIT(so, NULL);
 
 	if (cso->point_size_per_vertex) {
 		psize_min = util_get_min_point_size(cso);
@@ -312,16 +320,22 @@ of_rasterizer_state_create(struct pipe_context *pctx,
 	return so;
 }
 
+struct of_rasterizer_stateobj of_cso_dummy_rasterizer = {
+	OF_STATIC_CSO(&of_cso_dummy_rasterizer),
+};
+
 static void
 of_rasterizer_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	OF_CSO_BIND(pctx, rasterizer, OF_DIRTY_RASTERIZER, hwcso);
+	OF_CSO_BIND(of_context(pctx), rasterizer, OF_DIRTY_RASTERIZER, hwcso);
 }
 
 static void
 of_rasterizer_state_delete(struct pipe_context *pctx, void *hwcso)
 {
-	FREE(hwcso);
+	struct of_rasterizer_stateobj *so = hwcso;
+
+	OF_CSO_PUT(of_context(pctx), &so->cso);
 }
 
 static void *
@@ -334,6 +348,7 @@ of_zsa_state_create(struct pipe_context *pctx,
 	if (!so)
 		return NULL;
 
+	OF_CSO_INIT(so, NULL);
 	so->base = *cso;
 
 	if (cso->depth.enabled) {
@@ -380,16 +395,22 @@ of_zsa_state_create(struct pipe_context *pctx,
 	return so;
 }
 
+struct of_zsa_stateobj of_cso_dummy_zsa = {
+	OF_STATIC_CSO(&of_cso_dummy_zsa),
+};
+
 static void
 of_zsa_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	OF_CSO_BIND(pctx, zsa, OF_DIRTY_ZSA, hwcso);
+	OF_CSO_BIND(of_context(pctx), zsa, OF_DIRTY_ZSA, hwcso);
 }
 
 static void
 of_zsa_state_delete(struct pipe_context *pctx, void *hwcso)
 {
-	FREE(hwcso);
+	struct of_zsa_stateobj *so = hwcso;
+
+	OF_CSO_PUT(of_context(pctx), &so->cso);
 }
 
 struct of_element_data {
@@ -548,6 +569,15 @@ array_compare(const void *e1, const void *e2)
 	return elem1->src_offset - elem2->src_offset;
 }
 
+static void
+of_vertex_state_release(struct of_context *ctx, void *cso)
+{
+	struct of_vertex_stateobj *vtx = cso;
+
+	of_invalidate_vtx_caches(ctx, vtx);
+	FREE(vtx);
+}
+
 static void *
 of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 		       const struct pipe_vertex_element *elements)
@@ -566,6 +596,7 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 	if (!so)
 		return NULL;
 
+	OF_CSO_INIT(so, of_vertex_state_release);
 	LIST_INITHEAD(&so->vtx_inv_list);
 
 	memcpy(so->pipe, elements, sizeof(*elements) * num_elements);
@@ -640,22 +671,47 @@ of_vertex_state_create(struct pipe_context *pctx, unsigned num_elements,
 static void
 of_vertex_state_delete(struct pipe_context *pctx, void *hwcso)
 {
-	struct of_context *ctx = of_context(pctx);
-	struct of_vertex_stateobj *vtx = hwcso;
+	struct of_vertex_stateobj *so = hwcso;
 
-	of_invalidate_vtx_caches(ctx, vtx);
-	FREE(hwcso);
+	OF_CSO_PUT(of_context(pctx), &so->cso);
 }
+
+struct of_vertex_stateobj of_cso_dummy_vtx = {
+	OF_STATIC_CSO(&of_cso_dummy_vtx),
+};
 
 static void
 of_vertex_state_bind(struct pipe_context *pctx, void *hwcso)
 {
-	OF_CSO_BIND(pctx, vtx, OF_DIRTY_VTXSTATE, hwcso);
+	OF_CSO_BIND(of_context(pctx), vtx, OF_DIRTY_VTXSTATE, hwcso);
+}
+
+void
+of_cso_dummy_release(struct of_context *ctx, void *cso)
+{
+	assert("Tried to release dummy CSO" && 0);
 }
 
 void
 of_state_init(struct pipe_context *pctx)
 {
+	struct of_context *ctx = of_context(pctx);
+
+	OF_CSO_GET(&of_cso_dummy_rasterizer.cso);
+	OF_CSO_GET(&of_cso_dummy_blend.cso);
+	OF_CSO_GET(&of_cso_dummy_zsa.cso);
+	OF_CSO_GET(&of_cso_dummy_vtx.cso);
+
+	ctx->cso.rasterizer = &of_cso_dummy_rasterizer;
+	ctx->cso.blend = &of_cso_dummy_blend;
+	ctx->cso.zsa = &of_cso_dummy_zsa;
+	ctx->cso.vtx = &of_cso_dummy_vtx;
+
+	ctx->cso_active.rasterizer = &of_cso_dummy_rasterizer;
+	ctx->cso_active.blend = &of_cso_dummy_blend;
+	ctx->cso_active.zsa = &of_cso_dummy_zsa;
+	ctx->cso_active.vtx = &of_cso_dummy_vtx;
+
 	pctx->set_blend_color = of_set_blend_color;
 	pctx->set_stencil_ref = of_set_stencil_ref;
 	pctx->set_clip_state = of_set_clip_state;
