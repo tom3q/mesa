@@ -36,6 +36,8 @@
 struct fd_ringbuffer;
 struct of_vertex_stateobj;
 
+void of_draw_cache_gc(struct of_context *ctx);
+
 void of_draw_emit(struct of_context *ctx, const struct pipe_draw_info *info);
 
 void of_draw_init(struct pipe_context *pctx);

@@ -126,6 +126,10 @@ of_context_render(struct pipe_context *pctx)
 
 	ctx->dirty |= OF_DIRTY_FRAMEBUFFER | OF_DIRTY_VERTTEX
 			| OF_DIRTY_FRAGTEX;
+
+	++ctx->draw_ticks;
+	if (!(ctx->draw_ticks % 8))
+		of_draw_cache_gc(ctx);
 }
 
 static void
@@ -152,10 +156,6 @@ of_context_destroy(struct pipe_context *pctx)
 	int i;
 
 	DBG("");
-
-	pipe_mutex_lock(ctx->screen->ctxs_mutex);
-	list_del(&ctx->ctx_list);
-	pipe_mutex_unlock(ctx->screen->ctxs_mutex);
 
 	if (ctx->pipe)
 		fd_pipe_del(ctx->pipe);
@@ -212,7 +212,6 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 		return NULL;
 
 	pctx = &ctx->base;
-	LIST_INITHEAD(&ctx->ctx_list);
 
 	ctx->pipe = fd_pipe_new(screen->dev, FD_PIPE_3D);
 	if (!ctx->pipe) {
@@ -261,10 +260,6 @@ of_context_create(struct pipe_screen *pscreen, void *priv)
 		goto fail;
 
 	of_emit_setup(ctx);
-
-	pipe_mutex_lock(screen->ctxs_mutex);
-	list_addtail(&ctx->ctx_list, &screen->ctxs_list);
-	pipe_mutex_unlock(screen->ctxs_mutex);
 
 	return pctx;
 

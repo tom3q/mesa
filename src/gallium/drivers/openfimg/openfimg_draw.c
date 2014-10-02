@@ -375,6 +375,27 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 		vertex->direct = false;
 	}
 
+	if (vertex->direct) {
+		for (i = 0; i < draw->base.vtx->num_transfers; ++i)
+			pipe_resource_reference(&vertex->rscs[i], NULL);
+	} else {
+		transfer = draw->base.vtx->transfers;
+		for (i = 0; i < draw->base.vtx->num_transfers;
+		     ++i, ++transfer) {
+			unsigned pipe_idx = transfer->vertex_buffer_index;
+			unsigned buf_idx = vtx->vb_map[pipe_idx];
+			const struct pipe_vertex_buffer *vb
+							= &draw->vb[buf_idx];
+
+			pipe_resource_reference(&vertex->rscs[i], vb->buffer);
+		}
+	}
+
+	for (; i < OF_MAX_ATTRIBS; ++i)
+		pipe_resource_reference(&vertex->rscs[i], NULL);
+
+	pipe_resource_reference(&vertex->rscs[OF_MAX_ATTRIBS], ib->buffer);
+
 	if (primconvert)
 		of_primconvert_release(ctx, vertex);
 
@@ -405,10 +426,12 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 		of_primconvert_prepare(ctx, vertex);
 	}
 
+	LIST_INITHEAD(&vertex->lru_list);
 	vertex->first_draw = true;
 	vertex->bypass_cache = bypass_cache;
 	vertex->draw_mode = ctx->primtypes[vertex->mode];
 	OF_CSO_GET(&draw->base.vtx->cso);
+	++ctx->draw_cache_entries;
 
 	of_build_vertex_data(ctx, vertex);
 
@@ -426,31 +449,67 @@ static struct of_vertex_info *of_create_vertex_info(struct of_context *ctx,
 static void
 of_destroy_vertex_info(struct of_context *ctx, struct of_vertex_info *vertex)
 {
+	const struct of_draw_info *draw = &vertex->key;
 	struct of_vertex_buffer *buffer, *s;
+	int i;
 
 	OF_CSO_PUT(ctx, &vertex->key.base.vtx->cso);
+
+	for (i = 0; i < draw->base.vtx->num_transfers; ++i)
+		pipe_resource_reference(&vertex->rscs[i], NULL);
+
+	pipe_resource_reference(&vertex->rscs[OF_MAX_ATTRIBS], NULL);
 
 	LIST_FOR_EACH_ENTRY_SAFE(buffer, s, &vertex->buffers, list) {
 		pipe_resource_reference(&buffer->buffer, NULL);
 		FREE(buffer);
 	}
 
+	list_del(&vertex->lru_list);
 	FREE(vertex);
+	--ctx->draw_cache_entries;
 }
 
-static void
-of_invalidate_vb_caches(struct of_context *ctx)
+void
+of_draw_cache_gc(struct of_context *ctx)
 {
-	struct cso_hash_iter iter = cso_hash_first_node(ctx->draw_hash);
+	struct of_vertex_info *vertex, *s;
+	unsigned removed = 0;
 
-	while (!cso_hash_iter_is_null(iter)) {
-		struct of_vertex_info *vertex = cso_hash_iter_data(iter);
+	VDBG("Draw cache GC invoked...");
+
+	LIST_FOR_EACH_ENTRY_SAFE(vertex, s, &ctx->draw_lru, lru_list) {
+		struct cso_hash_iter iter;
+		struct cso_hash *hash;
+		unsigned key;
+
+		if (ctx->draw_ticks - vertex->last_use < 32)
+			break;
+
+		if (vertex->direct) {
+			hash = ctx->draw_hash_direct;
+			key = of_draw_hash_direct(&vertex->key);
+		} else {
+			hash = ctx->draw_hash;
+			key = of_draw_hash(&vertex->key);
+		}
+
+		iter = cso_hash_find(hash, key);
+		while (!cso_hash_iter_is_null(iter)) {
+			if (cso_hash_iter_key(iter) != key
+			|| cso_hash_iter_data(iter) == vertex)
+				break;
+		}
+		assert(cso_hash_iter_data(iter) == vertex);
+		cso_hash_erase(hash, iter);
 
 		of_destroy_vertex_info(ctx, vertex);
+
+		++removed;
 	}
 
-	cso_hash_delete(ctx->draw_hash);
-	ctx->draw_hash = cso_hash_create();
+	VDBG("Removed %u/%u cache entries", removed,
+		ctx->draw_cache_entries + removed);
 }
 
 /*
@@ -561,11 +620,6 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	unsigned hash_key;
 	unsigned i;
 
-	if (ctx->invalidate_vbos) {
-		of_invalidate_vb_caches(ctx);
-		ctx->invalidate_vbos = false;
-	}
-
 	if (draw->base.info.indexed != info->indexed
 	    || state_dirty & OF_DIRTY_INDEXBUF) {
 		struct pipe_index_buffer *indexbuf = &ctx->indexbuf;
@@ -629,7 +683,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 				struct pipe_resource *prsc = draw->vb[i].buffer;
 				struct of_resource *rsc = of_resource(prsc);
 
-				if (vertex->vb_version[i] < rsc->version) {
+				if (vertex->vb_version[i] != rsc->version) {
 					cached = false;
 					vertex->first_draw = true;
 				}
@@ -640,7 +694,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 			struct pipe_resource *prsc = draw->ib.buffer;
 			struct of_resource *rsc = of_resource(prsc);
 
-			if (vertex->ib_version < rsc->version) {
+			if (vertex->ib_version != rsc->version) {
 				cached = false;
 				vertex->first_draw = true;
 			}
@@ -652,6 +706,10 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		vertex = of_create_vertex_info(ctx, draw,
 						draw->user_ib || draw->user_vb);
 	}
+
+	list_del(&vertex->lru_list);
+	list_addtail(&vertex->lru_list, &ctx->draw_lru);
+	vertex->last_use = ctx->draw_ticks;
 
 	of_emit_state(ctx, state_dirty);
 	of_emit_draw(ctx, vertex, state_dirty);
@@ -939,27 +997,33 @@ of_draw_init(struct pipe_context *pctx)
 	ctx->draw_hash = cso_hash_create();
 	ctx->draw_hash_direct = cso_hash_create();
 	ctx->draw = CALLOC_STRUCT(of_draw_info);
+
+	LIST_INITHEAD(&ctx->draw_lru);
 }
 
 void
 of_draw_fini(struct pipe_context *pctx)
 {
 	struct of_context *ctx = of_context(pctx);
-	struct of_vertex_info *info = ctx->clear_vertex_info;
+	struct of_vertex_info *vertex, *s;
 
 	if (ctx->draw)
 		FREE(ctx->draw);
 
-	if (info) {
+	vertex = ctx->clear_vertex_info;
+	if (vertex) {
 		struct of_vertex_buffer *buf, *n;
 
-		LIST_FOR_EACH_ENTRY_SAFE(buf, n, &info->buffers, list) {
+		LIST_FOR_EACH_ENTRY_SAFE(buf, n, &vertex->buffers, list) {
 			pipe_resource_reference(&buf->buffer, NULL);
 			FREE(buf);
 		}
 
-		FREE(info);
+		FREE(vertex);
 	}
+
+	LIST_FOR_EACH_ENTRY_SAFE(vertex, s, &ctx->draw_lru, lru_list)
+		of_destroy_vertex_info(ctx, vertex);
 
 	cso_hash_delete(ctx->draw_hash);
 	cso_hash_delete(ctx->draw_hash_direct);

@@ -46,9 +46,6 @@ struct of_screen {
 	struct fd_device *dev;
 
 	int64_t cpu_gpu_time_delta;
-	pipe_mutex ctxs_mutex;
-	struct list_head ctxs_list;
-	int32_t bo_timestamp;
 };
 
 static INLINE struct of_screen *

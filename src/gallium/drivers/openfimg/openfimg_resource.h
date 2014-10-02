@@ -45,7 +45,7 @@ struct of_resource {
 	uint32_t cpp;
 	struct of_resource_slice slices[MAX_MIP_LEVELS];
 	bool dirty;
-	uint32_t version;
+	int32_t version;
 };
 
 static INLINE struct of_resource *

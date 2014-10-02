@@ -113,6 +113,10 @@ struct of_vertex_info {
 
 	uint32_t ib_version;
 	uint32_t vb_version[OF_MAX_ATTRIBS];
+	struct pipe_resource *rscs[OF_MAX_ATTRIBS + 1];
+
+	struct list_head lru_list;
+	unsigned last_use;
 };
 
 struct of_vertex_data {
