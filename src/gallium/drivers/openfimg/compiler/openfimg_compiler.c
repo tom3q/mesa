@@ -1749,6 +1749,7 @@ of_shader_compile(struct of_shader_stateobj *so)
 	struct of_compile_context *ctx;
 	unsigned ps_output_temp = 0;
 	int64_t start;
+	int ret;
 
 	start = os_time_get();
 
@@ -1808,6 +1809,24 @@ of_shader_compile(struct of_shader_stateobj *so)
 
 	compile_free(ctx);
 
+	ret = of_ir_to_ssa(so->ir);
+	if (ret) {
+		ERROR_MSG("failed to create SSA form");
+		return -1;
+	}
+
+	ret = of_ir_optimize(so->ir);
+	if (ret) {
+		ERROR_MSG("failed to optimize shader");
+		return -1;
+	}
+
+	ret = of_ir_assign_registers(so->ir);
+	if (ret) {
+		ERROR_MSG("failed to create executable form");
+		return -1;
+	}
+
 	DBG("compilation of program %p took %lld ms",
 		so, (os_time_get() - start) / 1000);
 
@@ -1828,24 +1847,6 @@ of_shader_assemble(struct of_context *ctx, struct of_shader_stateobj *so)
 	int ret;
 
 	start = os_time_get();
-
-	ret = of_ir_to_ssa(shader);
-	if (ret) {
-		ERROR_MSG("failed to create SSA form");
-		return -1;
-	}
-
-	ret = of_ir_optimize(shader);
-	if (ret) {
-		ERROR_MSG("failed to optimize shader");
-		return -1;
-	}
-
-	ret = of_ir_assign_registers(shader);
-	if (ret) {
-		ERROR_MSG("failed to create executable form");
-		return -1;
-	}
 
 	ret = of_ir_generate_code(ctx, shader, &buffer, &num_instrs);
 	if (ret) {
