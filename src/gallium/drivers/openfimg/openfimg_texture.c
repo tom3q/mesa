@@ -241,7 +241,8 @@ of_sampler_view_create(struct pipe_context *pctx, struct pipe_resource *prsc,
 	so->base.context = pctx;
 
 	so->tex_resource =  rsc;
-	so->tsta = TSTA_FORMAT(of_pipe2texture(cso->format, &is_rgba))
+	so->tsta = TSTA_FORMAT(of_pipe2texture(cso->format,
+						&is_rgba, &so->swizzle))
 			| TSTA_TYPE(TEX_TYPE_2D);
 	if (is_rgba)
 		so->tsta |= TSTA_RGBA;

@@ -32,7 +32,7 @@
 #include "openfimg_util.h"
 
 enum fgtu_tex_format
-of_pipe2texture(enum pipe_format format, bool *is_rgba)
+of_pipe2texture(enum pipe_format format, bool *is_rgba, bool *swizzle)
 {
 	switch (format) {
 	/* 8-bit buffers. */
@@ -54,22 +54,27 @@ of_pipe2texture(enum pipe_format format, bool *is_rgba)
 	case PIPE_FORMAT_R8_UINT:
 	case PIPE_FORMAT_R8_SINT:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_8;
 
 	/* 16-bit buffers. */
 	case PIPE_FORMAT_B5G6R5_UNORM:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_565;
 	case PIPE_FORMAT_B5G5R5A1_UNORM:
 	case PIPE_FORMAT_B5G5R5X1_UNORM:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_1555;
 	case PIPE_FORMAT_B4G4R4A4_UNORM:
 	case PIPE_FORMAT_B4G4R4X4_UNORM:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_4444;
 	case PIPE_FORMAT_Z16_UNORM:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_DEPTH16;
 	case PIPE_FORMAT_L8A8_UNORM:
 	case PIPE_FORMAT_L8A8_SNORM:
@@ -81,6 +86,7 @@ of_pipe2texture(enum pipe_format format, bool *is_rgba)
 	case PIPE_FORMAT_R8G8_UINT:
 	case PIPE_FORMAT_R8G8_SINT:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_88;
 
 	/* 32-bit buffers. */
@@ -88,31 +94,49 @@ of_pipe2texture(enum pipe_format format, bool *is_rgba)
 	case PIPE_FORMAT_A8B8G8R8_UNORM:
 	case PIPE_FORMAT_X8B8G8R8_UNORM:
 		*is_rgba = true;
+		*swizzle = false;
 		return TEX_FMT_8888;
 
 	case PIPE_FORMAT_B8G8R8A8_SRGB:
 	case PIPE_FORMAT_B8G8R8A8_UNORM:
 	case PIPE_FORMAT_B8G8R8X8_UNORM:
 		*is_rgba = false;
+		*swizzle = false;
+		return TEX_FMT_8888;
+
+	case PIPE_FORMAT_A8R8G8B8_UNORM:
+	case PIPE_FORMAT_X8R8G8B8_UNORM:
+		*is_rgba = true;
+		*swizzle = true;
+		return TEX_FMT_8888;
+
+	case PIPE_FORMAT_R8G8B8A8_UNORM:
+	case PIPE_FORMAT_R8G8B8X8_UNORM:
+		*is_rgba = false;
+		*swizzle = true;
 		return TEX_FMT_8888;
 
 	/* YUV buffers. */
 	case PIPE_FORMAT_UYVY:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_UY1VY0;
 	case PIPE_FORMAT_YUYV:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_Y1UY0V;
 
 	/* compressed formats */
 	case PIPE_FORMAT_DXT1_RGB:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_DXT1;
 
 	case PIPE_FORMAT_Z24X8_UNORM:
 	case PIPE_FORMAT_Z24_UNORM_S8_UINT:
 	case PIPE_FORMAT_X24S8_UINT:
 		*is_rgba = false;
+		*swizzle = false;
 		return TEX_FMT_DEPTH16;
 
 	default:

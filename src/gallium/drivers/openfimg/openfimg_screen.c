@@ -83,7 +83,7 @@ of_screen_is_format_supported(struct pipe_screen *pscreen,
 		unsigned usage)
 {
 	unsigned retval = 0;
-	bool is_rgba;
+	bool is_rgba, swizzle;
 
 	if ((target >= PIPE_MAX_TEXTURE_TYPES) ||
 			(sample_count > 1) ||
@@ -94,7 +94,7 @@ of_screen_is_format_supported(struct pipe_screen *pscreen,
 	}
 
 	if ((usage & PIPE_BIND_SAMPLER_VIEW) &&
-	    (of_pipe2texture(format, &is_rgba) != ~0))
+	    (of_pipe2texture(format, &is_rgba, &swizzle) != ~0))
 		retval |= PIPE_BIND_SAMPLER_VIEW;
 
 	if ((usage & (PIPE_BIND_RENDER_TARGET | PIPE_BIND_DISPLAY_TARGET |

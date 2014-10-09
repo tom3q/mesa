@@ -49,6 +49,7 @@ struct of_pipe_sampler_view {
 	struct of_resource *tex_resource;
 	uint32_t vtx_tsta;
 	uint32_t tsta;
+	bool swizzle;
 };
 
 static INLINE struct of_pipe_sampler_view *

@@ -134,7 +134,8 @@ enum of_shader_type {
 	OF_SHADER_PIXEL = G3D_SHADER_PIXEL
 };
 
-enum fgtu_tex_format of_pipe2texture(enum pipe_format format, bool *is_rgba);
+enum fgtu_tex_format of_pipe2texture(enum pipe_format format,
+				     bool *is_rgba, bool *swizzle);
 enum fgpf_color_mode of_pipe2color(enum pipe_format format);
 int of_depth_supported(enum pipe_format format);
 uint32_t of_tex_swiz(enum pipe_format format, unsigned swizzle_r,
