@@ -99,9 +99,9 @@ struct android_surface {
       int height;
       int format;
    } cache_key;
-   void *cache_handles[2];
-   struct pipe_resource *cache_resources[2];
-   struct pipe_resource *cache_resources[2];
+   void *cache_handles[4];
+   unsigned cache_types[4];
+   struct pipe_resource *cache_resources[4];
 };
 
 struct android_config {
