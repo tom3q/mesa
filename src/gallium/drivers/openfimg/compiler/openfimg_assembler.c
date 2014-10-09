@@ -29,6 +29,7 @@
 #include "openfimg_compiler.h"
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
+#include "openfimg_texture.h"
 
 struct of_ir_assembler {
 	struct of_context *ctx;
@@ -249,9 +250,29 @@ src_swiz(struct of_ir_register *reg)
 }
 
 static void
-instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
+patch_texld(struct of_ir_assembler *opt, uint32_t *dwords)
+{
+	unsigned swizzle = get_bitfield(dwords, &src_bitfields[1].mask);
+	unsigned sampler = get_bitfield(dwords, &src_bitfields[1].num);
+	struct of_texture_stateobj *tex = &opt->ctx->fragtex;
+	struct pipe_sampler_view *texture = tex->textures[sampler];
+	struct of_pipe_sampler_view *of_texture = of_pipe_sampler_view(texture);
+	static const uint8_t swizzle_map[4] = { 2, 1, 0, 3 };
+
+	if (of_texture->swizzle)
+		swizzle = swizzle_map[swizzle & 3]
+			| swizzle_map[(swizzle >> 2) & 3] << 2
+			| swizzle_map[(swizzle >> 4) & 3] << 4
+			| swizzle_map[(swizzle >> 6) & 3] << 6;
+
+	set_bitfield(swizzle, dwords, &src_bitfields[1].mask);
+}
+
+static void
+instr_emit(struct of_ir_assembler *opt, struct of_ir_instruction *instr,
 	   uint32_t *buffer, unsigned pc)
 {
+	struct of_ir_shader *shader = opt->shader;
 	const struct of_ir_opc_info *opc_info;
 	uint32_t *dwords = buffer + 4 * pc;
 	const struct of_ir_reg_info *info;
@@ -305,6 +326,9 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
 		dwords[2] |= CF_WORD2_JUMP_OFFS((uint32_t)offset);
 	}
 
+	if (shader->type == OF_SHADER_PIXEL && instr->opc == OF_OP_TEXLD)
+		patch_texld(opt, dwords);
+
 	/* TODO: Implement predicate support */
 }
 
@@ -328,12 +352,12 @@ generate_code(struct of_ir_assembler *opt, struct of_ir_ast_node *node)
 				if (ins->num_srcs == 3) {
 					ins = of_ir_instr_create(opt->shader,
 								OF_OP_NOP);
-					instr_emit(opt->shader, ins,
+					instr_emit(opt, ins,
 						opt->dwords, opt->cur_instr++);
 				}
 			}
 			LIST_FOR_EACH_ENTRY(ins, &child->list.instrs, list)
-				instr_emit(opt->shader, ins, opt->dwords,
+				instr_emit(opt, ins, opt->dwords,
 						opt->cur_instr++);
 			continue;
 
@@ -341,7 +365,7 @@ generate_code(struct of_ir_assembler *opt, struct of_ir_ast_node *node)
 			ins = of_ir_instr_create(opt->shader, OF_OP_BF);
 			of_ir_instr_add_src(ins, child->if_then.reg);
 			ins->target = child->end_address;
-			instr_emit(opt->shader, ins, opt->dwords,
+			instr_emit(opt, ins, opt->dwords,
 					opt->cur_instr++);
 			break;
 
@@ -356,7 +380,7 @@ generate_code(struct of_ir_assembler *opt, struct of_ir_ast_node *node)
 			target = child->depart_repeat.region;
 			ins = of_ir_instr_create(opt->shader, OF_OP_B);
 			ins->target = target->start_address;
-			instr_emit(opt->shader, ins, opt->dwords,
+			instr_emit(opt, ins, opt->dwords,
 					opt->cur_instr++);
 			break;
 		case OF_IR_NODE_DEPART:
@@ -368,7 +392,7 @@ generate_code(struct of_ir_assembler *opt, struct of_ir_ast_node *node)
 				ins = of_ir_instr_create(opt->shader,
 								OF_OP_RET);
 			}
-			instr_emit(opt->shader, ins, opt->dwords,
+			instr_emit(opt, ins, opt->dwords,
 					opt->cur_instr++);
 			break;
 

@@ -277,7 +277,7 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	if (dirty & OF_DIRTY_PROG_VP)
 		of_program_emit(ctx, ctx->cso.vp);
 
-	if (dirty & OF_DIRTY_PROG_FP)
+	if (dirty & (OF_DIRTY_PROG_FP | OF_DIRTY_FRAGTEX))
 		of_program_emit(ctx, ctx->cso.fp);
 
 	if (dirty & (OF_DIRTY_PROG_VP | OF_DIRTY_PROG_FP))
