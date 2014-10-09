@@ -30,6 +30,13 @@
 #include "openfimg_ir_priv.h"
 #include "openfimg_util.h"
 
+struct of_ir_assembler {
+	struct of_context *ctx;
+	struct of_ir_shader *shader;
+	uint32_t *dwords;
+	unsigned cur_instr;
+};
+
 struct of_instr_bitfield {
 	uint32_t mask;
 	uint8_t shift;
@@ -306,7 +313,7 @@ instr_emit(struct of_ir_shader *shader, struct of_ir_instruction *instr,
  */
 
 static void
-generate_code(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+generate_code(struct of_ir_assembler *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_instruction *ins;
 	struct of_ir_ast_node *target;
@@ -376,7 +383,7 @@ generate_code(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
  */
 
 static void
-collect_stats(struct of_ir_optimizer *opt, struct of_ir_ast_node *node)
+collect_stats(struct of_ir_assembler *opt, struct of_ir_ast_node *node)
 {
 	struct of_ir_ast_node *child, *s;
 
@@ -437,17 +444,16 @@ of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader,
 		    struct pipe_resource **buffer, unsigned *num_instrs)
 {
 	struct pipe_transfer *transfer;
-	struct of_ir_optimizer *opt;
-	struct of_heap *heap;
+	struct of_ir_assembler opt;
 	uint32_t *dwords;
 
-	heap = of_heap_create();
-	opt = of_heap_alloc(heap, sizeof(*opt));
-	opt->shader = shader;
-	opt->heap = heap;
+	memset(&opt, 0, sizeof(opt));
+
+	opt.ctx = ctx;
+	opt.shader = shader;
 
 	shader->stats.num_instrs = 0;
-	RUN_PASS(shader, opt, collect_stats);
+	RUN_PASS(shader, &opt, collect_stats);
 	OF_IR_DUMP_AST(shader, NULL, 0, "pre-assembler");
 
 	shader->buffer = pipe_buffer_create(ctx->base.screen,
@@ -459,14 +465,14 @@ of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader,
 		return -1;
 	}
 
-	opt->dwords = pipe_buffer_map(&ctx->base, shader->buffer,
+	opt.dwords = pipe_buffer_map(&ctx->base, shader->buffer,
 					PIPE_TRANSFER_WRITE, &transfer);
-	if (!opt->dwords) {
+	if (!opt.dwords) {
 		ERROR_MSG("failed to map shader BO");
 		goto fail;
 	}
 
-	RUN_PASS(shader, opt, generate_code);
+	RUN_PASS(shader, &opt, generate_code);
 
 	if (transfer)
 		pipe_buffer_unmap(&ctx->base, transfer);
@@ -474,11 +480,9 @@ of_ir_generate_code(struct of_context *ctx, struct of_ir_shader *shader,
 	*buffer = shader->buffer;
 	*num_instrs = shader->stats.num_instrs;
 
-	of_heap_destroy(heap);
 	return 0;
 
 fail:
-	of_heap_destroy(heap);
 	pipe_resource_reference(&shader->buffer, NULL);
 	return -1;
 }

@@ -114,10 +114,6 @@ struct of_ir_optimizer {
 	struct util_dynarray chunk_queue;	/**< Sorted array of coalescer chunks. */
 	unsigned chunk_queue_len;		/**< Number of chunks in chunk_queue. */
 	unsigned parity :1;			/**< Current parity for round robin assignment. */
-
-	/* Fields used by assembler. */
-	uint32_t *dwords;			/**< Output instruction buffer. */
-	unsigned cur_instr;			/**< Current instruction pointer. */
 };
 
 /**
