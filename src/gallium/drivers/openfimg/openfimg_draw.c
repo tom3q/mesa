@@ -807,8 +807,8 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	ctx->cso.vtx = &solid_vertex_stateobj;
 
 	/* emit clear program */
-	of_program_emit(ctx, ctx->solid_vp);
-	of_program_emit(ctx, ctx->solid_fp);
+	of_program_emit(ctx, ctx->solid_vp, 0);
+	of_program_emit(ctx, ctx->solid_fp, 0);
 
 	/* emit clear color */
 	pkt = OUT_PKT(ring, G3D_REQUEST_SHADER_DATA);

@@ -297,13 +297,14 @@ retry:
  */
 
 void
-of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so)
+of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so,
+		bool reassemble)
 {
 	struct fd_ringbuffer *ring = ctx->ring;
 	uint32_t *pkt;
 	int ret;
 
-	if (!so->buffer) {
+	if (!so->buffer || reassemble) {
 		ret = assemble(ctx, so);
 		if (ret) {
 			DBG("failed to assemble shader, using dummy!");

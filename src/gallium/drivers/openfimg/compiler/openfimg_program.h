@@ -93,7 +93,8 @@ struct of_shader_binary_header {
  * @param ctx Driver's pipe context.
  * @param so Shader state object to emit.
  */
-void of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so);
+void of_program_emit(struct of_context *ctx, struct of_shader_stateobj *so,
+		     bool reassemble);
 /**
  * Determines mapping between vertex shader outputs and pixel shader inputs
  * and emits necessary state to hardware.

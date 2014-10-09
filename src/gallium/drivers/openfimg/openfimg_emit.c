@@ -275,10 +275,10 @@ of_emit_state(struct of_context *ctx, uint32_t dirty)
 	}
 
 	if (dirty & OF_DIRTY_PROG_VP)
-		of_program_emit(ctx, ctx->cso.vp);
+		of_program_emit(ctx, ctx->cso.vp, 0);
 
 	if (dirty & (OF_DIRTY_PROG_FP | OF_DIRTY_FRAGTEX))
-		of_program_emit(ctx, ctx->cso.fp);
+		of_program_emit(ctx, ctx->cso.fp, dirty & OF_DIRTY_FRAGTEX);
 
 	if (dirty & (OF_DIRTY_PROG_VP | OF_DIRTY_PROG_FP))
 		of_program_link(ctx, ctx->cso.vp, ctx->cso.fp);
