@@ -91,6 +91,7 @@ struct of_draw_info {
 	/* Unhashed */
 	bool user_ib:1;
 	bool user_vb:1;
+	bool direct:1;
 };
 
 struct of_vertex_info {

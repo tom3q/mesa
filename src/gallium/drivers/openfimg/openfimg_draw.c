@@ -311,7 +311,6 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 	const struct of_vertex_stateobj *vtx = draw->base.vtx;
 	const struct of_vertex_transfer *transfer;
 	struct pipe_transfer *ib_transfer = NULL;
-	bool ugly = draw->base.vtx->ugly;
 	struct of_vertex_data vdata;
 	const void *indices = NULL;
 	bool primconvert = false;
@@ -347,9 +346,6 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 		unsigned buf_idx = vtx->vb_map[pipe_idx];
 		const struct pipe_vertex_buffer *vb = &draw->vb[buf_idx];
 
-		ugly |= vb->buffer == NULL;
-		ugly |= (vb->stride != ROUND_UP(transfer->width, 4));
-
 		if (vb->buffer) {
 			struct of_resource *rsc = of_resource(vb->buffer);
 
@@ -358,11 +354,11 @@ of_build_vertex_data(struct of_context *ctx, struct of_vertex_info *vertex)
 	}
 
 	/* Check for fast path conditions. */
-	if (!ugly && vertex->indexed
+	if (draw->direct && vertex->indexed
 	    && of_prepare_draw_direct_indices(&vdata, indices)) {
 		/* Use fast path for indexed draws. */
 		vertex->direct = true;
-	} else if (!ugly && !vertex->indexed) {
+	} else if (draw->direct && !vertex->indexed) {
 		/* Use fast path for sequential draws. */
 		if (!of_primitive_needs_workaround(draw->base.info.mode))
 			of_prepare_draw_direct(&vdata);
@@ -616,8 +612,8 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	struct of_draw_info *draw = ctx->draw;
 	struct of_vertex_info *vertex = NULL;
 	unsigned state_dirty = ctx->dirty;
-	bool direct = true;
 	unsigned hash_key;
+	bool direct;
 	unsigned i;
 
 	if (draw->base.info.indexed != info->indexed
@@ -635,7 +631,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	if (state_dirty & (OF_DIRTY_VTXSTATE | OF_DIRTY_VTXBUF)) {
 		struct of_vertexbuf_stateobj *vertexbuf = &ctx->vertexbuf;
 		struct of_vertex_stateobj *vtx = ctx->cso.vtx;
-		unsigned vb_mask;
+		const struct of_vertex_transfer *transfer;
 
 		if (vtx->num_elements < 1
 		    || vtx->num_elements >= OF_MAX_ATTRIBS)
@@ -645,10 +641,11 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		draw->base.num_vb = vtx->num_vb;
 		draw->base.vb_mask = vtx->vb_mask;
 		draw->user_vb = false;
+		draw->direct = !vtx->ugly;
 
-		vb_mask = vtx->vb_mask;
-		while (vb_mask) {
-			unsigned pipe_idx = u_bit_scan(&vb_mask);
+		transfer = draw->base.vtx->transfers;
+		for (i = 0; i < draw->base.vtx->num_transfers; ++i, ++transfer) {
+			unsigned pipe_idx = transfer->vertex_buffer_index;
 			unsigned buf_idx = vtx->vb_map[pipe_idx];
 
 			memcpy(&draw->vb[buf_idx], &vertexbuf->vb[pipe_idx],
@@ -657,15 +654,25 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 				vertexbuf->vb[pipe_idx].stride;
 			if (!draw->vb[buf_idx].buffer)
 				draw->user_vb = true;
+			if (draw->vb[buf_idx].stride != ROUND_UP(transfer->width, 4))
+				draw->direct = false;
 		}
+
+		if (draw->user_vb)
+			draw->direct = false;
 	}
 
 	memcpy(&draw->base.info, info, sizeof(draw->base.info));
+	direct = draw->direct;
 
-	hash_key = of_draw_hash_direct(draw);
-	vertex = cso_hash_find_data_from_template_c(ctx->draw_hash_direct,
+	if (direct) {
+		hash_key = of_draw_hash_direct(draw);
+		vertex = cso_hash_find_data_from_template_c(
+						ctx->draw_hash_direct,
 						hash_key, draw, sizeof(*draw),
 						draw_info_compare_direct);
+	}
+
 	if (!vertex) {
 		direct = false;
 		hash_key = of_draw_hash(draw);
@@ -705,6 +712,7 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 	} else {
 		vertex = of_create_vertex_info(ctx, draw,
 						draw->user_ib || draw->user_vb);
+		draw->direct = vertex->direct;
 	}
 
 	list_del(&vertex->lru_list);
