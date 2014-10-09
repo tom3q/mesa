@@ -726,6 +726,7 @@ of_ir_shader_create(enum of_shader_type type)
 	if (!shader)
 		return NULL;
 
+	shader->type = type;
 	shader->heap = of_heap_create();
 
 	LIST_INITHEAD(&shader->root_nodes);

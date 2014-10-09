@@ -237,6 +237,8 @@ struct of_ir_ast_node {
 
 /** Representation of a shader program. */
 struct of_ir_shader {
+	enum of_shader_type type;
+
 	/** List of root AST nodes in the program. */
 	struct list_head root_nodes;
 
