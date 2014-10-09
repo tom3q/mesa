@@ -101,6 +101,7 @@ struct android_surface {
    } cache_key;
    void *cache_handles[2];
    struct pipe_resource *cache_resources[2];
+   struct pipe_resource *cache_resources[2];
 };
 
 struct android_config {
@@ -164,14 +165,23 @@ extern "C" {
 }
 
 static int
-get_handle_name(buffer_handle_t handle)
+get_handle_name(buffer_handle_t handle, unsigned *type)
 {
+   int fd;
+
+   fd = gralloc_drm_get_gem_fd(handle);
+   if (fd > 0) {
+      *type = DRM_API_HANDLE_TYPE_FD;
+      return fd;
+   }
+
+   *type = DRM_API_HANDLE_TYPE_SHARED;
    return gralloc_drm_get_gem_handle(handle);
 }
 #else
 
 static int
-get_handle_name(buffer_handle_t handle)
+get_handle_name(buffer_handle_t handle, unsigned *type)
 {
    return 0;
 }
@@ -203,9 +213,8 @@ import_buffer(struct android_display *adpy, const struct pipe_resource *templ,
       struct winsys_handle handle;
 
       memset(&handle, 0, sizeof(handle));
-      handle.type = DRM_API_HANDLE_TYPE_SHARED;
       /* for DRM, we need the GEM name */
-      handle.handle = get_handle_name(abuf->handle);
+      handle.handle = get_handle_name(abuf->handle, &handle.type);
       if (!handle.handle) {
          ALOGE("unable to import invalid buffer %p", abuf);
          return NULL;
@@ -253,6 +262,7 @@ android_surface_add_cache(struct native_surface *nsurf,
                           ANativeWindowBuffer *abuf)
 {
    struct android_surface *asurf = android_surface(nsurf);
+   unsigned type = 0;
    void *handle;
    int idx;
 
@@ -263,7 +273,7 @@ android_surface_add_cache(struct native_surface *nsurf,
       android_surface_clear_cache(&asurf->base);
 
    if (asurf->adpy->use_drm)
-      handle = (void *) get_handle_name(abuf->handle);
+      handle = (void *) get_handle_name(abuf->handle, &type);
    else
       handle = (void *) abuf->handle;
    /* NULL is invalid */
@@ -274,7 +284,8 @@ android_surface_add_cache(struct native_surface *nsurf,
 
    /* find the slot to use */
    for (idx = 0; idx < Elements(asurf->cache_handles); idx++) {
-      if (asurf->cache_handles[idx] == handle || !asurf->cache_handles[idx])
+      if ((asurf->cache_handles[idx] == handle
+      && asurf->cache_types[idx] == type) || !asurf->cache_handles[idx])
          break;
    }
    if (idx == Elements(asurf->cache_handles)) {
@@ -318,6 +329,7 @@ android_surface_add_cache(struct native_surface *nsurf,
       }
 
       asurf->cache_handles[idx] = handle;
+      asurf->cache_types[idx] = type;
    }
 
    return asurf->cache_resources[idx];
