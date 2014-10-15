@@ -584,7 +584,6 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
 			handle = fd_bo_handle(of_resource(vb->buffer)->bo);
 		} else {
 			buffer = buf->buffer;
-			offset = buf->offset;
 			handle = buf->handle;
 		}
 
