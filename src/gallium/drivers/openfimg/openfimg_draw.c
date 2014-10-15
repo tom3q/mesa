@@ -637,6 +637,9 @@ of_draw(struct of_context *ctx, const struct pipe_draw_info *info)
 		    || vtx->num_elements >= OF_MAX_ATTRIBS)
 			return;
 
+		OF_CSO_GET(&vtx->cso);
+		OF_CSO_PUT(ctx, &draw->base.vtx->cso);
+
 		draw->base.vtx = ctx->cso.vtx;
 		draw->base.num_vb = vtx->num_vb;
 		draw->base.vb_mask = vtx->vb_mask;
@@ -991,6 +994,9 @@ of_draw_init(struct pipe_context *pctx)
 	ctx->draw_hash_direct = cso_hash_create();
 	ctx->draw = CALLOC_STRUCT(of_draw_info);
 
+	OF_CSO_GET(&of_cso_dummy_vtx.cso);
+	ctx->draw->base.vtx = &of_cso_dummy_vtx;
+
 	LIST_INITHEAD(&ctx->draw_lru);
 }
 
@@ -1000,8 +1006,10 @@ of_draw_fini(struct pipe_context *pctx)
 	struct of_context *ctx = of_context(pctx);
 	struct of_vertex_info *vertex, *s;
 
-	if (ctx->draw)
+	if (ctx->draw) {
+		OF_CSO_PUT(ctx, &ctx->draw->base.vtx->cso);
 		FREE(ctx->draw);
+	}
 
 	vertex = ctx->clear_vertex_info;
 	if (vertex) {
