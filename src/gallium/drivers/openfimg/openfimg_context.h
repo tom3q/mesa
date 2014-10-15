@@ -109,19 +109,6 @@ struct of_context {
 	/* optional state used for hardware blitting */
 	struct of_shader_stateobj *blit_vp, *blit_fp; // TODO move to screen?
 
-	/* do we need to mem2gmem before rendering.  We don't, if for example,
-	 * there was a glClear() that invalidated the entire previous buffer
-	 * contents.  Keep track of which buffer(s) are cleared, or needs
-	 * restore.  Masks of PIPE_CLEAR_*
-	 */
-	enum {
-		/* align bitmask values w/ PIPE_CLEAR_*.. since that is convenient.. */
-		OF_BUFFER_COLOR   = PIPE_CLEAR_COLOR,
-		OF_BUFFER_DEPTH   = PIPE_CLEAR_DEPTH,
-		OF_BUFFER_STENCIL = PIPE_CLEAR_STENCIL,
-		OF_BUFFER_ALL     = OF_BUFFER_COLOR | OF_BUFFER_DEPTH | OF_BUFFER_STENCIL,
-	} cleared, restore, resolve;
-
 	bool needs_flush;
 	unsigned num_draws;
 	uint32_t last_timestamp;

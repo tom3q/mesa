@@ -729,7 +729,7 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	struct of_context *ctx = of_context(pctx);
 	struct pipe_framebuffer_state *pfb = &ctx->framebuffer.base;
 	struct pipe_scissor_state *scissor = of_context_get_scissor(ctx);
-	unsigned i, buffers = 0;
+	unsigned i;
 
 	/* if we supported transform feedback, we'd have to disable this: */
 	if (((scissor->maxx - scissor->minx) *
@@ -743,15 +743,8 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	 * Figure out the buffers/features we need:
 	 */
 
-	if (of_depth_enabled(ctx)) {
-		buffers |= OF_BUFFER_DEPTH;
+	if (of_depth_enabled(ctx) || of_stencil_enabled(ctx))
 		of_resource(pfb->zsbuf->texture)->dirty = true;
-	}
-
-	if (of_stencil_enabled(ctx)) {
-		buffers |= OF_BUFFER_STENCIL;
-		of_resource(pfb->zsbuf->texture)->dirty = true;
-	}
 
 	for (i = 0; i < pfb->nr_cbufs; i++) {
 		struct pipe_resource *surf;
@@ -762,13 +755,7 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 		surf = pfb->cbufs[i]->texture;
 
 		of_resource(surf)->dirty = true;
-		buffers |= OF_BUFFER_COLOR;
 	}
-
-	/* any buffers that haven't been cleared, we need to restore: */
-	ctx->restore |= buffers & (OF_BUFFER_ALL & ~ctx->cleared);
-	/* and any buffers used, need to be resolved: */
-	ctx->resolve |= buffers;
 
 	of_draw(ctx, info);
 }
@@ -790,8 +777,6 @@ of_clear(struct pipe_context *pctx, unsigned buffers,
 	if (!ctx->clear_vertex_info)
 		of_context_init_solid(ctx);
 
-	ctx->cleared |= buffers;
-	ctx->resolve |= buffers;
 	ctx->needs_flush = true;
 
 	if (!pfb->cbufs[0])

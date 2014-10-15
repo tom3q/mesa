@@ -112,7 +112,6 @@ of_context_render(struct pipe_context *pctx)
 		of_context_next_rb(pctx);
 
 	ctx->needs_flush = false;
-	ctx->cleared = ctx->restore = ctx->resolve = 0;
 	ctx->num_draws = 0;
 
 	if (pfb->cbufs[0])
