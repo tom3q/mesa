@@ -735,10 +735,9 @@ of_draw_vbo(struct pipe_context *pctx, const struct pipe_draw_info *info)
 	unsigned i;
 
 	/* if we supported transform feedback, we'd have to disable this: */
-	if (((scissor->maxx - scissor->minx) *
-			(scissor->maxy - scissor->miny)) == 0) {
+	if ((scissor->maxx - scissor->minx <= 0)
+	    || (scissor->maxy - scissor->miny <= 0))
 		return;
-	}
 
 	ctx->needs_flush = true;
 
