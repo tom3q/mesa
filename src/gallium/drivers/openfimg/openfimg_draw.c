@@ -582,8 +582,6 @@ of_emit_draw(struct of_context *ctx, struct of_vertex_info *info,
 			buffer = vb->buffer;
 			offset += vb->buffer_offset;
 			handle = fd_bo_handle(of_resource(vb->buffer)->bo);
-
-			// FIXME: reference the buffer
 		} else {
 			buffer = buf->buffer;
 			offset = buf->offset;
